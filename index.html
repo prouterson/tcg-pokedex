@@ -1449,20 +1449,34 @@ const scanner = {
     if (!card) { status('No card ' + hit.num + ' in ' + set.name + '. Try again.'); this.found = null; return; }
     const key = setKey(set.id);
     const r = $('scanResult'); r.hidden = false;
-    const have = !!ownedIn(set.id)[card.localId];
     r.innerHTML = (card.image ? '<img alt="" src="' + card.image + '/low.webp">' : '') + '<div class="t"><b></b><small></small></div><div class="btns"></div>';
     r.querySelector('b').textContent = card.name;
-    r.querySelector('small').textContent = set.name + ' · ' + card.localId + (set.cardCount.official ? '/' + String(set.cardCount.official).padStart(card.localId.length, '0') : '') + (have ? ' · already owned by ' + me().name : '');
+    r.querySelector('small').textContent = set.name + ' · ' + card.localId + (set.cardCount.official ? '/' + String(set.cardCount.official).padStart(card.localId.length, '0') : '');
+    status('Found ' + card.name + ' — which printing?');
+    // the number is the same on every printing, so ask which one: fetch the card's printings (cached per set when known)
+    let avail = 'n';
+    const cachedSet = cacheGet('details2/' + set.id);
+    if (cachedSet && cachedSet.cards[card.localId]) avail = cachedSet.cards[card.localId].v || 'n';
+    else { try { const d = await getJSONL(lang, 'cards/' + card.id); avail = variantsFrom(d); } catch (e) {} }
     const btns = r.querySelector('.btns');
-    if (!have) btns.appendChild(Object.assign(makeButton('✓ Owned', () => {
-      setCard(state.current, key, card.localId, true, 'n');
-      if (window._set && window._set.id === set.id && (location.hash || '').startsWith('#/set/')) renderSet();   // keep the page behind in step
-      status(card.name + ' marked owned for ' + me().name + '. Scan the next card.');
-      this.found = null; r.hidden = true;
-    }), { className: 'primary' }));
-    btns.appendChild(makeButton('Open set', () => { this.close(); ui.q = card.localId; location.hash = '#/set/' + set.id; }));
-    btns.appendChild(makeButton('Scan again', () => { this.found = null; r.hidden = true; status('Hold the next card in the box'); }));
-    status('Found ' + card.name);
+    const draw = () => {
+      btns.innerHTML = '';
+      const m = marks(ownedIn(set.id)[card.localId]);
+      [...avail].forEach(v => {
+        const got = !!m[v] || (!avail.includes('n') && v === avail[0] && !!m.n);
+        const b = makeButton((got ? '✓ ' : '+ ') + (avail.length > 1 ? VNAME[v] : 'Owned'), () => {
+          setCard(state.current, key, card.localId, !got, v);
+          if (window._set && window._set.id === set.id && (location.hash || '').startsWith('#/set/')) renderSet();   // keep the page behind in step
+          status(card.name + (got ? ' — ' + VNAME[v] + ' removed' : ' — ' + VNAME[v] + ' marked owned for ' + me().name) + '. Pick another or scan the next card.');
+          draw();
+        }, got ? 'Owned — tap to remove' : 'Mark this printing owned');
+        if (got) b.className = 'primary';
+        btns.appendChild(b);
+      });
+      btns.appendChild(makeButton('Open set', () => { this.close(); ui.q = card.localId; location.hash = '#/set/' + set.id; }));
+      btns.appendChild(makeButton('Scan next', () => { this.found = null; r.hidden = true; status('Fit the next card in the outline'); }));
+    };
+    draw();
   }
 };
 // "001/084 PBL", "25/198 SVI", "TG12/TG30", "001/084" -> { num, denom, code }
