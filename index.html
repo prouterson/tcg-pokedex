@@ -210,13 +210,15 @@
   #scan .peek { display: flex; gap: 10px; align-items: center; min-height: 28px; }
   #scan .peek canvas { height: 28px; width: auto; max-width: 55%; border-radius: 4px; background: #fff; }
   #scan .peek span { font: 12px/1.2 ui-monospace, Consolas, monospace; color: #9a9a92; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #scan .result { display: flex; gap: 12px; align-items: center; background: #1e2128; border-radius: 12px; padding: 10px; position: relative; }
+  #scan .result { display: grid; grid-template-columns: 64px 1fr; gap: 10px 12px; align-items: center; background: #1e2128; border-radius: 12px; padding: 10px; position: relative; }
   #scan .result .dismiss { position: absolute; top: -8px; right: -8px; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: #e3350d; border-color: #e3350d; font-size: 14px; }
   #scan .result img { width: 64px; border-radius: 4px; }
   #scan .result .t { flex: 1; min-width: 0; }
   #scan .result .t b { display: block; font-size: 16px; }
   #scan .result .t small { color: #9a9a92; }
-  #scan .result .btns { display: flex; flex-direction: column; gap: 6px; }
+  #scan .result .btns { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+  #scan .result .btns button { flex: 1 1 auto; }
+  #scan .result .choices { grid-column: 1 / -1; }
   #scan .row2 { display: flex; gap: 8px; }
   #scan .setrow { align-items: center; font-size: 14px; color: #c9ccd4; }
   #scan .setrow select { flex: 1; min-width: 0; background: #262932; color: #fff; border-color: #3a3e48; }
@@ -326,7 +328,6 @@
 <div id="scan">
   <div class="cam"><video playsinline autoplay muted></video><div class="guide"><span>Fill the outline with the card and hold still.<br>Glare is fine — it matches the picture, not the number.</span><i class="zone"></i></div></div>
   <div class="panel">
-    <div class="row2 setrow"><label for="scanSet">Set:</label><select id="scanSet"></select></div>
     <div class="status" id="scanStatus">Starting camera…</div>
     <div class="peek"><canvas id="scanPeek" width="10" height="10"></canvas><span id="scanRead"></span></div>
     <div class="result" id="scanResult" hidden></div>
@@ -1621,45 +1622,74 @@ async function buildPlaceholders(which, style) {
   window.print();
 }
 
-/* ---------- picture matching: recognise a card by comparing the camera view with the set's card images ----------
-   Holo and full-art cards defeat text reading (foil, glare, tiny print), so the main route is now the artwork:
-   every card in the set becomes a 24x33 thumbnail (brightness high-passed, edges, chroma) and the camera's
-   guide box is compared against all of them at a few scales, shifts and tilts. Glare pixels are masked out. */
+/* ---------- picture matching: recognise a card by its artwork, against every card in the catalogue ----------
+   Holo and full-art cards defeat text reading (foil, glare, tiny print), so the scanner works from the picture:
+   1. coarse: a small fingerprint of every card with a picture (cards-*.fp, built offline from TCGdex images)
+      is compared with the camera's guide box at a few scales/shifts — a dot product per card, the top 40 go on;
+   2. fine: those 40 catalogue pictures are fetched and compared at 24x33 (high-passed brightness, edges, chroma,
+      glare pixels masked, tilt variants). Reprints with the same artwork end up tied and are offered as a choice. */
+const FP_FILE = 'cards-1.fp';
 const FP_W = 24, FP_H = 33;
-function thumbOf(src, sx, sy, sw, sh) {
-  const cv = thumbOf.cv || (thumbOf.cv = document.createElement('canvas'));
-  cv.width = FP_W; cv.height = FP_H;
+// A frame: a region of a video/photo/picture shrunk once to a small working canvas and read back once.
+// Everything after that is plain JS on the pixel array — no more canvas reads, which are what cost time.
+function frameOf(src, sx, sy, sw, sh, angle, BW = 144) {
+  const BH = Math.round(BW * sh / sw);
+  const cv = frameOf.cv || (frameOf.cv = document.createElement('canvas'));
+  cv.width = BW; cv.height = BH;
   const ctx = cv.getContext('2d', { willReadFrequently: true });
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(src, sx, sy, sw, sh, 0, 0, FP_W, FP_H);
-  const d = ctx.getImageData(0, 0, FP_W, FP_H).data, n = FP_W * FP_H;
-  const g = new Float32Array(n), c = new Float32Array(n * 3);
-  for (let i = 0, p = 0; i < n; i++, p += 4) { g[i] = 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2]; c[i * 3] = d[p]; c[i * 3 + 1] = d[p + 1]; c[i * 3 + 2] = d[p + 2]; }
+  if (angle) { ctx.translate(BW / 2, BH / 2); ctx.rotate(angle * Math.PI / 180); ctx.translate(-BW / 2, -BH / 2); }
+  ctx.drawImage(src, sx, sy, sw, sh, 0, 0, BW, BH);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  return { px: ctx.getImageData(0, 0, BW, BH).data, BW, BH };
+}
+// box-filter a region of a frame down to W x H: greyscale + RGB
+function thumbPx(f, x, y, w, h, W = FP_W, H = FP_H) {
+  const { px, BW, BH } = f, g = new Float32Array(W * H), c = new Float32Array(W * H * 3);
+  for (let oy = 0; oy < H; oy++) {
+    const iy0 = Math.max(0, Math.floor(y + oy * h / H)), iy1 = Math.min(BH - 1, Math.ceil(y + (oy + 1) * h / H) - 1);
+    for (let ox = 0; ox < W; ox++) {
+      const ix0 = Math.max(0, Math.floor(x + ox * w / W)), ix1 = Math.min(BW - 1, Math.ceil(x + (ox + 1) * w / W) - 1);
+      let r = 0, gg = 0, b = 0, n = 0;
+      for (let yy = iy0; yy <= iy1; yy++) for (let xx = ix0, p = (yy * BW + ix0) * 4; xx <= ix1; xx++, p += 4) { r += px[p]; gg += px[p + 1]; b += px[p + 2]; n++; }
+      if (!n) n = 1;
+      const o = oy * W + ox;
+      c[o * 3] = r / n; c[o * 3 + 1] = gg / n; c[o * 3 + 2] = b / n;
+      g[o] = 0.299 * c[o * 3] + 0.587 * c[o * 3 + 1] + 0.114 * c[o * 3 + 2];
+    }
+  }
   return { g, c };
 }
-// gradient magnitude: edges survive foil tint and uneven light better than brightness does
-function edgesOf(g) {
+function edgesOf(g, W = FP_W, H = FP_H) {
   const e = new Float32Array(g.length);
-  for (let y = 1; y < FP_H - 1; y++) for (let x = 1; x < FP_W - 1; x++) { const i = y * FP_W + x; e[i] = Math.abs(g[i + 1] - g[i - 1]) + Math.abs(g[i + FP_W] - g[i - FP_W]); }
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) { const i = y * W + x; e[i] = Math.abs(g[i + 1] - g[i - 1]) + Math.abs(g[i + W] - g[i - W]); }
   return e;
 }
-// subtract a 7x7 local mean so lighting gradients and sheen drop out
-function highpass(g) {
-  const out = new Float32Array(g.length), R = 3;
-  for (let y = 0; y < FP_H; y++) for (let x = 0; x < FP_W; x++) {
+function highpass(g, W = FP_W, H = FP_H, R = 3) {
+  const out = new Float32Array(g.length);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     let s = 0, n = 0;
-    for (let yy = Math.max(0, y - R); yy <= Math.min(FP_H - 1, y + R); yy++) for (let xx = Math.max(0, x - R); xx <= Math.min(FP_W - 1, x + R); xx++) { s += g[yy * FP_W + xx]; n++; }
-    out[y * FP_W + x] = g[y * FP_W + x] - s / n;
+    for (let yy = Math.max(0, y - R); yy <= Math.min(H - 1, y + R); yy++) for (let xx = Math.max(0, x - R); xx <= Math.min(W - 1, x + R); xx++) { s += g[yy * W + xx]; n++; }
+    out[y * W + x] = g[y * W + x] - s / n;
   }
   return out;
 }
-// per-pixel colour independent of brightness
+// local contrast normalisation: (pixel - local mean) / local spread, so dim, bright and washed-out regions all count the same
+function localnorm(g, W = FP_W, H = FP_H, R = 2) {
+  const out = new Float32Array(g.length);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let s = 0, s2 = 0, n = 0;
+    for (let yy = Math.max(0, y - R); yy <= Math.min(H - 1, y + R); yy++) for (let xx = Math.max(0, x - R); xx <= Math.min(W - 1, x + R); xx++) { const v = g[yy * W + xx]; s += v; s2 += v * v; n++; }
+    const m = s / n, sd = Math.sqrt(Math.max(0, s2 / n - m * m));
+    out[y * W + x] = (g[y * W + x] - m) / (sd + 8);
+  }
+  return out;
+}
 function chromaOf(c) {
   const n = c.length / 3, out = new Float32Array(n * 2);
   for (let i = 0; i < n; i++) { const r = c[i * 3], g = c[i * 3 + 1], b = c[i * 3 + 2], s = r + g + b + 1; out[i * 2] = (r - g) / s; out[i * 2 + 1] = (b - (r + g) / 2) / s; }
   return out;
 }
-// zero-mean normalised cross-correlation over the unmasked pixels
 function ncc(a, b, mask) {
   let n = 0, sa = 0, sb = 0;
   for (let i = 0; i < a.length; i++) { if (mask && !mask[i]) continue; n++; sa += a[i]; sb += b[i]; }
@@ -1669,62 +1699,162 @@ function ncc(a, b, mask) {
   for (let i = 0; i < a.length; i++) { if (mask && !mask[i]) continue; const da = a[i] - ma, db = b[i] - mb; sab += da * db; saa += da * da; sbb += db * db; }
   return saa && sbb ? sab / Math.sqrt(saa * sbb) : 0;
 }
+// a catalogue picture's fine fingerprint (inset a touch so the card border does not count)
 function fingerprintOf(img) {
-  const m = 0.035, w = img.width, h = img.height;          // inset a touch so the card border does not count
-  const t = thumbOf(img, w * m, h * m, w * (1 - 2 * m), h * (1 - 2 * m));
-  return { g: highpass(t.g), e: edgesOf(t.g), ch: chromaOf(t.c) };
+  const m = 0.035, w = img.width, h = img.height;
+  const f = frameOf(img, w * m, h * m, w * (1 - 2 * m), h * (1 - 2 * m), 0);
+  const t = thumbPx(f, 0, 0, f.BW, f.BH);
+  const gn = localnorm(t.g);
+  return { g: gn, e: edgesOf(gn), ch: chromaOf(t.c) };
 }
 function scoreFP(cam, fp) { return 0.35 * ncc(cam.g, fp.g, cam.mask) + 0.4 * ncc(cam.e, fp.e, cam.mask) + 0.25 * ncc(cam.ch, fp.ch, cam.mask2); }
-function rotatedCrop(src, gx, gy, gw, gh, deg) {
-  const cv = document.createElement('canvas'); cv.width = Math.round(gw); cv.height = Math.round(gh);
-  const ctx = cv.getContext('2d');
-  ctx.translate(gw / 2, gh / 2); ctx.rotate(deg * Math.PI / 180); ctx.translate(-gw / 2, -gh / 2);
-  ctx.drawImage(src, gx, gy, gw, gh, 0, 0, gw, gh);
-  return cv;
+// the guide box (plus margin) as one working frame at a given tilt; the alignment variants are rectangles inside it
+function camFrame(src, gx, gy, gw, gh, angle) {
+  const pad = 0.1, f = frameOf(src, gx - gw * pad, gy - gh * pad, gw * (1 + 2 * pad), gh * (1 + 2 * pad), angle || 0);
+  return { f, GW: f.BW / (1 + 2 * pad), GH: f.BH / (1 + 2 * pad), bx: f.BW * pad / (1 + 2 * pad), by: f.BH * pad / (1 + 2 * pad) };
 }
-// Compare the guide box of a video frame or photo with every fingerprint. Tries a few scales, shifts and (optionally)
-// tilts, keeps the one alignment that produces the strongest match anywhere, and returns that alignment's scores.
-function matchFrame(src, gx, gy, gw, gh, fps, tilt) {
-  const shifts = [-0.05, 0, 0.05], scales = [0.92, 1, 1.08], angles = tilt ? [-3, 0, 3] : [0];
-  let bestTop = -1, bestScores = null;
-  for (const a of angles) {
-    const pad = 0.1, base = a ? rotatedCrop(src, gx - gw * pad, gy - gh * pad, gw * (1 + 2 * pad), gh * (1 + 2 * pad), a) : src;
-    const bx = a ? gw * pad : gx, by = a ? gh * pad : gy;
-    for (const s of scales) for (const dx of shifts) for (const dy of shifts) {
-      const w = gw * s, h = gh * s, t = thumbOf(base, bx + gw / 2 - w / 2 + dx * gw, by + gh / 2 - h / 2 + dy * gh, w, h);
-      const mask = new Uint8Array(t.g.length), mask2 = new Uint8Array(t.g.length * 2);
-      for (let i = 0; i < t.g.length; i++) { const ok = t.g[i] < 243; mask[i] = ok; mask2[i * 2] = mask2[i * 2 + 1] = ok; }   // blown-out glare does not vote
-      const cam = { g: highpass(t.g), e: edgesOf(t.g), ch: chromaOf(t.c), mask, mask2 };
-      const sc = new Float32Array(fps.length); let top = -1;
-      for (let k = 0; k < fps.length; k++) { sc[k] = fps[k] ? scoreFP(cam, fps[k]) : 0; if (sc[k] > top) top = sc[k]; }
-      if (top > bestTop) { bestTop = top; bestScores = sc; }
+// Alignment variants. The coarse stage (12x16) tolerates about 4% of size or offset, so the live loop rotates through
+// four variant sets on successive frames and averages the scores: between them they cover sizes 0.84-1.08, offsets to
+// 4% and tilts of +-3 degrees, without any single pass getting slow. The fine stage (24x33) is sensitive to one pixel
+// of misalignment, so it always gets a dense grid.
+const CORNERS = r => [[0, 0], [-r, -r], [r, -r], [-r, r], [r, r]];
+const LIVE_SETS = [
+  { scales: [0.84, 0.92, 1, 1.08], shifts: CORNERS(0.04), tilt: 0 },
+  { scales: [0.88, 0.96, 1.04], shifts: CORNERS(0.02), tilt: 0 },
+  { scales: [0.84, 0.92, 1, 1.08], shifts: CORNERS(0.03), tilt: 3 },
+  { scales: [0.88, 0.96, 1.04], shifts: CORNERS(0.03), tilt: -3 }
+];
+const SNAP_SET = { scales: [0.84, 0.88, 0.92, 0.96, 1, 1.04, 1.08], shifts: CORNERS(0.04).concat([[-0.04, 0], [0.04, 0], [0, -0.04], [0, 0.04]]), tilt: 0 };
+const FINE_SCALES = [0.82, 0.86, 0.9, 0.94, 0.98, 1.02, 1.06, 1.1], FINE_SHIFTS = [-0.04, -0.02, 0, 0.02, 0.04];
+function rectsOf(fr, scales, shifts) {
+  const out = [];
+  for (const sc of scales) for (const [dx, dy] of shifts) {
+    const w = fr.GW * sc, h = fr.GH * sc;
+    out.push({ f: fr.f, x: fr.bx + fr.GW / 2 - w / 2 + dx * fr.GW, y: fr.by + fr.GH / 2 - h / 2 + dy * fr.GH, w, h });
+  }
+  return out;
+}
+function fineRects(fr) { const sh = []; for (const dx of FINE_SHIFTS) for (const dy of FINE_SHIFTS) sh.push([dx, dy]); return rectsOf(fr, FINE_SCALES, sh); }
+function fineCam(v) {
+  const t = thumbPx(v.f, v.x, v.y, v.w, v.h);
+  const mask = new Uint8Array(t.g.length), mask2 = new Uint8Array(t.g.length * 2);
+  for (let i = 0; i < t.g.length; i++) { const ok = t.g[i] < 243; mask[i] = ok; mask2[i * 2] = mask2[i * 2 + 1] = ok; }
+  const gn = localnorm(t.g);
+  return { g: gn, e: edgesOf(gn), ch: chromaOf(t.c), mask, mask2 };
+}
+// ---- coarse index ----
+let IDX = null;      // { n, w, h, cw, ch, cards: [{set, localId}], vec: Int8Array(n*L), L }
+// zero-mean, unit-length, weighted, quantised to int8 — so a match is one dot product
+function normQ(v, out, off, weight) {
+  let m = 0; for (let i = 0; i < v.length; i++) m += v[i]; m /= v.length;
+  let s = 0; for (let i = 0; i < v.length; i++) { const d = v[i] - m; s += d * d; }
+  const k = s ? Math.sqrt(weight) / Math.sqrt(s) * 25 * Math.sqrt(v.length) : 0;
+  for (let i = 0; i < v.length; i++) { const q = Math.round((v[i] - m) * k); out[off + i] = q > 127 ? 127 : q < -127 ? -127 : q; }
+}
+// coarse descriptor: locally normalised grey + chroma, one unit vector per card so a match is one dot product
+function coarseVec(g, c, w, h, cw, ch, out, off) {
+  const gn = window.COARSE_LN === false ? highpass(g, w, h, 2) : localnorm(g, w, h, 2), chr = chromaOf(c);
+  normQ(gn, out, off, 0.5); normQ(chr, out, off + gn.length, 0.3);
+}
+let idxLoading = null;
+function loadIndex(onProgress) {
+  if (IDX) return Promise.resolve(IDX);
+  if (idxLoading) return idxLoading;
+  return (idxLoading = (async () => {
+    const r = await fetch(window.FP_OVERRIDE || FP_FILE);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const buf = await r.arrayBuffer();
+    const dv = new DataView(buf), hl = dv.getUint32(0, true);
+    const head = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, hl)));
+    const { w, h, cw, ch, n } = head, per = w * h + cw * ch * 3, L = w * h + cw * ch * 2;
+    const cards = []; head.sets.forEach(([set, ids]) => ids.forEach(localId => cards.push({ set, localId })));
+    const data = new Uint8Array(buf, 4 + hl), vec = new Int8Array(n * L);
+    const g = new Float32Array(w * h), c = new Float32Array(cw * ch * 3);
+    for (let k = 0; k < n; k++) {
+      const o = k * per;
+      for (let i = 0; i < w * h; i++) g[i] = data[o + i];
+      for (let i = 0; i < cw * ch * 3; i++) c[i] = data[o + w * h + i];
+      coarseVec(g, c, w, h, cw, ch, vec, k * L);
+      if (onProgress && k % 2000 === 0) { onProgress(k, n); await new Promise(r => setTimeout(r, 0)); }   // keep the page responsive
+    }
+    IDX = { n, w, h, cw, ch, cards, vec, L };
+    idxLoading = null;
+    return IDX;
+  })().catch(e => { idxLoading = null; throw e; }));
+}
+function coarseCam(v) {
+  const { w, h, cw, ch, L } = IDX;
+  const t = thumbPx(v.f, v.x, v.y, v.w, v.h, w, h), tc = thumbPx(v.f, v.x, v.y, v.w, v.h, cw, ch);
+  const out = new Int8Array(L);
+  coarseVec(t.g, tc.c, w, h, cw, ch, out, 0);
+  return out;
+}
+// scores every card against each camera variant (max over variants); with prev, averages in the previous pass's
+// scores so a steady card rises over a couple of frames while glare moves about. Returns { top: [...K best], scores }.
+function coarseSearch(cams, K, hist) {
+  const { n, L, vec } = IDX, best = new Float32Array(n).fill(-1e9);
+  for (const cam of cams) {
+    for (let k = 0, o = 0; k < n; k++, o += L) {
+      let s = 0;
+      for (let i = 0; i < L; i++) s += cam[i] * vec[o + i];
+      if (s > best[k]) best[k] = s;
     }
   }
-  return bestScores || new Float32Array(fps.length);
+  const raw = best.slice();
+  if (hist && hist.length) for (let k = 0; k < n; k++) { let s = best[k]; for (const h of hist) s += h[k]; best[k] = s / (hist.length + 1); }
+  // partial sort: the K best
+  const top = [];
+  for (let k = 0; k < n; k++) {
+    if (top.length === K && best[k] <= top[K - 1].s) continue;
+    let j = top.length; top.push({ k, s: best[k] });
+    while (j > 0 && top[j - 1].s < top[j].s) { const t = top[j]; top[j] = top[j - 1]; top[j - 1] = t; j--; }
+    if (top.length > K) top.pop();
+  }
+  return { top: top.map(t => ({ k: t.k, card: IDX.cards[t.k], coarse: t.s / 1e5 })), scores: raw };
 }
-// fingerprints for one set, built from the catalogue pictures (kept for the session; the pictures themselves are cached by the service worker)
-const fpBook = {};
-async function fingerprintsFor(set, onProgress) {
-  const old = fpBook[set.id];
-  if (old && old.fps.every(Boolean)) return old;
-  const cards = old ? old.cards : set.cards.filter(c => c.image), fps = old ? old.fps : new Array(cards.length).fill(null);   // a picture that failed last time is tried again
-  let done = 0, next = 0;
-  const load = url => new Promise((ok, bad) => { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => ok(im); im.onerror = bad; im.src = url; });
-  const worker = async () => {
-    while (next < cards.length) {
-      const i = next++;
-      if (fps[i]) { done++; continue; }
-      try {
-        // a copy saved by the service worker without CORS cannot be read back; a query string gets a fresh readable one
-        const im = await load(cards[i].image + '/low.webp').catch(() => load(cards[i].image + '/low.webp?fp'))
-          .catch(() => new Promise(r => setTimeout(r, 1500)).then(() => load(cards[i].image + '/low.webp?fp2')));   // a flaky connection gets one more go
-        fps[i] = fingerprintOf(im);
-      } catch (e) {}
-      done++; if (onProgress) onProgress(done, cards.length);
-    }
-  };
-  await Promise.all([0, 1, 2, 3, 4, 5].map(worker));
-  return (fpBook[set.id] = { cards, fps });
+// fine fingerprints of catalogue pictures, fetched on demand and kept for the session
+const fineCache = new Map();
+function cardImageUrl(card) { const serie = window._serieOf && window._serieOf[card.set]; return serie ? 'https://assets.tcgdex.net/en/' + serie + '/' + card.set + '/' + card.localId : null; }
+function fineFor(card) {
+  const key = card.set + '-' + card.localId;
+  if (fineCache.has(key)) return fineCache.get(key);
+  const url = cardImageUrl(card);
+  if (!url) return Promise.resolve(null);
+  const load = u => new Promise((ok, bad) => { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => ok(im); im.onerror = bad; im.src = u; });
+  // a copy saved by the service worker without CORS cannot be read back; a query string gets a fresh readable one
+  const p = load(url + '/low.webp').catch(() => load(url + '/low.webp?fp')).then(fingerprintOf).catch(() => null);
+  fineCache.set(key, p);
+  p.then(v => { if (!v) fineCache.delete(key); });
+  return p;
+}
+// which series each set belongs to (the picture URL needs it): one small GraphQL call, cached with the card index
+async function loadSerieMap() {
+  if (window._serieOf) return window._serieOf;
+  const cached = cacheGet('seriemap');
+  if (cached && Date.now() - cached.at < 7 * 86400e3) return (window._serieOf = cached.map);
+  const r = await fetch('https://api.tcgdex.net/v2/graphql', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: '{ series { id sets { id } } }' }) });
+  const j = await r.json(), map = {};
+  j.data.series.forEach(s => s.sets.forEach(x => { map[x.id] = s.id; }));
+  cacheSet('seriemap', { at: Date.now(), map });
+  return (window._serieOf = map);
+}
+// The whole search for one frame or photo: list of { card, coarse, fine } best first (coarse only with opts.coarseOnly).
+// opts.set = which variant set (LIVE_SETS[i] or SNAP_SET); opts.hist = previous frames' coarse scores to average in;
+// opts.tilt = also try +-3 degrees at the snap stage. The result carries .scores (this frame's raw coarse scores).
+async function searchPicture(src, box, opts) {
+  const set = opts.set || SNAP_SET, angles = opts.tilt ? [0, 3, -3] : [set.tilt];
+  const frames = angles.map(a => camFrame(src, box.x, box.y, box.w, box.h, a));
+  const cams = [];
+  frames.forEach(fr => rectsOf(fr, set.scales, set.shifts).forEach(v => cams.push(coarseCam(v))));
+  const res = coarseSearch(cams, opts.k || 40, opts.hist);
+  const coarse = res.top; coarse.scores = res.scores;
+  if (opts.coarseOnly) return coarse;
+  const fps = await Promise.all(coarse.map(c => fineFor(c.card)));
+  const fines = [];
+  frames.forEach(fr => fineRects(fr).forEach(v => fines.push(fineCam(v))));
+  coarse.forEach((c, i) => { c.fine = fps[i] ? Math.max(...fines.map(f => scoreFP(f, fps[i]))) : -1; });
+  coarse.sort((a, b) => b.fine - a.fine);
+  return coarse;
 }
 
 /* ---------- camera scan: match the picture, or read "001/084 PBL" off the card, and jump to it ---------- */
@@ -1735,7 +1865,7 @@ const scanner = {
     const box = $('scan');
     box.classList.add('open');
     $('scanResult').hidden = true; $('scanResult').innerHTML = '';
-    this.found = null; this.book = null; this.matchSet = null; this.hist = []; this.tries = 0; this.shown = null;
+    this.found = null; this.last = null; this.coarseHist = []; this.tries = 0; this.shown = null; this.checking = false;
     const status = m => { $('scanStatus').textContent = m; };
     $('scanManual').value = '';
     this.torch = false; $('scanTorch').hidden = true; $('scanTorch').textContent = '🔦 Light'; $('scanSnap').hidden = true;
@@ -1763,43 +1893,28 @@ const scanner = {
         return true;
       } catch (e) { return false; }
     })();
-    // which set to match pictures against: the open set, else the last one opened
-    const sets = window._sets || await getJSON('sets').catch(() => []);
-    if (!window._sets) window._sets = sets;
-    let setId = (window._set && (location.hash || '').startsWith('#/set/')) ? window._set.id : null;
-    if (!setId) { try { setId = localStorage.getItem('tcgPokedex.lastSet'); } catch (e) {} }
-    if (!setId && sets.length) setId = sets[sets.length - 1].id;
-    const sel = $('scanSet');
-    sel.innerHTML = sets.slice().reverse().map(s => '<option value="' + s.id + '"' + (s.id === setId ? ' selected' : '') + '>' + esc(s.name) + (abbrOf(s.id) ? ' (' + abbrOf(s.id) + ')' : '') + '</option>').join('');
-    sel.onchange = () => this.learn(sel.value);
     if (this.stream) { $('scanSnap').hidden = false; this.loop(); }
-    if (setId) await this.learn(setId);
-    else status(this.stream ? 'Pick a set above, or type the number below.' : 'Type the number below.');
-  },
-  // build (or fetch from the session cache) the picture fingerprints of one set
-  async learn(setId) {
-    const status = m => { $('scanStatus').textContent = m; };
-    this.book = null; this.hist = []; this.found = null; $('scanResult').hidden = true;
-    let set;
-    try { set = window._set && window._set.id === setId ? window._set : await getJSON('sets/' + setId); } catch (e) { status('Could not load that set.'); return; }
-    this.matchSet = set;
-    if (!set.cards.some(c => c.image)) { status('No pictures for ' + set.name + ' — type the number below.'); return; }
-    const t0 = Date.now();
-    const book = await fingerprintsFor(set, (d, n) => { if (this.matchSet === set && Date.now() - t0 > 600) status('Learning ' + set.name + ' pictures… ' + d + '/' + n); });
-    if (this.matchSet !== set) return;                       // the set was changed while loading
-    this.book = book;
-    status(this.stream ? 'Fill the outline with the card and hold still.' : 'Type the number below.');
+    // the catalogue fingerprints (a few MB, fetched once) and the set→series map the picture URLs need
+    try {
+      status('Loading the card index…');
+      await Promise.all([loadIndex((k, n) => status('Preparing the card index… ' + Math.round(k / n * 100) + '%')), loadSerieMap()]);
+      if (!window._sets) window._sets = await getJSON('sets').catch(() => null);
+      this.ready = true;
+      status(this.stream ? 'Fill the outline with the card and hold still.' : 'Type the number below.');
+    } catch (e) {
+      this.ready = false;
+      status(this.stream ? 'Card index not available (no internet?). Reading the number instead — or type it below.' : 'Type the number below.');
+    }
   },
   close() {
     clearTimeout(this.timer); this.timer = null;
     if (this.stream) { this.stream.getTracks().forEach(t => t.stop()); this.stream = null; }
     const v = $('scan').querySelector('video'); v.pause(); v.srcObject = null;   // iPhones otherwise keep the camera light on
-    this.found = null; this.busy = false;
+    this.found = null; this.busy = false; this.checking = false;
     $('scanResult').hidden = true; $('scanResult').innerHTML = '';
     $('scanManual').blur();
     $('scan').classList.remove('open');
   },
-  // Tap to read: a full-resolution still photo where the phone offers one (ImageCapture), else the live frame.
   // the on-screen guide (or its number strip) in the coordinates of a source that shares the video's width of view
   guideBox(which, src) {
     const v = $('scan').querySelector('video');
@@ -1810,16 +1925,42 @@ const scanner = {
     const kx = sw0 / v.videoWidth, cy = sh0 / 2 - (v.videoHeight / 2) * kx;
     return { x: (g.left - c.left - ox) / scale * kx, y: (g.top - c.top - oy) / scale * kx + cy, w: g.width / scale * kx, h: g.height / scale * kx };
   },
-  // picture match of one frame or photo against the learnt set: { card, score, margin, top } or null
-  matchPicture(src, box, tilt) {
-    const scores = matchFrame(src, box.x, box.y, box.w, box.h, this.book.fps, tilt);
-    if (!tilt) { this.hist.push(scores); if (this.hist.length > 3) this.hist.shift(); }
-    const avg = new Float32Array(scores.length);
-    const use = tilt ? [scores] : this.hist;
-    use.forEach(s => { for (let k = 0; k < s.length; k++) avg[k] += s[k] / use.length; });
-    const order = [...avg.keys()].sort((a, b) => avg[b] - avg[a]);
-    const pk = $('scanPeek'); pk.width = 36; pk.height = 50; pk.getContext('2d').drawImage(src, box.x, box.y, box.w, box.h, 0, 0, 36, 50);
-    return { top: order.slice(0, 3).map(k => ({ card: this.book.cards[k], score: avg[k] })), score: avg[order[0]], margin: avg[order[0]] - avg[order[1]] };
+  setName(setId) { const s = window._sets && window._sets.find(s => s.id === setId); return s ? s.name : setId; },
+  // a card's name if its set is already cached (it will be after show()), else its number
+  cardName(card) { const s = cacheGet('sets/' + card.set); const c = s && s.cards.find(c => c.localId === card.localId); return c ? c.name : this.setName(card.set) + ' ' + card.localId; },
+  key(card) { return card.set + '-' + card.localId; },
+  // Weigh up a ranked search result. Returns 'shown' when a card (or a which-set choice) is on screen, else false.
+  // hit = a number read off the card, used to pick between reprints with the same picture.
+  decide(list, hit) {
+    const status = m => { $('scanStatus').textContent = m; };
+    const best = list[0];
+    if (!best || best.fine < 0.45) return false;
+    const ties = list.filter(c => best.fine - c.fine < 0.03);           // the same artwork in several sets
+    const next = list.find(c => best.fine - c.fine >= 0.03);
+    if (next && best.fine - next.fine < 0.05) return false;              // a different picture scores almost as well: not sure
+    let pick = ties[0];
+    if (ties.length > 1) {
+      const open = window._set && (location.hash || '').startsWith('#/set/') ? window._set.id : null;
+      const byNumber = hit && ties.find(c => (hit.code && abbrOf(c.set).toUpperCase() === hit.code.toUpperCase()) || (hit.denom && cacheGet('sets/' + c.set) && cacheGet('sets/' + c.set).cardCount.official === hit.denom));
+      const inOpen = ties.filter(c => c.card.set === open);
+      pick = byNumber || (inOpen.length === 1 ? inOpen[0] : null);
+      if (!pick) {
+        status('That picture is in ' + ties.length + ' sets — which one?');
+        const r = $('scanResult'); r.hidden = false; r.innerHTML = '<div class="choices"></div><button class="dismiss" aria-label="Dismiss">✕</button>';
+        ties.slice(0, 6).forEach(c => {
+          const b = makeButton('', () => { this.found = { localId: c.card.localId }; this.show(c.card.set, this.found); });
+          const url = cardImageUrl(c.card);
+          b.innerHTML = (url ? '<img alt="" src="' + url + '/low.webp">' : '') + esc(this.setName(c.card.set)) + ' · ' + esc(c.card.localId) + (dateOf(c.card.set) ? ' · ' + dateOf(c.card.set).slice(0, 4) : '');
+          r.querySelector('.choices').appendChild(b);
+        });
+        r.querySelector('.dismiss').onclick = () => { this.found = null; this.last = null; this.coarseHist = []; r.hidden = true; status('Fill the outline with the next card.'); };
+        this.found = { localId: best.card.localId };
+        return 'shown';
+      }
+    }
+    this.found = { localId: pick.card.localId };
+    this.show(pick.card.set, this.found);
+    return 'shown';
   },
   async snap() {
     if (!this.stream || this.snapping) return;
@@ -1838,16 +1979,18 @@ const scanner = {
       }
       // map the on-screen outline into the source: the photo shares the video's width of view, with extra height either side
       const G = this.guideBox('guide', src !== v ? src : null), Z = this.guideBox('zone', src !== v ? src : null);
-      // 1. the picture, with tilt search, against the chosen set
-      let pic = null;
-      if (this.book) {
-        pic = this.matchPicture(src, G, true);
-        $('scanRead').textContent = sw0 + '×' + sh0 + ' ' + note + ': ' + pic.top.map(t => t.card.name + ' ' + t.score.toFixed(2)).join(', ');
-        if (pic.score >= 0.4 && pic.margin >= 0.04) { this.found = { localId: pic.top[0].card.localId }; await this.show(this.matchSet.id, this.found); if (src !== v && src.close) src.close(); this.snapping = false; return; }
+      const pk = $('scanPeek'); pk.width = 36; pk.height = 50; pk.getContext('2d').drawImage(src, G.x, G.y, G.w, G.h, 0, 0, 36, 50);
+      // 1. the picture, with tilt search, against the whole catalogue
+      let list = null;
+      if (this.ready) {
+        list = await searchPicture(src, G, { set: SNAP_SET, k: 60 });
+        if (!list[0] || list[0].fine < 0.45) { const tilted = await searchPicture(src, G, { set: SNAP_SET, tilt: true, k: 60 }); if (tilted[0] && (!list[0] || tilted[0].fine > list[0].fine)) list = tilted; }
+        $('scanRead').textContent = sw0 + '×' + sh0 + ' ' + note + ': ' + list.slice(0, 3).map(c => this.key(c.card) + ' ' + c.fine.toFixed(2)).join(', ');
       }
-      // 2. the printed number, in case the card is from another set or the picture match is unsure
-      let hit = null, read = '';
-      if (await this.ocrReady) {
+      // 2. the printed number — only when needed: it settles reprints, and covers cards the index has no picture for
+      let hit = null;
+      const sure = list && list[0] && list[0].fine >= 0.45 && list.filter(c => list[0].fine - c.fine < 0.03).length === 1;
+      if (!sure && await this.ocrReady) {
         status('Reading the number…');
         const pad = Z.h * 0.4;
         const tries = [['strip', Z.x, Z.y - pad, Z.w, Z.h + 2 * pad, 1600, '6'], ['card', G.x, G.y, G.w, G.h, 1400, '11']];
@@ -1855,24 +1998,28 @@ const scanner = {
           const [plain, inv] = prepForOCR(src, x, y, w, h, tw);
           await this.worker.setParameters({ tessedit_pageseg_mode: psm });
           for (const img of [plain, inv]) {
-            const { data } = await this.worker.recognize(img);
-            read = read || data.text.trim().replace(/\s+/g, ' ');
-            hit = parseScan(data.text);
+            hit = parseScan((await this.worker.recognize(img)).data.text);
             if (hit) break;
           }
           if (hit) break;
         }
       }
-      if (hit) { this.found = hit; await this.resolve(hit); }
-      else if (pic && pic.score >= 0.25) {
+      if (list && this.decide(list, hit)) {}
+      else if (hit) { this.found = hit; await this.resolve(hit); }
+      else if (list && list[0] && list[0].fine >= 0.25) {
         // 3. not sure: offer the closest pictures and let the eye decide
         status('Not certain — is it one of these?');
         const r = $('scanResult'); r.hidden = false; r.innerHTML = '<div class="choices"></div><button class="dismiss" aria-label="Dismiss">✕</button>';
-        pic.top.forEach(t => {
-          const b = makeButton('', () => { this.found = { localId: t.card.localId }; this.show(this.matchSet.id, this.found); });
-          b.innerHTML = (t.card.image ? '<img alt="" src="' + t.card.image + '/low.webp">' : '') + esc(t.card.name) + ' · ' + esc(t.card.localId);
+        const seen = [];
+        for (const c of list) {
+          if (seen.length >= 3 || c.fine < 0.25) break;
+          if (seen.some(s => Math.abs(s.fine - c.fine) < 0.03)) continue;      // one of each picture
+          seen.push(c);
+          const b = makeButton('', () => { this.found = { localId: c.card.localId }; this.show(c.card.set, this.found); });
+          const url = cardImageUrl(c.card);
+          b.innerHTML = (url ? '<img alt="" src="' + url + '/low.webp">' : '') + esc(this.setName(c.card.set)) + ' · ' + esc(c.card.localId);
           r.querySelector('.choices').appendChild(b);
-        });
+        }
         r.querySelector('.dismiss').onclick = () => { r.hidden = true; status('Fill the outline with the card and hold still, then Snap again.'); };
       }
       else status('Could not match it. Fill the outline with the card, hold still, Snap again — or type the number.');
@@ -1887,7 +2034,9 @@ const scanner = {
     try { await track.applyConstraints({ advanced: [{ torch: this.torch }] }); } catch (e) { this.torch = false; }
     $('scanTorch').textContent = this.torch ? '🔦 Light off' : '🔦 Light';
   },
-  // live: match the picture in the guide box every pass (fast); every few passes also try reading the number strip (slow)
+  // live: one coarse pass per frame, cycling through the variant sets and averaging the last few frames' scores;
+  // when the same picture leads two frames running, the fine check runs on it. Every few passes the number strip
+  // is read too (slow), which covers cards the index has no picture for.
   async loop() {
     if (!$('scan').classList.contains('open') || !this.stream) return;
     if (!this.busy && !this.found) {
@@ -1896,17 +2045,27 @@ const scanner = {
         const v = $('scan').querySelector('video');
         if (v.videoWidth) {
           this.tries = (this.tries || 0) + 1;
-          if (this.book) {
-            const pic = this.matchPicture(v, this.guideBox('guide'), false);
-            const best = pic.top[0];
-            $('scanRead').textContent = v.videoWidth + '×' + v.videoHeight + ': ' + pic.top.map(t => t.card.name + ' ' + t.score.toFixed(2)).join(', ');
-            const again = this.shown && this.shown.setId === this.matchSet.id && this.shown.localId === best.card.localId && Date.now() - this.shown.at < 6000;
-            if (this.hist.length >= 2 && pic.score >= 0.42 && pic.margin >= 0.05 && !again) { this.found = { localId: best.card.localId }; this.show(this.matchSet.id, this.found); }
-            else if (again) {}
-            else if (pic.score >= 0.3) $('scanStatus').textContent = 'Looks like ' + best.card.name + ' — hold still…';
-            else $('scanStatus').textContent = 'Looking… fill the outline with the card, or tap Snap.';
+          if (this.ready) {
+            const box = this.guideBox('guide');
+            const pk = $('scanPeek'); pk.width = 36; pk.height = 50; pk.getContext('2d').drawImage(v, box.x, box.y, box.w, box.h, 0, 0, 36, 50);
+            const coarse = await searchPicture(v, box, { set: LIVE_SETS[this.tries % LIVE_SETS.length], hist: this.coarseHist, k: 40, coarseOnly: true });
+            this.coarseHist.push(coarse.scores); if (this.coarseHist.length > 3) this.coarseHist.shift();
+            coarse.slice(0, 12).forEach(c => fineFor(c.card));            // start fetching the likely pictures now, so the fine check has them
+            const keys = coarse.slice(0, 3).map(c => this.key(c.card));
+            $('scanRead').textContent = v.videoWidth + '×' + v.videoHeight + ': ' + coarse.slice(0, 3).map(c => this.key(c.card) + ' ' + c.coarse.toFixed(2)).join(', ');
+            const steady = this.last && this.last.includes(keys[0]);
+            this.last = keys;
+            const again = this.shown && this.shown.key === keys[0] && Date.now() - this.shown.at < 6000;
+            if (steady && !again) {
+              $('scanStatus').textContent = 'Checking ' + this.cardName(coarse[0].card) + '…';
+              const list = await searchPicture(v, box, { set: LIVE_SETS[this.tries % LIVE_SETS.length], hist: this.coarseHist, k: 40 });
+              if (!this.found && !this.decide(list, null)) {
+                if (list[0] && list[0].fine >= 0.3) { $('scanStatus').textContent = 'Looks like ' + this.cardName(list[0].card) + ' — hold still, fill the outline…'; getJSON('sets/' + list[0].card.set).catch(() => {}); }
+                else $('scanStatus').textContent = 'Looking… fill the outline with the card, or tap Snap.';
+              }
+            } else if (!again) $('scanStatus').textContent = 'Looking… fill the outline with the card and hold still.';
           }
-          // the number strip tells us the set when the card is not from the chosen one
+          // the number strip tells us the card when the picture cannot
           if (!this.found && this.tries % 4 === 0 && this.worker) {
             const Z = this.guideBox('zone'), pad = Z.h * 0.3;
             const [plain, inverted] = prepForOCR(v, Z.x, Z.y - pad, Z.w, Z.h + pad * 2, 1400);
@@ -1914,13 +2073,13 @@ const scanner = {
             let hit = parseScan((await this.worker.recognize(plain)).data.text);
             if (!hit) hit = parseScan((await this.worker.recognize(inverted)).data.text);   // white-on-foil text
             if (hit && !this.found) { this.found = hit; this.resolve(hit); }
-            if (!this.book) { const pk = $('scanPeek'); pk.width = plain.width / 4; pk.height = plain.height / 4; pk.getContext('2d').drawImage(plain, 0, 0, pk.width, pk.height); }
+            if (!this.ready) { const pk = $('scanPeek'); pk.width = plain.width / 4; pk.height = plain.height / 4; pk.getContext('2d').drawImage(plain, 0, 0, pk.width, pk.height); }
           }
         }
       } catch (e) {}
       this.busy = false;
     }
-    this.timer = setTimeout(() => this.loop(), this.book ? 250 : 400);
+    this.timer = setTimeout(() => this.loop(), this.ready ? 120 : 400);
   },
   async resolve(hit) {
     const status = m => { $('scanStatus').textContent = m; };
@@ -1956,8 +2115,8 @@ const scanner = {
     const key = setKey(set.id);
     const r = $('scanResult'); r.hidden = false;
     r.innerHTML = (card.image ? '<img alt="" src="' + card.image + '/low.webp">' : '') + '<div class="t"><b></b><small></small></div><div class="btns"></div><button class="dismiss" title="Wrong card — keep scanning" aria-label="Dismiss">✕</button>';
-    r.querySelector('.dismiss').onclick = () => { this.found = null; this.hist = []; r.hidden = true; status('Fill the outline with the next card.'); };
-    this.shown = { localId: card.localId, setId: set.id, at: Date.now() };
+    r.querySelector('.dismiss').onclick = () => { this.found = null; this.last = null; this.coarseHist = []; r.hidden = true; status('Fill the outline with the next card.'); };
+    this.shown = { key: set.id + '-' + card.localId, at: Date.now() };
     r.querySelector('b').textContent = card.name;
     r.querySelector('small').textContent = set.name + ' · ' + card.localId + (set.cardCount.official ? '/' + String(set.cardCount.official).padStart(card.localId.length, '0') : '');
     status('Found ' + card.name + ' — which printing?');
@@ -1976,14 +2135,14 @@ const scanner = {
           setCard(state.current, key, card.localId, !got, v);
           if (window._set && window._set.id === set.id && (location.hash || '').startsWith('#/set/')) renderSet();   // keep the page behind in step
           status(card.name + (got ? ' — ' + VNAME[v] + ' removed' : ' — ' + VNAME[v] + ' marked owned for ' + me().name) + '. Pick another or hold up the next card.');
-          this.found = null; this.hist = []; this.shown.at = Date.now();      // scanning carries on; the same card is not re-announced for a few seconds
+          this.found = null; this.last = null; this.coarseHist = []; this.shown.at = Date.now();      // scanning carries on; the same card is not re-announced for a few seconds
           draw();
         }, got ? 'Owned — tap to remove' : 'Mark this printing owned');
         if (got) b.className = 'primary';
         btns.appendChild(b);
       });
       btns.appendChild(makeButton('Open set', () => { this.close(); ui.q = card.localId; location.hash = '#/set/' + set.id; }));
-      btns.appendChild(makeButton('✕ Wrong card', () => { this.found = null; this.hist = []; r.hidden = true; status('Fill the outline with the next card.'); }, 'Dismiss and keep scanning'));
+      btns.appendChild(makeButton('✕ Wrong card', () => { this.found = null; this.last = null; this.coarseHist = []; r.hidden = true; status('Fill the outline with the next card.'); }, 'Dismiss and keep scanning'));
     };
     draw();
   }

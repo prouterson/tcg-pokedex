@@ -56,7 +56,9 @@ GitHub Pages is free and needs no software installed.
    `https://YOURNAME.github.io/tcg-pokedex/`. That is the app.
 
 The app is these files, and all of them go in the repository:
-`index.html`, `sw.js`, `manifest.webmanifest`, `icon-180.png`, `icon-192.png`, `icon-512.png`.
+`index.html`, `sw.js`, `manifest.webmanifest`, `icon-180.png`, `icon-192.png`, `icon-512.png`,
+`cards-1.fp` (the card-picture fingerprints the camera scanner matches against; about 6 MB,
+rebuilt now and then as new sets come out — the number in the name goes up each time).
 
 Optional — set symbols: TCGdex has no picture for some sets (30th Celebration, Trainer
 Galleries, promos). To add one, save a PNG of the symbol named after the set id, e.g.
