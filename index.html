@@ -1,0 +1,871 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1b202b">
+<title>TCG Pokédex</title>
+<style>
+  :root {
+    --bg: #f4f5f7; --panel: #ffffff; --text: #1d2330; --muted: #6b7385; --line: #dfe3ea;
+    --accent: #e3350d; --owned: #2e9e5b; --need: #e3350d; --card-miss: #eef0f4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #12151c; --panel: #1b202b; --text: #e8ebf2; --muted: #98a1b5; --line: #2b3242;
+      --accent: #ff5a3c; --owned: #3fc27a; --need: #ff5a3c; --card-miss: #181c26;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, "Segoe UI", sans-serif; -webkit-tap-highlight-color: transparent; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); padding: 10px 16px; }
+  .top { display: flex; align-items: center; gap: 10px; }
+  .back { width: 36px; height: 36px; padding: 0; font-size: 20px; flex: none; }
+  h1 { font-size: 18px; margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  h1 span { color: var(--accent); }
+  .count { font-weight: 600; white-space: nowrap; }
+  .bar { height: 8px; background: var(--card-miss); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+  .bar > i { display: block; height: 100%; background: var(--owned); width: 0; transition: width .25s; }
+  .stats { font-size: 12px; color: var(--muted); margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; }
+  .stats b { color: var(--text); }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+  input[type=search] { flex: 1 1 160px; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
+  button, select { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 11px; cursor: pointer; }
+  button:hover { border-color: var(--accent); }
+  select.person { font-weight: 600; border-color: var(--person, var(--line)); }
+  .seg { display: flex; }
+  .seg button { border-radius: 0; margin-left: -1px; }
+  .seg button:first-child { border-radius: 8px 0 0 8px; margin-left: 0; }
+  .seg button:last-child { border-radius: 0 8px 8px 0; }
+  .seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  main { padding: 16px; max-width: 1400px; margin: 0 auto; }
+  h2 { font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 18px 0 8px; }
+  h2:first-child { margin-top: 0; }
+
+  /* who-owns-it badges */
+  .who { display: inline-flex; gap: 2px; }
+  .who i { font-style: normal; font-size: 10px; font-weight: 700; color: #fff; border-radius: 50%; width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; }
+
+  /* series and set lists */
+  .rows { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+  .row { display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; cursor: pointer; text-align: left; }
+  .row img { width: 72px; height: 40px; object-fit: contain; flex: none; }
+  .row .sym { width: 28px; height: 28px; object-fit: contain; flex: none; }
+  .row .t { flex: 1; min-width: 0; }
+  .row .t b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .t small { color: var(--muted); }
+  .row .pct { font-weight: 600; white-space: nowrap; }
+  .row .pct.done { color: var(--owned); }
+  .row .mini { height: 4px; background: var(--card-miss); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+  .row .mini i { display: block; height: 100%; background: var(--owned); }
+
+  /* card grid */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
+  .card { position: relative; background: var(--card-miss); border: 2px solid transparent; border-radius: 10px; padding: 6px; text-align: center; cursor: pointer; user-select: none; }
+  .card img { width: 100%; aspect-ratio: 63/88; object-fit: contain; border-radius: 6px; filter: grayscale(.9) opacity(.45); transition: filter .15s; background: var(--card-miss); }
+  .card.noimg img { display: none; }
+  .card .ph { display: none; aspect-ratio: 63/88; align-items: center; justify-content: center; color: var(--muted); font-size: 12px; padding: 6px; }
+  .card.noimg .ph { display: flex; }
+  .card.owned { background: var(--panel); border-color: var(--owned); }
+  .card.owned img { filter: none; }
+  .card .num { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .card .name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .meta { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; gap: 4px; min-height: 16px; }
+  .card .meta .price { font-weight: 600; color: var(--text); }
+  .card .tick { position: absolute; top: 6px; left: 6px; width: 24px; height: 24px; border-radius: 50%; background: var(--owned); color: #fff; font-weight: 700; display: none; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
+  .card.owned .tick { display: flex; }
+  .card .zoom { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; padding: 0; border-radius: 50%; background: var(--panel); font-size: 14px; line-height: 1; }
+
+  /* compact list for checking in a shop */
+  .list { display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  .line { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--need); border-radius: 8px; padding: 8px 10px; cursor: pointer; user-select: none; }
+  .line.owned { border-left-color: var(--owned); opacity: .6; }
+  .line .n { font-variant-numeric: tabular-nums; color: var(--muted); width: 64px; flex: none; }
+  .line .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .line .name small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; }
+  .line .price { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .line .st { font-size: 12px; font-weight: 700; color: var(--need); }
+  .line.owned .st { color: var(--owned); }
+
+  .empty { text-align: center; color: var(--muted); padding: 40px 0; }
+  .note { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; color: var(--muted); }
+  footer { text-align: center; color: var(--muted); font-size: 12px; padding: 20px; }
+  footer a { color: inherit; }
+  #syncStatus { margin-bottom: 6px; font-weight: 600; }
+  #syncStatus.ok { color: var(--owned); }
+  #syncStatus.bad { color: var(--need); }
+
+  /* people manager */
+  .people { max-width: 520px; }
+  .people .p { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; }
+  .people .p .dot { width: 22px; height: 22px; border-radius: 50%; flex: none; color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .people .p b { flex: 1; }
+  .people .p small { color: var(--muted); }
+  .people .add { display: flex; gap: 8px; margin-top: 12px; }
+  .people .add input { flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
+
+  /* lightbox */
+  #lb { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; align-items: center; justify-content: center; z-index: 20; padding: 16px; }
+  #lb.open { display: flex; }
+  #lb img { max-width: 100%; max-height: 90vh; border-radius: 12px; }
+
+  /* printable binder placeholders: 3 x 3 real-size cards per A4 page */
+  #print { display: none; }
+  @media print {
+    @page { size: A4; margin: 8mm; }
+    body { background: #fff; color: #000; }
+    header, main, footer, #lb { display: none !important; }
+    #print { display: block; }
+    .page { display: grid; grid-template-columns: repeat(3, 63mm); grid-auto-rows: 88mm; gap: 2mm; justify-content: center; break-after: page; }
+    .page:last-child { break-after: auto; }
+    .slot { position: relative; border: 0.3mm dashed #999; border-radius: 3mm; overflow: hidden; }
+    .slot img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) opacity(.35); }
+    .slot .lbl { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.92); padding: 2mm 3mm; font-size: 9pt; line-height: 1.25; }
+    .slot .lbl b { display: block; font-size: 11pt; }
+    .slot .tag { position: absolute; top: 4mm; left: -14mm; transform: rotate(-35deg); background: #e3350d; color: #fff; font-weight: 700; font-size: 9pt; letter-spacing: .1em; padding: 1mm 16mm; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <button class="back" id="back" aria-label="Back" hidden>‹</button>
+    <h1 id="title"><span>◆</span> TCG Pokédex</h1>
+    <div class="count" id="count"></div>
+  </div>
+  <div class="bar" id="bar" hidden><i id="barFill"></i></div>
+  <div class="stats" id="stats" hidden></div>
+  <div class="controls" id="controls"></div>
+</header>
+<main id="main"></main>
+<footer id="foot"><div id="syncStatus"></div>Tap a card to mark it owned by the user selected at the top. Use Export to back up. Card data and prices from TCGdex.</footer>
+<div id="lb"><img id="lbImg" alt=""></div>
+<div id="print"></div>
+
+<script>
+const LANGS = [
+  ['en', 'English'], ['ja', '日本語 Japanese'], ['zh-cn', '简体中文 Simplified Chinese'], ['zh-tw', '繁體中文 Traditional Chinese'],
+  ['ko', '한국어 Korean'], ['th', 'ไทย Thai'], ['id', 'Indonesian'], ['fr', 'Français'], ['de', 'Deutsch'], ['es', 'Español'], ['it', 'Italiano'], ['pt', 'Português']
+];
+// ---- Shared family database (optional) ----
+// Paste the "firebaseConfig" object from your Firebase project here to turn on syncing between phones.
+// Leave it as null and the app works on this device only.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAJDBPxCOBe1ynk8UmVuQ8dzb3fILwRzm4",
+  authDomain: "tcg-pokedex-82cd6.firebaseapp.com",
+  databaseURL: "https://tcg-pokedex-82cd6-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "tcg-pokedex-82cd6",
+  storageBucket: "tcg-pokedex-82cd6.firebasestorage.app",
+  messagingSenderId: "389795033906",
+  appId: "1:389795033906:web:f1037626eef4d8208e5d2b"
+};
+const FIREBASE_SDK = 'https://www.gstatic.com/firebasejs/10.12.0/';
+
+const SAVE_KEY = 'tcgPokedex.v2';
+const OLD_KEY = 'tcgPokedex.v1';
+const LANG_KEY = 'tcgPokedex.lang';
+const FAMILY_KEY = 'tcgPokedex.family';
+const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
+const CACHE_PFX = 'tcgPokedex.cache.';
+const PRICE_MAX_AGE = 7 * 24 * 3600 * 1000;   // refresh card prices weekly
+const DETAIL_BATCH = 6;                        // concurrent card-detail requests
+const COLOURS = ['#e3350d', '#2b6fd6', '#2e9e5b', '#e0a800', '#8e44ad', '#17a2b8', '#d63384', '#6c757d'];
+
+let lang = 'en';
+let state = { people: [], current: '', owned: {} };   // owned[personId][setKey][localId] = 1
+let ui = { filter: 'all', mode: 'grid', q: '', rarity: '', sort: 'num' };
+let details = {};                     // current set: localId -> { r: rarity, p: price, u: unit }
+let detailJob = 0;                    // bumps when the set changes so an old loader stops
+
+const API = () => 'https://api.tcgdex.net/v2/' + lang + '/';
+// English keeps the plain set id so progress from the first version still matches
+const setKey = id => lang === 'en' ? id : lang + '/' + id;
+
+function loadState() {
+  try { lang = localStorage.getItem(LANG_KEY) || 'en'; } catch (e) {}
+  if (!LANGS.some(l => l[0] === lang)) lang = 'en';
+  try {
+    const s = JSON.parse(localStorage.getItem(SAVE_KEY));
+    if (s && s.people && s.owned) state = s;
+    else {
+      const old = JSON.parse(localStorage.getItem(OLD_KEY));
+      if (old && old.owned) state = { people: [{ id: 'p1', name: 'User 1', c: 0 }], current: 'p1', owned: { p1: old.owned } };
+    }
+  } catch (e) {}
+  try { const cur = localStorage.getItem(CURRENT_KEY); if (cur) state.current = cur; } catch (e) {}
+  normalise();
+}
+function normalise() {
+  if (!Array.isArray(state.people)) state.people = [];
+  if (!state.owned || typeof state.owned !== 'object') state.owned = {};
+  if (!state.people.length) { state.people = [{ id: 'p1', name: 'User 1', c: 0 }]; state.current = 'p1'; }
+  if (!state.people.some(p => p.id === state.current)) state.current = state.people[0].id;
+}
+function saveState() {
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify(state)); localStorage.setItem(CURRENT_KEY, state.current); } catch (e) {}
+}
+
+/* ---------- changes go through here so the family database stays in step ---------- */
+function setCard(pid, key, localId, on) {
+  const person = state.owned[pid] || (state.owned[pid] = {});
+  const mine = person[key] || (person[key] = {});
+  if (on) mine[localId] = 1; else delete mine[localId];
+  if (!Object.keys(mine).length) delete person[key];
+  saveState();
+  sync.writeCard(pid, key, localId, on);
+}
+function savePerson(p) { saveState(); sync.writePerson(p); }
+function removePerson(p) {
+  state.people = state.people.filter(x => x !== p); delete state.owned[p.id];
+  if (state.current === p.id) state.current = state.people[0].id;
+  saveState(); sync.removePerson(p.id);
+}
+
+/* ---------- family sync: Firebase Realtime Database ---------- */
+// Database layout:  families/<code>/people/<pid> = {name, c}
+//                   families/<code>/owned/<pid>/<setKey>/<localId> = 1
+// Set ids like "sv03.5" and keys like "ja/SVK" contain characters Firebase forbids, so they are escaped.
+const dbKey = s => s.replace(/[.$#\[\]\/%]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
+const unKey = s => decodeURIComponent(s);
+const sync = {
+  code: '', status: 'off', fb: null, root: null, unsub: null,
+  get on() { return !!this.root; },
+  async start(code) {
+    if (!FIREBASE_CONFIG || !code) return;
+    this.code = code; this.status = 'connecting'; renderSyncStatus();
+    try {
+      if (!this.fb) {
+        const [app, db, auth] = await Promise.all([
+          import(FIREBASE_SDK + 'firebase-app.js'), import(FIREBASE_SDK + 'firebase-database.js'), import(FIREBASE_SDK + 'firebase-auth.js')]);
+        const a = app.initializeApp(FIREBASE_CONFIG);
+        await auth.signInAnonymously(auth.getAuth(a));
+        this.fb = { db, database: db.getDatabase(a) };
+      }
+      this.stop();
+      this.root = this.fb.db.ref(this.fb.database, 'families/' + dbKey(code));
+      this.unsub = this.fb.db.onValue(this.root, snap => this.onRemote(snap.val()), err => { this.status = 'error: ' + err.message; renderSyncStatus(); });
+    } catch (e) { this.status = 'error: ' + (e.message || e); this.root = null; renderSyncStatus(); }
+  },
+  stop() { if (this.unsub) this.unsub(); this.unsub = null; this.root = null; },
+  leave() { this.stop(); this.code = ''; this.status = 'off'; try { localStorage.removeItem(FAMILY_KEY); } catch (e) {} renderSyncStatus(); },
+  onRemote(data) {
+    this.status = 'live';
+    if (!data || !data.people) {
+      // brand-new family: seed it with whatever this phone already has
+      this.uploadAll();
+    } else {
+      state.people = Object.entries(data.people).map(([id, p]) => ({ id, name: p.name || 'User', c: p.c || 0 }));
+      const owned = {};
+      Object.entries(data.owned || {}).forEach(([pid, sets]) => {
+        owned[pid] = {};
+        Object.entries(sets || {}).forEach(([k, cards]) => { owned[pid][unKey(k)] = {}; Object.keys(cards || {}).forEach(id => { owned[pid][unKey(k)][unKey(id)] = 1; }); });
+      });
+      state.owned = owned;
+      normalise(); saveState();
+    }
+    renderSyncStatus();
+    rerender();
+  },
+  path(...parts) { return this.fb.db.ref(this.fb.database, 'families/' + dbKey(this.code) + '/' + parts.map(dbKey).join('/')); },
+  writeCard(pid, key, localId, on) {
+    if (!this.on) return;
+    const r = this.path('owned', pid, key, localId);
+    (on ? this.fb.db.set(r, 1) : this.fb.db.remove(r)).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
+  },
+  writePerson(p) { if (this.on) this.fb.db.set(this.path('people', p.id), { name: p.name, c: p.c || 0 }).catch(() => {}); },
+  removePerson(pid) { if (this.on) { this.fb.db.remove(this.path('people', pid)).catch(() => {}); this.fb.db.remove(this.path('owned', pid)).catch(() => {}); } },
+  uploadAll() {
+    if (!this.on) return;
+    const people = {}, owned = {};
+    state.people.forEach(p => { people[dbKey(p.id)] = { name: p.name, c: p.c || 0 }; });
+    Object.entries(state.owned).forEach(([pid, sets]) => {
+      owned[dbKey(pid)] = {};
+      Object.entries(sets).forEach(([k, cards]) => { owned[dbKey(pid)][dbKey(k)] = {}; Object.keys(cards).forEach(id => { owned[dbKey(pid)][dbKey(k)][dbKey(id)] = 1; }); });
+    });
+    this.fb.db.set(this.root, { people, owned }).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
+  }
+};
+function newFamilyCode() {
+  const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+  return Array.from(crypto.getRandomValues(new Uint8Array(10)), b => chars[b % chars.length]).join('');
+}
+function renderSyncStatus() {
+  const f = $('syncStatus');
+  if (!FIREBASE_CONFIG) { f.innerHTML = 'This device only · <a href="#/sync">set up family sync</a>'; return; }
+  if (!sync.code) { f.innerHTML = 'This device only · <a href="#/sync">join a family</a>'; return; }
+  const s = sync.status;
+  f.innerHTML = (s === 'live' ? '● Family sync live' : s === 'connecting' ? '○ Connecting…' : '○ Sync ' + esc(s)) + ' · <a href="#/sync">family ' + esc(sync.code) + '</a>';
+  f.className = s === 'live' ? 'ok' : s.startsWith('error') ? 'bad' : '';
+}
+// redraw the current view after a change arrives from another phone
+function rerender() {
+  const h = location.hash || '#/';
+  if (h.startsWith('#/set/') && window._set) renderSet();
+  else if (h === '#/people') viewPeople();
+  else if (h === '#/sync') viewSync();
+  else if (h === '#/' && window._sets) renderHome();
+}
+
+function viewSync() {
+  setHeader({ title: 'Family sync', back: '#/' });
+  const main = $('main');
+  main.innerHTML = '';
+  const box = el('div', 'people');
+  if (!FIREBASE_CONFIG) {
+    box.appendChild(el('div', 'note', 'Family sync needs a free Firebase database. Once its config has been pasted into this app, every phone that enters the same family code sees the same users and cards, live.'));
+    main.appendChild(box); return;
+  }
+  if (sync.code) {
+    const link = location.origin + location.pathname + '?family=' + sync.code;
+    box.appendChild(el('div', 'note', 'This phone is in family <b>' + esc(sync.code) + '</b>. Status: ' + esc(sync.status) + '.<br>Other phones join by opening this link, or by typing the code here:'));
+    const l = el('div', 'p'); l.innerHTML = '<b style="overflow-wrap:anywhere;font-weight:400"></b>'; l.querySelector('b').textContent = link;
+    l.appendChild(makeButton('Copy link', () => { navigator.clipboard && navigator.clipboard.writeText(link).then(() => alert('Link copied')); }));
+    if (navigator.share) l.appendChild(makeButton('Share…', () => navigator.share({ title: 'TCG Pokédex family', url: link }).catch(() => {})));
+    box.appendChild(l);
+    box.appendChild(makeButton('Leave family (keeps a copy on this phone)', () => { if (confirm('Leave the family? This phone keeps a copy of the data but will stop syncing.')) { sync.leave(); viewSync(); } }));
+  } else {
+    box.appendChild(el('div', 'note', 'Join your family by typing the code from another phone, or start a new family. Whatever is already on this phone is uploaded when you start a new family.'));
+    const add = el('div', 'add');
+    add.innerHTML = '<input placeholder="Family code" autocapitalize="off" autocomplete="off">';
+    add.appendChild(makeButton('Join', () => joinFamily(add.querySelector('input').value.trim().toLowerCase())));
+    box.appendChild(add);
+    box.appendChild(makeButton('Start a new family', () => joinFamily(newFamilyCode())));
+  }
+  main.appendChild(box);
+}
+function joinFamily(code) {
+  if (!code) return;
+  try { localStorage.setItem(FAMILY_KEY, code); } catch (e) {}
+  sync.start(code).then(() => { if (location.hash === '#/sync') viewSync(); });
+}
+function cacheGet(k) { try { return JSON.parse(localStorage.getItem(CACHE_PFX + lang + ':' + k)); } catch (e) { return null; } }
+function cacheSet(k, v) { try { localStorage.setItem(CACHE_PFX + lang + ':' + k, JSON.stringify(v)); } catch (e) {} }
+
+// Fetch with a cache so sets already opened still load without signal.
+async function getJSON(path) {
+  const cached = cacheGet(path);
+  if (cached) return cached;
+  const r = await fetch(API() + path);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const data = await r.json();
+  cacheSet(path, data);
+  return data;
+}
+
+/* ---------- people ---------- */
+const me = () => state.people.find(p => p.id === state.current);
+const colour = p => COLOURS[(p.c || 0) % COLOURS.length];
+const initial = p => (p.name || '?').trim().charAt(0).toUpperCase();
+function ownedBy(personId, setId) { return (state.owned[personId] || {})[setKey(setId)] || {}; }
+function ownedIn(setId) { return ownedBy(state.current, setId); }
+function ownedCount(setId) { return Object.keys(ownedIn(setId)).length; }
+function ownersOf(setId, localId) { return state.people.filter(p => ownedBy(p.id, setId)[localId]); }
+function whoBadges(setId, localId) {
+  const others = ownersOf(setId, localId).filter(p => p.id !== state.current);
+  if (!others.length) return '';
+  return '<span class="who" title="Also owned by ' + esc(others.map(p => p.name).join(', ')) + '">' +
+    others.map(p => '<i style="background:' + colour(p) + '">' + esc(initial(p)) + '</i>').join('') + '</span>';
+}
+
+function personSelect() {
+  const sel = el('select', 'person');
+  sel.title = 'Whose collection you are looking at';
+  sel.innerHTML = state.people.map(p => '<option value="' + p.id + '"' + (p.id === state.current ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') +
+    '<option value="__add">+ User</option><option value="__manage">Edit users…</option>';
+  sel.style.setProperty('--person', colour(me()));
+  sel.onchange = () => {
+    if (sel.value === '__add') {
+      const p = addUser();
+      const n = prompt('Name for the new user', p.name);
+      if (n && n.trim()) p.name = n.trim();
+      savePerson(p); route(); return;
+    }
+    if (sel.value === '__manage') { location.hash = '#/people'; return; }
+    state.current = sel.value; saveState(); route();
+  };
+  return sel;
+}
+
+function langSelect() {
+  const sel = el('select');
+  sel.title = 'Card language — Japanese and Asian sets have their own numbering';
+  sel.innerHTML = LANGS.map(l => '<option value="' + l[0] + '"' + (l[0] === lang ? ' selected' : '') + '>' + l[1] + '</option>').join('');
+  sel.onchange = () => {
+    lang = sel.value;
+    try { localStorage.setItem(LANG_KEY, lang); } catch (e) {}
+    window._sets = window._series = null;
+    if (location.hash && location.hash !== '#/') location.hash = '#/'; else route();
+  };
+  return sel;
+}
+
+function viewPeople() {
+  setHeader({ title: 'Users', back: '#/' });
+  const main = $('main');
+  main.innerHTML = '';
+  const box = el('div', 'people');
+  box.appendChild(el('div', 'note', 'Each person has their own owned list. Cards show a coloured initial for anyone else in the family who has them, and the Family filter shows what nobody has yet.'));
+  state.people.forEach(p => {
+    const sets = Object.keys(state.owned[p.id] || {}).length;
+    const cards = Object.values(state.owned[p.id] || {}).reduce((n, s) => n + Object.keys(s).length, 0);
+    const row = el('div', 'p');
+    row.innerHTML = '<span class="dot" style="background:' + colour(p) + '">' + esc(initial(p)) + '</span><b></b><small>' + cards + ' card' + (cards === 1 ? '' : 's') + ' · ' + sets + ' set' + (sets === 1 ? '' : 's') + '</small>' +
+      '<button class="ren">Rename</button><button class="col" title="Change colour">●</button><button class="del">Remove</button>';
+    row.querySelector('b').textContent = p.name;
+    row.querySelector('.col').style.color = colour(p);
+    row.querySelector('.ren').onclick = () => { const n = prompt('Name', p.name); if (n && n.trim()) { p.name = n.trim(); savePerson(p); viewPeople(); } };
+    row.querySelector('.col').onclick = () => { p.c = ((p.c || 0) + 1) % COLOURS.length; savePerson(p); viewPeople(); };
+    row.querySelector('.del').onclick = () => {
+      if (state.people.length === 1) { alert('You need at least one person.'); return; }
+      if (!confirm('Remove ' + p.name + ' and their ' + cards + ' owned card' + (cards === 1 ? '' : 's') + (sync.on ? ' from every phone in the family' : '') + '? This cannot be undone.')) return;
+      removePerson(p); viewPeople();
+    };
+    box.appendChild(row);
+  });
+  const add = el('div', 'add');
+  add.appendChild(makeButton('+ User', () => {
+    const p = addUser();
+    const n = prompt('Name for the new user', p.name);
+    if (n && n.trim()) p.name = n.trim();
+    savePerson(p); viewPeople();
+  }));
+  box.appendChild(add);
+  box.appendChild(el('h2', '', 'Sharing'));
+  box.appendChild(el('div', 'note', sync.on ? 'This phone syncs with family <b>' + esc(sync.code) + '</b>. <a href="#/sync">Manage</a>' : 'Only on this phone. <a href="#/sync">Family sync</a> lets everyone use their own phone.'));
+  main.appendChild(box);
+}
+
+function addUser() {
+  const used = state.people.map(p => p.c || 0);
+  const c = COLOURS.findIndex((_, i) => !used.includes(i));
+  let id; do { id = 'p' + Math.random().toString(36).slice(2, 8); } while (state.people.some(x => x.id === id));
+  let n = state.people.length + 1; while (state.people.some(p => p.name === 'User ' + n)) n++;
+  const p = { id, name: 'User ' + n, c: c < 0 ? state.people.length % COLOURS.length : c };
+  state.people.push(p); state.current = p.id; savePerson(p);
+  return p;
+}
+
+/* ---------- helpers ---------- */
+function pct(n, total) { return total ? Math.round(n / total * 100) : 0; }
+function money(n, unit) {
+  if (n == null) return '';
+  return (unit === 'EUR' ? '€' : '$') + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+const $ = id => document.getElementById(id);
+function el(tag, cls, html) { const d = document.createElement(tag); if (cls) d.className = cls; if (html != null) d.innerHTML = html; return d; }
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function setHeader({ title, back, count, progress, controls }) {
+  $('title').innerHTML = title;
+  $('back').hidden = !back;
+  $('back').onclick = back ? () => { location.hash = back; } : null;
+  $('count').textContent = count || '';
+  $('bar').hidden = progress == null;
+  $('stats').hidden = true;
+  if (progress != null) $('barFill').style.width = progress + '%';
+  const c = $('controls');
+  c.innerHTML = '';
+  c.hidden = !controls;
+  if (controls) controls.forEach(n => c.appendChild(n));
+}
+function makeSearch(placeholder, onInput) {
+  const s = el('input'); s.type = 'search'; s.placeholder = placeholder; s.value = ui.q;
+  s.addEventListener('input', () => { ui.q = s.value.trim(); onInput(); });
+  return s;
+}
+function makeSeg(items, current, onPick) {
+  const seg = el('div', 'seg');
+  items.forEach(([key, label, title]) => {
+    const b = el('button', key === current ? 'on' : '', label);
+    if (title) b.title = title;
+    b.onclick = () => onPick(key);
+    seg.appendChild(b);
+  });
+  return seg;
+}
+function makeButton(label, onClick, title) { const b = el('button', '', label); b.onclick = onClick; if (title) b.title = title; return b; }
+
+function setRow(set) {
+  const total = set.cardCount.total, have = ownedCount(set.id);
+  const full = cacheGet('sets/' + set.id);           // opened before: we know abbreviation and date
+  const abbr = full && full.abbreviation && full.abbreviation.official;
+  const date = full && full.releaseDate;
+  const row = el('button', 'row');
+  row.innerHTML =
+    (set.logo ? '<img loading="lazy" alt="" src="' + set.logo + '.webp">' : (set.symbol ? '<img class="sym" loading="lazy" alt="" src="' + set.symbol + '.webp">' : '')) +
+    '<div class="t"><b></b><small>' + (abbr ? abbr + ' · ' : '') + total + ' cards' + (date ? ' · ' + date : '') + '</small>' +
+    '<div class="mini"><i style="width:' + pct(have, total) + '%"></i></div></div>' +
+    '<div class="pct' + (have >= total && total ? ' done' : '') + '">' + have + '/' + total + '</div>';
+  row.querySelector('b').textContent = set.name;
+  row.onclick = () => { ui.q = ''; location.hash = '#/set/' + set.id; };
+  return row;
+}
+
+/* ---------- Home: your sets, search all sets, series list ---------- */
+async function viewHome() {
+  const main = $('main');
+  main.innerHTML = '<div class="empty">Loading…</div>';
+  setHeader({ title: '<span>◆</span> TCG Pokédex', controls: [personSelect(), langSelect(), makeSearch('Search sets', () => renderHome())] });
+  try {
+    window._series = await getJSON('series');
+    window._sets = await getJSON('sets');
+  } catch (e) {
+    main.innerHTML = '<div class="note">Could not load the set list (no internet?). Sets you have opened before still work from the list below.</div>';
+    window._sets = window._sets || []; window._series = window._series || [];
+  }
+  renderHome();
+}
+
+function renderHome() {
+  const main = $('main');
+  main.innerHTML = '';
+  const sets = (window._sets || []).slice().reverse();   // API order is release order; newest first
+  const q = ui.q.toLowerCase();
+
+  if (q) {
+    const hits = sets.filter(s => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q));
+    main.appendChild(el('h2', '', hits.length + ' set' + (hits.length === 1 ? '' : 's')));
+    const rows = el('div', 'rows'); hits.forEach(s => rows.appendChild(setRow(s))); main.appendChild(rows);
+    if (!hits.length) main.appendChild(el('div', 'empty', 'No set matches.'));
+    return;
+  }
+
+  const mine = sets.filter(s => ownedCount(s.id) > 0);
+  if (mine.length) {
+    main.appendChild(el('h2', '', esc(me().name) + "'s sets"));
+    const rows = el('div', 'rows'); mine.forEach(s => rows.appendChild(setRow(s))); main.appendChild(rows);
+  }
+  if (sets.length) {
+    main.appendChild(el('h2', '', 'Latest sets'));
+    const latest = el('div', 'rows'); sets.slice(0, 6).forEach(s => latest.appendChild(setRow(s))); main.appendChild(latest);
+  }
+  main.appendChild(el('h2', '', 'Series'));
+  const rows = el('div', 'rows');
+  (window._series || []).slice().reverse().forEach(sr => {
+    const row = el('button', 'row');
+    row.innerHTML = (sr.logo ? '<img loading="lazy" alt="" src="' + sr.logo + '.webp">' : '') + '<div class="t"><b></b></div><div class="pct">›</div>';
+    row.querySelector('b').textContent = sr.name;
+    row.onclick = () => { ui.q = ''; location.hash = '#/series/' + sr.id; };
+    rows.appendChild(row);
+  });
+  main.appendChild(rows);
+  if (!mine.length && !(window._series || []).length) main.appendChild(el('div', 'empty', 'Nothing to show.'));
+}
+
+/* ---------- Series: its sets ---------- */
+async function viewSeries(id) {
+  const main = $('main');
+  main.innerHTML = '<div class="empty">Loading…</div>';
+  setHeader({ title: 'Series', back: '#/' });
+  let sr;
+  try { sr = await getJSON('series/' + id); }
+  catch (e) { main.innerHTML = '<div class="note">Could not load this series (no internet?).</div>'; return; }
+  setHeader({ title: esc(sr.name), back: '#/', controls: [personSelect()] });
+  main.innerHTML = '';
+  const rows = el('div', 'rows');
+  sr.sets.slice().reverse().forEach(s => rows.appendChild(setRow(s)));
+  main.appendChild(rows);
+}
+
+/* ---------- Set: the cards ---------- */
+async function viewSet(id) {
+  const main = $('main');
+  main.innerHTML = '<div class="empty">Loading…</div>';
+  setHeader({ title: 'Set', back: '#/' });
+  let set;
+  try { set = await getJSON('sets/' + id); }
+  catch (e) { main.innerHTML = '<div class="note">Could not load this set. Sets load once online and then work offline.</div>'; return; }
+  window._set = set;
+  ui.rarity = ''; ui.sort = 'num';
+  if (ui.filter === 'family' && state.people.length < 2) ui.filter = 'all';
+  const cached = cacheGet('details/' + id);
+  details = (cached && cached.cards) || {};
+  renderSet();
+  loadDetails(set, cached);
+}
+
+// Rarity and price come from the per-card endpoint, so fill them in behind the grid.
+async function loadDetails(set, cached) {
+  const job = ++detailJob;
+  const fresh = cached && (Date.now() - (cached.at || 0) < PRICE_MAX_AGE);
+  const todo = set.cards.filter(c => !details[c.localId] || !fresh);
+  if (!todo.length) return;
+  let done = set.cards.length - todo.length, failed = 0;
+  const queue = todo.slice();
+  const base = API();
+  const worker = async () => {
+    while (queue.length && job === detailJob) {
+      const c = queue.shift();
+      try {
+        const r = await fetch(base + 'cards/' + c.id);
+        if (!r.ok) throw new Error(r.status);
+        const d = await r.json();
+        details[c.localId] = { r: d.rarity && d.rarity !== 'None' ? d.rarity : '', ...bestPrice(d.pricing) };
+      } catch (e) { failed++; }
+      done++;
+      if (job === detailJob) renderStats(done, set.cards.length);
+    }
+  };
+  await Promise.all(Array.from({ length: DETAIL_BATCH }, worker));
+  if (job !== detailJob) return;
+  cacheSet('details/' + set.id, { at: failed ? 0 : Date.now(), cards: details });   // partial: retry next open
+  renderSet();
+}
+
+// TCGplayer market price in USD when there is one, else Cardmarket trend in EUR.
+function bestPrice(p) {
+  if (!p) return {};
+  const t = p.tcgplayer;
+  if (t) {
+    for (const k of ['holofoil', 'normal', 'reverseHolofoil', '1stEditionHolofoil', '1stEditionNormal', 'unlimitedHolofoil']) {
+      if (t[k] && t[k].marketPrice != null) return { p: t[k].marketPrice, u: 'USD' };
+    }
+  }
+  const m = p.cardmarket;
+  if (m && (m.trend != null || m.avg != null)) return { p: m.trend != null ? m.trend : m.avg, u: 'EUR' };
+  return {};
+}
+
+function priceOf(c) { const d = details[c.localId]; return d && d.p != null ? d.p : null; }
+function rarityOf(c) { const d = details[c.localId]; return d ? d.r : ''; }
+function haveDetails() { return Object.keys(details).length > 0; }
+
+function cardVisible(c) {
+  const have = !!ownedIn(window._set.id)[c.localId];
+  if (ui.filter === 'need' && have) return false;
+  if (ui.filter === 'owned' && !have) return false;
+  if (ui.filter === 'family' && ownersOf(window._set.id, c.localId).length) return false;
+  if (ui.rarity && rarityOf(c) !== ui.rarity) return false;
+  if (ui.q) {
+    const q = ui.q.toLowerCase();
+    if (!c.name.toLowerCase().includes(q) && !c.localId.toLowerCase().includes(q) && String(+c.localId) !== q) return false;
+  }
+  return true;
+}
+
+function visibleCards() {
+  const cards = window._set.cards.filter(cardVisible);
+  if (ui.sort === 'price') cards.sort((a, b) => (priceOf(b) ?? -1) - (priceOf(a) ?? -1));
+  return cards;
+}
+
+function cardNum(c) {
+  const off = window._set.cardCount.official;
+  return c.localId + (off && /^\d+$/.test(c.localId) ? '/' + String(off).padStart(c.localId.length, '0') : '');
+}
+
+function makeCard(c) {
+  const have = !!ownedIn(window._set.id)[c.localId];
+  const d = details[c.localId] || {};
+  const price = d.p != null ? money(d.p, d.u) : '';
+  const who = whoBadges(window._set.id, c.localId);
+  if (ui.mode === 'list') {
+    const n = el('div', 'line' + (have ? ' owned' : ''));
+    n.dataset.id = c.localId;
+    n.innerHTML = '<span class="n">' + esc(cardNum(c)) + '</span><span class="name"></span>' + who +
+      (price ? '<span class="price">' + price + '</span>' : '') +
+      '<span class="st">' + (have ? 'OWNED' : 'NEED') + '</span>';
+    n.querySelector('.name').innerHTML = esc(c.name) + (d.r ? '<small>' + esc(d.r) + '</small>' : '');
+    return n;
+  }
+  const n = el('div', 'card' + (have ? ' owned' : '') + (c.image ? '' : ' noimg'));
+  n.dataset.id = c.localId;
+  n.innerHTML =
+    '<span class="tick">✓</span>' +
+    (c.image ? '<button class="zoom" title="View card" aria-label="View card">⤢</button>' : '') +
+    '<img loading="lazy" alt="" src="' + (c.image ? c.image + '/low.webp' : '') + '">' +
+    '<div class="ph"></div>' +
+    '<div class="num">' + esc(cardNum(c)) + '</div><div class="name"></div>' +
+    '<div class="meta"><span class="rar"></span>' + who + '<span class="price">' + price + '</span></div>';
+  n.querySelector('.ph').textContent = c.name;
+  n.querySelector('.name').textContent = c.name;
+  n.querySelector('.rar').textContent = shortRarity(d.r);
+  return n;
+}
+
+function shortRarity(r) {
+  if (!r || r === 'None') return '';
+  const map = { 'Common': 'C', 'Uncommon': 'U', 'Rare': 'R', 'Double rare': 'RR', 'Ultra Rare': 'UR', 'Illustration rare': 'IR',
+    'Special illustration rare': 'SIR', 'Hyper rare': 'HR', 'Secret Rare': 'SR', 'Rare Holo': 'Holo', 'ACE SPEC Rare': 'ACE', 'Shiny rare': 'ShR', 'Shiny Ultra Rare': 'ShUR' };
+  return map[r] || r;
+}
+
+function rarityOptions() {
+  const order = ['Common', 'Uncommon', 'Rare', 'Rare Holo', 'Double rare', 'Ultra Rare', 'Illustration rare', 'Special illustration rare', 'Hyper rare', 'Secret Rare'];
+  const seen = new Set(window._set.cards.map(rarityOf).filter(r => r && r !== 'None'));
+  return [...seen].sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99) || a.localeCompare(b));
+}
+
+function renderStats(done, total) {
+  const set = window._set, box = $('stats');
+  box.hidden = false;
+  let own = 0, need = 0, unit = null, priced = 0;
+  set.cards.forEach(c => {
+    const d = details[c.localId];
+    if (!d || d.p == null) return;
+    priced++; unit = unit || d.u;
+    if (ownedIn(set.id)[c.localId]) own += d.p; else need += d.p;
+  });
+  const parts = [];
+  if (priced) parts.push('Owned <b>' + money(own, unit) + '</b>', 'Need <b>' + money(need, unit) + '</b>');
+  if (state.people.length > 1) {
+    const nobody = set.cards.filter(c => !ownersOf(set.id, c.localId).length).length;
+    parts.push('Family needs <b>' + nobody + '</b>');
+  }
+  if (done != null && done < total) parts.push('Loading prices ' + done + '/' + total + '…');
+  else if (priced) parts.push('<span title="TCGplayer market price (USD), or Cardmarket trend (EUR) when TCGplayer has none">' + (unit === 'EUR' ? 'Cardmarket' : 'TCGplayer') + ' prices</span>');
+  box.innerHTML = parts.join(' · ');
+  if (!parts.length) box.hidden = true;
+}
+
+function renderSetHeader() {
+  const set = window._set, total = set.cards.length, have = ownedCount(set.id);
+  const filters = [['all', 'All'], ['need', 'Need'], ['owned', 'Owned']];
+  if (state.people.length > 1) filters.push(['family', 'Family', 'Cards nobody in the family has']);
+  const controls = [
+    personSelect(),
+    makeSearch('Search name or number', () => renderCards()),
+    makeSeg(filters, ui.filter, k => { ui.filter = k; renderSet(); }),
+    makeSeg([['grid', '▦', 'Card grid'], ['list', '☰', 'Compact list']], ui.mode, k => { ui.mode = k; renderSet(); })
+  ];
+  if (haveDetails()) {
+    const sel = el('select');
+    sel.innerHTML = '<option value="">All rarities</option>' + rarityOptions().map(r => '<option' + (r === ui.rarity ? ' selected' : '') + '>' + esc(r) + '</option>').join('');
+    sel.onchange = () => { ui.rarity = sel.value; renderCards(); };
+    controls.push(sel);
+    controls.push(makeSeg([['num', '#', 'Number order'], ['price', '$↓', 'Price, highest first']], ui.sort, k => { ui.sort = k; renderSet(); }));
+  }
+  controls.push(makeButton('Print placeholders', printPlaceholders, 'Print the cards you still need at real size, to fill binder pockets'));
+  controls.push(makeButton('Export', exportProgress));
+  controls.push(makeButton('Import', importProgress));
+  setHeader({
+    title: esc(set.name), back: set.serie ? '#/series/' + set.serie.id : '#/',
+    count: have + ' / ' + total, progress: pct(have, total), controls
+  });
+  renderStats();
+}
+
+function renderSet() { renderSetHeader(); renderCards(); }
+
+function renderCards() {
+  const main = $('main');
+  main.innerHTML = '';
+  const box = el('div', ui.mode === 'list' ? 'list' : 'grid');
+  box.id = 'cards';
+  const frag = document.createDocumentFragment();
+  const cards = visibleCards();
+  cards.forEach(c => frag.appendChild(makeCard(c)));
+  box.appendChild(frag);
+  main.appendChild(box);
+  if (!cards.length) {
+    const msg = !window._set.cards.length ? 'TCGdex has no card list for this set in ' + (LANGS.find(l => l[0] === lang) || [lang, lang])[1] + ' yet. Try the same set in English or Japanese.'
+      : ui.q || ui.rarity ? 'Nothing matches.' : ui.filter === 'need' ? 'Set complete — nothing needed!' : ui.filter === 'family' ? 'Between you, the family has every card in this set!' : 'Nothing here.';
+    main.appendChild(el('div', 'empty', msg));
+  }
+  box.addEventListener('click', onCardClick);
+}
+
+function onCardClick(e) {
+  const node = e.target.closest('.card, .line');
+  if (!node) return;
+  const set = window._set, id = node.dataset.id;
+  const card = set.cards.find(c => c.localId === id);
+  if (e.target.closest('.zoom')) {
+    $('lbImg').src = card.image + '/high.webp';
+    $('lb').classList.add('open');
+    return;
+  }
+  setCard(state.current, setKey(set.id), id, !ownedIn(set.id)[id]);
+  // swap just this card so the page does not jump
+  if (cardVisible(card)) node.replaceWith(makeCard(card)); else node.remove();
+  const have = ownedCount(set.id), total = set.cards.length;
+  $('count').textContent = have + ' / ' + total;
+  $('barFill').style.width = pct(have, total) + '%';
+  renderStats();
+}
+$('lb').onclick = () => { $('lb').classList.remove('open'); $('lbImg').src = ''; };
+
+/* ---------- printable binder placeholders ---------- */
+async function printPlaceholders() {
+  const set = window._set;
+  // the cards still needed in the current view (current person, or the whole family on the Family filter), in set order
+  const family = ui.filter === 'family';
+  const need = set.cards.filter(c => (family ? !ownersOf(set.id, c.localId).length : !ownedIn(set.id)[c.localId]) && (!ui.rarity || rarityOf(c) === ui.rarity) && (!ui.q || cardVisible(c)));
+  if (!need.length) { alert('Nothing needed — nothing to print.'); return; }
+  const pages = Math.ceil(need.length / 9);
+  if (!confirm('Print ' + need.length + ' placeholder' + (need.length === 1 ? '' : 's') + ' for ' + (family ? 'the family' : me().name) + ' — ' + set.name + ' (' + pages + ' A4 page' + (pages === 1 ? '' : 's') + ', 9 per page)?')) return;
+  const box = $('print');
+  box.innerHTML = '';
+  for (let i = 0; i < need.length; i += 9) {
+    const page = el('div', 'page');
+    need.slice(i, i + 9).forEach(c => {
+      const s = el('div', 'slot');
+      s.innerHTML = (c.image ? '<img alt="" src="' + c.image + '/high.webp">' : '') +
+        '<span class="tag">NEEDED</span><div class="lbl"><b></b><span></span></div>';
+      s.querySelector('b').textContent = c.name;
+      s.querySelector('span:last-child').textContent = set.name + ' · ' + cardNum(c) + (family ? '' : ' · ' + me().name);
+      page.appendChild(s);
+    });
+    box.appendChild(page);
+  }
+  // wait for the artwork before opening the print dialog
+  const imgs = [...box.querySelectorAll('img')];
+  await Promise.all(imgs.map(im => im.complete ? null : new Promise(r => { im.onload = im.onerror = r; })));
+  window.print();
+}
+
+/* ---------- backup ---------- */
+function exportProgress() {
+  const blob = new Blob([JSON.stringify(state)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'tcg-pokedex-' + new Date().toISOString().slice(0, 10) + '.json';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function importProgress() {
+  const inp = document.createElement('input');
+  inp.type = 'file'; inp.accept = 'application/json';
+  inp.onchange = () => {
+    const f = inp.files[0]; if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      try {
+        const s = JSON.parse(rd.result);
+        if (!s || typeof s.owned !== 'object') throw new Error('bad');
+        if (!confirm('Replace everyone\'s progress with this file' + (sync.on ? ', on every phone in the family' : '') + '?')) return;
+        if (s.people) state = s; else state = { people: [{ id: 'p1', name: 'User 1', c: 0 }], current: 'p1', owned: { p1: s.owned } };
+        normalise(); saveState(); sync.uploadAll(); route();
+      } catch (e) { alert('That file is not a TCG Pokédex export.'); }
+    };
+    rd.readAsText(f);
+  };
+  inp.click();
+}
+
+/* ---------- routing: #/  #/series/<id>  #/set/<id>  #/people ---------- */
+function route() {
+  detailJob++;                       // stop any price loader from the previous view
+  const h = location.hash || '#/';
+  let m;
+  if (h === '#/people') return viewPeople();
+  if (h === '#/sync') return viewSync();
+  if ((m = h.match(/^#\/set\/([^/]+)/))) return viewSet(m[1]);
+  if ((m = h.match(/^#\/series\/([^/]+)/))) return viewSeries(m[1]);
+  return viewHome();
+}
+window.addEventListener('hashchange', () => { ui.q = ''; route(); });
+loadState();
+// a shared link carries ?family=<code>; remember it and tidy the address bar
+let family = '';
+try {
+  const q = new URLSearchParams(location.search).get('family');
+  if (q) { family = q.trim().toLowerCase(); localStorage.setItem(FAMILY_KEY, family); history.replaceState(null, '', location.pathname + location.hash); }
+  else family = localStorage.getItem(FAMILY_KEY) || '';
+} catch (e) {}
+renderSyncStatus();
+if (FIREBASE_CONFIG && family) sync.start(family);
+route();
+</script>
+</body>
+</html>
