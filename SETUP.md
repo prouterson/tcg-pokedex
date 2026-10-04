@@ -58,6 +58,12 @@ GitHub Pages is free and needs no software installed.
 The app is these files, and all of them go in the repository:
 `index.html`, `sw.js`, `manifest.webmanifest`, `icon-180.png`, `icon-192.png`, `icon-512.png`.
 
+Optional — set symbols: TCGdex has no picture for some sets (30th Celebration, Trainer
+Galleries, promos). To add one, save a PNG of the symbol named after the set id, e.g.
+`30th.png`, `swsh9tg.png`, and upload it into a `symbols` folder in the repository
+(**Add file → Upload files**, type `symbols/30th.png` as the name). The app shows it automatically.
+Set ids are in the address bar when a set is open, e.g. `#/set/30th`.
+
 When the app changes later: repository → **Add file** → **Upload files** → drag the changed
 files in → **Commit changes**. Phones show an "Update" button next time they open the app.
 

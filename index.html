@@ -101,7 +101,8 @@
   .rows { display: grid; gap: 8px; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
   .row { display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--card-radius); padding: 10px 12px; cursor: pointer; text-align: left; }
   .row img { width: 72px; height: 40px; object-fit: contain; flex: none; }
-  .row .sym { width: 28px; height: 28px; object-fit: contain; flex: none; }
+  .row .sym { width: 28px; height: 28px; object-fit: contain; flex: none; margin: 0 22px; }
+  .row .badge { width: auto; min-width: 44px; height: 24px; margin: 0 14px; padding: 0 6px; border-radius: 6px; background: var(--card-miss); color: var(--muted); font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; letter-spacing: .04em; }
   .row .t { flex: 1; min-width: 0; }
   .row .t b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .t small { color: var(--muted); }
@@ -144,6 +145,8 @@
   .line.partial { opacity: .85; }
   .card .want { position: absolute; top: 40px; right: 6px; width: 30px; height: 30px; padding: 0; border-radius: 50%; background: var(--panel); font-size: 19px; line-height: 1; color: #e0a800; border: 2px solid #e0a800; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
   .card .want.on, .line .want.on { color: #fff; background: #e0a800; border-color: #e0a800; }
+  .pcbtn { padding: 4px 8px; font-size: 14px; border-radius: 8px; }
+  .card .pcbtn { position: absolute; bottom: 6px; right: 6px; width: 30px; height: 30px; padding: 0; border-radius: 50%; background: var(--panel); }
   .line .want { color: #e0a800; border: 2px solid #e0a800; border-radius: 50%; width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex: none; }
   .card.want { border-color: #e0a800; }
   .card.want img { filter: none; }
@@ -206,7 +209,8 @@
   #scan .peek { display: flex; gap: 10px; align-items: center; min-height: 28px; }
   #scan .peek canvas { height: 28px; width: auto; max-width: 55%; border-radius: 4px; background: #fff; }
   #scan .peek span { font: 12px/1.2 ui-monospace, Consolas, monospace; color: #9a9a92; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #scan .result { display: flex; gap: 12px; align-items: center; background: #1e2128; border-radius: 12px; padding: 10px; }
+  #scan .result { display: flex; gap: 12px; align-items: center; background: #1e2128; border-radius: 12px; padding: 10px; position: relative; }
+  #scan .result .dismiss { position: absolute; top: -8px; right: -8px; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: #e3350d; border-color: #e3350d; font-size: 14px; }
   #scan .result img { width: 64px; border-radius: 4px; }
   #scan .result .t { flex: 1; min-width: 0; }
   #scan .result .t b { display: block; font-size: 16px; }
@@ -216,6 +220,7 @@
   #scan input { flex: 1; min-width: 0; padding: 10px; border-radius: 10px; border: 1px solid #3a3e48; background: #262932; color: #fff; font: inherit; }
   #scan button { background: #262932; color: #fff; border-color: #3a3e48; }
   #scan button.primary { background: #2e9e5b; border-color: #2e9e5b; }
+  #scan button.big { flex: 1; padding: 14px; font-size: 17px; font-weight: 600; }
   #scan .choices { display: grid; gap: 6px; }
   #scan .choices button { text-align: left; }
 
@@ -237,6 +242,32 @@
   #sheet .acts button.want { color: #a07800; border-color: #e0a800; }
   #sheet .acts button.want.on { background: #e0a800; border-color: #e0a800; color: #fff; }
   #sheet .acts .hint { font-size: 12px; color: var(--muted); text-align: center; margin-top: 4px; }
+
+  /* price check */
+  #pc { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: flex-end; justify-content: center; z-index: 27; }
+  #pc.open { display: flex; }
+  #pc .box { background: var(--panel); color: var(--text); border-radius: 18px 18px 0 0; padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); width: 100%; max-width: 560px; max-height: 92vh; overflow: auto; box-shadow: 0 -4px 24px rgba(0,0,0,.3); }
+  #pc .head { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+  #pc .head img { width: 56px; aspect-ratio: 63/88; object-fit: contain; border-radius: 4px; background: var(--card-miss); }
+  #pc .head .t { flex: 1; min-width: 0; }
+  #pc .head b { display: block; font-size: 17px; }
+  #pc .head small { color: var(--muted); }
+  #pc .x { width: 36px; height: 36px; padding: 0; border-radius: 50%; font-size: 14px; }
+  #pc table { width: 100%; border-collapse: collapse; margin: 8px 0; }
+  #pc th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 8px 0 4px; }
+  #pc td { padding: 6px 0; border-top: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+  #pc td:last-child { text-align: right; font-weight: 600; }
+  #pc td small { color: var(--muted); font-weight: 400; }
+  #pc .guide { display: flex; justify-content: space-between; align-items: center; background: var(--card-miss); border-radius: 12px; padding: 12px 14px; margin: 10px 0; }
+  #pc .guide b { font-size: 22px; }
+  #pc .guide small { color: var(--muted); display: block; }
+  #pc .ask { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+  #pc .ask input { flex: 1; min-width: 0; padding: 10px; font: inherit; font-size: 18px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); color: var(--text); }
+  #pc .verdict { font-weight: 700; min-height: 22px; }
+  #pc .verdict.good { color: var(--owned); } #pc .verdict.bad { color: var(--need); }
+  #pc .links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  #pc .links a { padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius); color: var(--text); text-decoration: none; font-size: 14px; background: var(--bg); }
+  #pc .note.small { font-size: 12px; margin: 8px 0 0; }
 
   /* print options dialog */
   #printOpts { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 25; padding: 16px; }
@@ -295,12 +326,17 @@
       <input id="scanManual" placeholder="or type it: 001/084 PBL" autocapitalize="characters" autocomplete="off">
       <button id="scanManualGo">Find</button>
     </div>
+    <div class="row2"><button id="scanSnap" class="primary big" hidden>📸 Snap &amp; read</button></div>
     <div class="row2"><button id="scanTorch" hidden>🔦 Light</button><button id="scanClose">Close</button></div>
   </div>
 </div>
 <div id="sheet"><div class="box">
   <div class="head"><img alt=""><div class="t"><b></b><small></small></div><button class="x" aria-label="Close">✕</button></div>
   <div class="acts"></div>
+</div></div>
+<div id="pc"><div class="box">
+  <div class="head"><img alt=""><div class="t"><b></b><small></small></div><button class="x" aria-label="Close">✕</button></div>
+  <div class="body"></div>
 </div></div>
 <div id="printOpts"><div class="box">
   <h3></h3>
@@ -709,10 +745,27 @@ function addUser() {
 
 /* ---------- helpers ---------- */
 function pct(n, total) { return total ? Math.round(n / total * 100) : 0; }
+
+/* ---------- money: everything is shown in Australian dollars ---------- */
+// TCGplayer prices arrive in USD and Cardmarket's in EUR; ECB rates (frankfurter.dev, free) convert them, refreshed daily.
+let fx = { USD: 1.44, EUR: 1.62, at: 0 };       // AUD per unit; fallback figures from Oct 2026 until live rates load
+try { const c = JSON.parse(localStorage.getItem(CACHE_PFX + 'fx')); if (c && c.USD) fx = c; } catch (e) {}
+async function loadFX() {
+  if (Date.now() - (fx.at || 0) < 24 * 3600 * 1000) return;
+  try {
+    const j = await (await fetch('https://api.frankfurter.dev/v1/latest?base=AUD&symbols=USD,EUR')).json();
+    if (j.rates && j.rates.USD && j.rates.EUR) {
+      fx = { USD: 1 / j.rates.USD, EUR: 1 / j.rates.EUR, at: Date.now(), date: j.date };
+      try { localStorage.setItem(CACHE_PFX + 'fx', JSON.stringify(fx)); } catch (e) {}
+    }
+  } catch (e) {}
+}
+function toAUD(n, unit) { return n == null ? null : unit === 'AUD' ? n : n * (fx[unit] || 1); }
 function money(n, unit) {
   if (n == null) return '';
-  return (unit === 'EUR' ? '€' : '$') + n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return '$' + toAUD(n, unit).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+const priceNote = () => 'Prices in AUD · TCGplayer, or Cardmarket where TCGplayer has none' + (fx.date ? ' · ECB rates ' + fx.date : '');
 const $ = id => document.getElementById(id);
 function el(tag, cls, html) { const d = document.createElement(tag); if (cls) d.className = cls; if (html != null) d.innerHTML = html; return d; }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -774,15 +827,32 @@ function setMatches(s, q) {
   return s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q) || abbrOf(s.id).toLowerCase() === q || abbrOf(s.id).toLowerCase().startsWith(q);
 }
 
+// Set picture: a symbols/<id>.png you have added to the repo wins; then TCGdex's logo, then its symbol, then a code badge.
+function setArt(set) {
+  const chain = ['symbols/' + encodeURIComponent(set.id) + '.png', set.logo ? set.logo + '.webp' : '', set.symbol ? set.symbol + '.webp' : ''].filter(Boolean);
+  const badge = '<span class="sym badge">' + esc(abbrOf(set.id) || set.id.toUpperCase().slice(0, 4)) + '</span>';
+  if (!chain.length) return badge;
+  // each failure moves to the next source; the last failure swaps in the badge
+  return '<img loading="lazy" alt="" class="' + (chain[0].startsWith('symbols/') || !set.logo ? 'sym' : '') + '" src="' + chain[0] + '" data-next="' + esc(chain.slice(1).join('|')) + '" onerror="setArtFallback(this)">';
+}
+window.setArtFallback = img => {
+  const rest = (img.dataset.next || '').split('|').filter(Boolean);
+  if (rest.length) { img.className = rest[0].endsWith('/logo.webp') ? '' : 'sym'; img.dataset.next = rest.slice(1).join('|'); img.src = rest[0]; return; }
+  const b = document.createElement('span'); b.className = 'sym badge';
+  const id = (img.closest('.row') || {}).dataset ? img.closest('.row').dataset.set : '';
+  b.textContent = (id && abbrOf(id)) || (id || '?').toUpperCase().slice(0, 4);
+  img.replaceWith(b);
+};
+
 function setRow(set) {
   const total = set.cardCount.total, have = ownedCount(set.id);
   const abbr = abbrOf(set.id), date = dateOf(set.id);
   const row = el('button', 'row');
-  row.innerHTML =
-    (set.logo ? '<img loading="lazy" alt="" src="' + set.logo + '.webp">' : (set.symbol ? '<img class="sym" loading="lazy" alt="" src="' + set.symbol + '.webp">' : '')) +
+  row.innerHTML = setArt(set) +
     '<div class="t"><b></b><small>' + (abbr ? abbr + ' · ' : '') + (set.cardCount.official && total > set.cardCount.official ? set.cardCount.official + ' + ' + (total - set.cardCount.official) + ' secret' : total + ' cards') + (date ? ' · ' + date : '') + '</small>' +
     '<div class="mini"><i style="width:' + pct(have, total) + '%"></i></div></div>' +
     '<div class="pct' + (have >= total && total ? ' done' : '') + '">' + have + '/' + total + '</div>';
+  row.dataset.set = set.id;
   row.querySelector('b').textContent = set.name;
   row.onclick = () => { ui.q = ''; location.hash = '#/set/' + set.id; };
   return row;
@@ -807,7 +877,7 @@ function allOwnedCards() {
 }
 function knownPrice(c) {
   let set = null;
-  try { set = JSON.parse(localStorage.getItem(CACHE_PFX + c.lang + ':details2/' + c.setId)); } catch (e) {}
+  try { set = JSON.parse(localStorage.getItem(CACHE_PFX + c.lang + ':details3/' + c.setId)); } catch (e) {}
   const d = set && set.cards && set.cards[c.localId];
   if (d && d.p != null) return d;
   if (d && set.at) return { p: null };                       // set priced recently, this card just has no price
@@ -816,8 +886,8 @@ function knownPrice(c) {
   return undefined;                                         // not known yet
 }
 function valueTotals() {
-  const per = {}, fam = { n: 0, usd: 0, eur: 0, unknown: 0, unpriced: 0 };
-  state.people.forEach(p => { per[p.id] = { n: 0, usd: 0, eur: 0, unknown: 0, unpriced: 0 }; });
+  const per = {}, fam = { n: 0, aud: 0, unknown: 0, unpriced: 0 };
+  state.people.forEach(p => { per[p.id] = { n: 0, aud: 0, unknown: 0, unpriced: 0 }; });
   allOwnedCards().forEach(c => {
     const t = per[c.pid]; if (!t) return;
     const d = knownPrice(c);
@@ -826,17 +896,12 @@ function valueTotals() {
       x.n += printings.length;
       if (d === undefined) x.unknown += printings.length;
       else if (d.p == null) x.unpriced += printings.length;
-      else printings.forEach(v => { const p = variantPrice(d, v); if (d.u === 'EUR') x.eur += p; else x.usd += p; });
+      else printings.forEach(v => { x.aud += toAUD(variantPrice(d, v), d.u); });
     });
   });
   return { per, fam };
 }
-function fmtValue(t) {
-  const parts = [];
-  if (t.usd || !t.eur) parts.push(money(t.usd, 'USD'));
-  if (t.eur) parts.push(money(t.eur, 'EUR'));
-  return parts.join(' + ');
-}
+function fmtValue(t) { return money(t.aud, 'AUD'); }
 function valuePanel() {
   const { per, fam } = valueTotals();
   const box = el('div', 'people'); box.id = 'valuePanel';
@@ -853,7 +918,7 @@ function valuePanel() {
   const foot = [];
   if (fam.unknown) foot.push('Fetching prices for ' + fam.unknown + ' card' + (fam.unknown === 1 ? '' : 's') + '…');
   if (fam.unpriced) foot.push(fam.unpriced + ' with no market price yet');
-  foot.push('TCGplayer market (USD); Cardmarket (EUR) where TCGplayer has none');
+  foot.push(priceNote());
   box.appendChild(el('div', 'note small', foot.join(' · ')));
   return box;
 }
@@ -1011,7 +1076,7 @@ async function viewLookout() {
       const off = set ? set.cardCount.official : 0;
       const num = localId + (off && /^\d+$/.test(localId) ? '/' + String(off).padStart(localId.length, '0') : '');
       const mineToo = wanters.some(p => p.id === state.current);
-      const drop = mineToo ? '<button class="want on" title="Found it / no longer looking">★</button>' : '';
+      const drop = '<button class="pcbtn" title="Price check">💲</button>' + (mineToo ? '<button class="want on" title="Found it / no longer looking">★</button>' : '');
       let n;
       if (ui.mode === 'list') {
         n = el('div', 'line want');
@@ -1025,6 +1090,7 @@ async function viewLookout() {
       }
       n.onclick = e => {
         if (e.target.closest('.zoom')) { $('lbImg').src = c.image + '/high.webp'; $('lb').classList.add('open'); return; }
+        if (e.target.closest('.pcbtn')) { if (c.id) openPriceCheck(g.lang, g.setId, name, c); return; }
         if (e.target.closest('button.want')) { setWish(state.current, g.lang === 'en' ? g.setId : g.lang + '/' + g.setId, localId, false); viewLookout(); return; }
         if (g.lang === lang) location.hash = '#/set/' + g.setId;
       };
@@ -1138,17 +1204,26 @@ async function viewSet(id) {
   ui.rarity = ''; ui.sort = 'num';
   if (window._jump) { ui.q = window._jump; ui.filter = 'all'; window._jump = null; }   // arrived from a card search: show just that card
   if (ui.filter === 'family' && state.people.length < 2) ui.filter = 'all';
-  const cached = cacheGet('details2/' + id);
+  const cached = cacheGet('details3/' + id);
   details = (cached && cached.cards) || {};
   renderSet();
   loadDetails(set, cached);
 }
 
 /* ---------- printings (variants): n = normal, r = reverse holo, h = holo, f = 1st edition, w = W promo ---------- */
-const VARIANTS = [['n', 'N', 'Normal'], ['r', 'RH', 'Reverse Holo'], ['h', 'H', 'Holo'], ['f', '1st', '1st Edition'], ['w', 'W', 'W Promo']];
+const VARIANTS = [['n', 'STD', 'Standard'], ['r', 'RH', 'Reverse Holo'], ['h', 'H', 'Holo'], ['f', '1st', '1st Edition'], ['w', 'W', 'W Promo']];
 const VNAME = Object.fromEntries(VARIANTS.map(v => [v[0], v[2]]));
 const VSHORT = Object.fromEntries(VARIANTS.map(v => [v[0], v[1]]));
 function variantsFrom(d) {          // TCGdex card detail -> "nr", "h", ...
+  // TCGplayer lists exactly the printings that exist (a modern Rare is holo + reverse, never plain), so trust that first
+  const t = d.pricing && d.pricing.tcgplayer;
+  if (t) {
+    const keys = Object.keys(t).filter(k => t[k] && typeof t[k] === 'object');
+    const map = { 'normal': 'n', 'unlimited': 'n', 'reverse-holofoil': 'r', 'holofoil': 'h', 'unlimited-holofoil': 'h', '1st-edition': 'f', '1st-edition-holofoil': 'f' };
+    const set = new Set(keys.map(k => map[k]).filter(Boolean));
+    const s = ['n', 'r', 'h', 'f'].filter(k => set.has(k)).join('');
+    if (s) return s;
+  }
   const v = d.variants || {};
   return (v.normal ? 'n' : '') + (v.reverse ? 'r' : '') + (v.holo ? 'h' : '') + (v.firstEdition ? 'f' : '') + (v.wPromo ? 'w' : '') || 'n';
 }
@@ -1163,8 +1238,9 @@ function marks(v) {
 function ownedVariants(c) {
   const m = marks(ownedIn(window._set.id)[c.localId]);
   const avail = variantsOf(c);
-  // a legacy "n" on a holo-only card counts as that card's one printing
-  return [...avail].filter(k => m[k] || (k === avail[0] && m.n && !avail.includes('n')));
+  // a "normal" mark on a card that has no plain printing (older saves, or a Rare that is really holo) counts as its holo
+  const stand = avail.includes('h') ? 'h' : avail[0];
+  return [...avail].filter(k => m[k] || (k === stand && m.n && !avail.includes('n')));
 }
 const MASTER_KEY = 'tcgPokedex.master';
 let master = (() => { try { return localStorage.getItem(MASTER_KEY) === '1'; } catch (e) { return false; } })();
@@ -1193,7 +1269,9 @@ async function loadDetails(set, cached) {
   };
   await Promise.all(Array.from({ length: DETAIL_BATCH }, worker));
   if (job !== detailJob) return;
-  cacheSet('details2/' + set.id, { at: failed ? 0 : Date.now(), cards: details });   // partial: retry next open
+  // partial: retry next open; a set with no prices at all (new release): look again tomorrow rather than next week
+  const anyPrice = Object.values(details).some(d => d.p != null);
+  cacheSet('details3/' + set.id, { at: failed ? 0 : anyPrice ? Date.now() : Date.now() - PRICE_MAX_AGE + 24 * 3600 * 1000, cards: details });
   renderSet();
 }
 
@@ -1217,7 +1295,7 @@ function bestPrice(p) {
 }
 function variantPrice(d, v) { if (!d || d.p == null) return null; return d.pv && d.pv[v] != null ? d.pv[v] : d.p; }
 
-function priceOf(c) { const d = details[c.localId]; return d && d.p != null ? d.p : null; }
+function priceOf(c) { const d = details[c.localId]; return d && d.p != null ? toAUD(d.p, d.u) : null; }   // AUD, so mixed sources sort together
 function rarityOf(c) { const d = details[c.localId]; return d ? d.r : ''; }
 function haveDetails() { return Object.keys(details).length > 0; }
 
@@ -1305,28 +1383,27 @@ function rarityOptions() {
 function renderStats(done, total) {
   const set = window._set, box = $('stats');
   box.hidden = false;
-  let own = 0, need = 0, unit = null, priced = 0;
+  let own = 0, need = 0, priced = 0;             // summed in AUD, since one set can mix TCGplayer and Cardmarket prices
   set.cards.forEach(c => {
     const d = details[c.localId];
     if (!d || d.p == null) return;
-    priced++; unit = unit || d.u;
+    priced++;
+    const got = ownedVariants(c);
     if (master) {
       // every printing counts, each at its own price
-      const got = ownedVariants(c);
-      [...variantsOf(c)].forEach(v => { const p = variantPrice(d, v); if (got.includes(v)) own += p; else need += p; });
-    } else {
-      const got = ownedVariants(c);
-      if (got.length) own += variantPrice(d, got[0]); else need += variantPrice(d, primaryVariant(c));
-    }
+      [...variantsOf(c)].forEach(v => { const p = toAUD(variantPrice(d, v), d.u); if (got.includes(v)) own += p; else need += p; });
+    } else if (got.length) own += toAUD(variantPrice(d, got[0]), d.u);
+    else need += toAUD(variantPrice(d, primaryVariant(c)), d.u);
   });
   const parts = [];
-  if (priced) parts.push('Owned <b>' + money(own, unit) + '</b>', 'Need <b>' + money(need, unit) + '</b>');
+  if (priced) parts.push('Owned <b>' + money(own, 'AUD') + '</b>', 'Need <b>' + money(need, 'AUD') + '</b>');
   if (state.people.length > 1) {
     const nobody = set.cards.filter(c => !ownersOf(set.id, c.localId).length).length;
     parts.push('Family needs <b>' + nobody + '</b>');
   }
   if (done != null && done < total) parts.push('Loading prices ' + done + '/' + total + '…');
-  else if (priced) parts.push('<span title="TCGplayer market price (USD), or Cardmarket trend (EUR) when TCGplayer has none">' + (unit === 'EUR' ? 'Cardmarket' : 'TCGplayer') + ' prices</span>');
+  else if (priced) parts.push('<span title="' + priceNote() + '">AUD</span>');
+  else if (haveDetails()) parts.push('<span title="TCGplayer and Cardmarket have not listed this set yet; the app checks again daily">No prices for this set yet</span>');
   box.innerHTML = parts.join(' · ');
   if (!parts.length) box.hidden = true;
 }
@@ -1442,6 +1519,7 @@ function openCardSheet(card) {
       w.onclick = () => { setWish(state.current, key, card.localId, !want); refreshCardNode(card); close(); };
       acts.appendChild(w);
     }
+    acts.appendChild(makeButton('💲 Price check', () => { close(); openPriceCheck(lang, set.id, set.name, card, primaryVariant(card)); }));
     if (card.image) acts.appendChild(makeButton('View card', () => { close(); $('lbImg').src = card.image + '/high.webp'; $('lb').classList.add('open'); }));
     const others = ownersOf(set.id, card.localId).filter(p => p.id !== state.current);
     if (others.length) acts.appendChild(el('div', 'hint', 'Also owned by ' + esc(others.map(p => p.name).join(', '))));
@@ -1535,7 +1613,7 @@ const scanner = {
     this.found = null;
     const status = m => { $('scanStatus').textContent = m; };
     $('scanManual').value = '';
-    this.torch = false; $('scanTorch').hidden = true; $('scanTorch').textContent = '🔦 Light';
+    this.torch = false; $('scanTorch').hidden = true; $('scanTorch').textContent = '🔦 Light'; $('scanSnap').hidden = true;
     try {
       // ask for the sharpest feed the phone will give: the number is small print, and the card sits further away now
       this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false });
@@ -1556,8 +1634,8 @@ const scanner = {
       if (!window.Tesseract) await new Promise((ok, bad) => { const s = document.createElement('script'); s.src = TESS_URL; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
       if (!this.worker) this.worker = await Tesseract.createWorker('eng', 1);
       await this.worker.setParameters({ tessedit_char_whitelist: '0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ:. ', tessedit_pageseg_mode: '7' });
-      status(this.stream ? 'Fit the card in the outline, number along the bottom' : 'Type the number below.');
-      if (this.stream) this.loop();
+      status(this.stream ? 'Fit the card in the outline, then tap Snap when it looks sharp' : 'Type the number below.');
+      if (this.stream) { $('scanSnap').hidden = false; this.loop(); }
     } catch (e) { status('Could not load the text reader (no internet?). Type the number below.'); }
   },
   close() {
@@ -1568,6 +1646,53 @@ const scanner = {
     $('scanResult').hidden = true; $('scanResult').innerHTML = '';
     $('scanManual').blur();
     $('scan').classList.remove('open');
+  },
+  // Tap to read: a full-resolution still photo where the phone offers one (ImageCapture), else the live frame.
+  async snap() {
+    if (!this.stream || !this.worker || this.snapping) return;
+    this.snapping = true; this.found = null; $('scanResult').hidden = true;
+    const status = m => { $('scanStatus').textContent = m; };
+    const v = $('scan').querySelector('video');
+    try {
+      status('Reading photo…');
+      let src = v, sw0 = v.videoWidth, sh0 = v.videoHeight, note = 'live frame';
+      if (window.ImageCapture) {
+        try {
+          const ic = new ImageCapture(this.stream.getVideoTracks()[0]);
+          const blob = await ic.takePhoto().catch(() => null);
+          if (blob) { src = await createImageBitmap(blob); sw0 = src.width; sh0 = src.height; note = 'photo'; }
+        } catch (e) {}
+      }
+      // map the on-screen outline into the source: the photo shares the video's width of view, with extra height either side
+      const g = $('scan').querySelector('.guide').getBoundingClientRect(), z = $('scan').querySelector('.guide .zone').getBoundingClientRect(), c = v.getBoundingClientRect();
+      const scale = Math.max(c.width / v.videoWidth, c.height / v.videoHeight);
+      const vw = v.videoWidth * scale, vh = v.videoHeight * scale, ox = (c.width - vw) / 2, oy = (c.height - vh) / 2;
+      const kx = sw0 / v.videoWidth, cy = sh0 / 2 - (v.videoHeight / 2) * kx;
+      const box = r => ({ x: (r.left - c.left - ox) / scale * kx, y: (r.top - c.top - oy) / scale * kx + cy, w: r.width / scale * kx, h: r.height / scale * kx });
+      const G = box(g), Z = box(z), pad = Z.h * 0.4;
+      const tries = [
+        ['strip', Z.x, Z.y - pad, Z.w, Z.h + 2 * pad, 1600, '6'],
+        ['card', G.x, G.y, G.w, G.h, 1400, '11']
+      ];
+      let hit = null, read = '';
+      for (const [name, x, y, w, h, tw, psm] of tries) {
+        const [plain, inv] = prepForOCR(src, x, y, w, h, tw);
+        if (name === 'strip') { const pk = $('scanPeek'); pk.width = plain.width / 4; pk.height = plain.height / 4; pk.getContext('2d').drawImage(plain, 0, 0, pk.width, pk.height); }
+        await this.worker.setParameters({ tessedit_pageseg_mode: psm });
+        for (const img of [plain, inv]) {
+          const { data } = await this.worker.recognize(img);
+          read = read || data.text.trim().replace(/\s+/g, ' ');
+          hit = parseScan(data.text);
+          if (hit) break;
+        }
+        if (hit) break;
+      }
+      $('scanRead').textContent = sw0 + '×' + sh0 + ' ' + note + ': ' + read.slice(0, 32);
+      if (hit) { this.found = hit; await this.resolve(hit); }
+      else status('Could not read it. Closer in on the bottom line, sharp focus, no glare — then Snap again, or type it.');
+      if (src !== v && src.close) src.close();
+    } catch (e) { status('Snap failed: ' + (e.message || e)); }
+    this.snapping = false;
   },
   async toggleTorch() {
     const track = this.stream && this.stream.getVideoTracks()[0];
@@ -1624,8 +1749,9 @@ const scanner = {
     if (!candidates.length) { status('Read ' + hit.num + '/' + (hit.denom || '?') + (hit.code ? ' ' + hit.code : '') + ' but no set matches. Try again or type it with the set code.'); this.found = null; return; }
     if (candidates.length > 1) {
       status('Read ' + hit.num + '/' + hit.denom + ' — which set?');
-      const r = $('scanResult'); r.hidden = false; r.innerHTML = '<div class="choices"></div>';
+      const r = $('scanResult'); r.hidden = false; r.innerHTML = '<div class="choices"></div><button class="dismiss" aria-label="Dismiss">✕</button>';
       candidates.slice(0, 8).forEach(s => { const b = makeButton(s.name + (abbrOf(s.id) ? ' (' + abbrOf(s.id) + ')' : '') + (dateOf(s.id) ? ' · ' + dateOf(s.id).slice(0, 4) : ''), () => this.show(s.id, hit)); r.querySelector('.choices').appendChild(b); });
+      r.querySelector('.dismiss').onclick = () => { this.found = null; r.hidden = true; status('Fit the card in the outline, then Snap'); };
       return;
     }
     this.show(candidates[0].id, hit);
@@ -1640,13 +1766,14 @@ const scanner = {
     if (!card) { status('No card ' + hit.num + ' in ' + set.name + '. Try again.'); this.found = null; return; }
     const key = setKey(set.id);
     const r = $('scanResult'); r.hidden = false;
-    r.innerHTML = (card.image ? '<img alt="" src="' + card.image + '/low.webp">' : '') + '<div class="t"><b></b><small></small></div><div class="btns"></div>';
+    r.innerHTML = (card.image ? '<img alt="" src="' + card.image + '/low.webp">' : '') + '<div class="t"><b></b><small></small></div><div class="btns"></div><button class="dismiss" title="Wrong card — keep scanning" aria-label="Dismiss">✕</button>';
+    r.querySelector('.dismiss').onclick = () => { this.found = null; r.hidden = true; status('Fit the next card in the outline, then Snap'); };
     r.querySelector('b').textContent = card.name;
     r.querySelector('small').textContent = set.name + ' · ' + card.localId + (set.cardCount.official ? '/' + String(set.cardCount.official).padStart(card.localId.length, '0') : '');
     status('Found ' + card.name + ' — which printing?');
     // the number is the same on every printing, so ask which one: fetch the card's printings (cached per set when known)
     let avail = 'n';
-    const cachedSet = cacheGet('details2/' + set.id);
+    const cachedSet = cacheGet('details3/' + set.id);
     if (cachedSet && cachedSet.cards[card.localId]) avail = cachedSet.cards[card.localId].v || 'n';
     else { try { const d = await getJSONL(lang, 'cards/' + card.id); avail = variantsFrom(d); } catch (e) {} }
     const btns = r.querySelector('.btns');
@@ -1665,7 +1792,7 @@ const scanner = {
         btns.appendChild(b);
       });
       btns.appendChild(makeButton('Open set', () => { this.close(); ui.q = card.localId; location.hash = '#/set/' + set.id; }));
-      btns.appendChild(makeButton('Scan next', () => { this.found = null; r.hidden = true; status('Fit the next card in the outline'); }));
+      btns.appendChild(makeButton('✕ Wrong card', () => { this.found = null; r.hidden = true; status('Fit the next card in the outline, then Snap'); }, 'Dismiss and keep scanning'));
     };
     draw();
   }
@@ -1728,6 +1855,7 @@ function parseScan(text, typed) {
   return { num, denom, code, prefix };
 }
 $('scanClose').onclick = () => scanner.close();
+$('scanSnap').onclick = () => scanner.snap();
 $('scanTorch').onclick = () => scanner.toggleTorch();
 $('scanManualGo').onclick = () => {
   const hit = parseScan($('scanManual').value, true);
@@ -1736,6 +1864,79 @@ $('scanManualGo').onclick = () => {
 };
 $('scanManual').addEventListener('keydown', e => { if (e.key === 'Enter') $('scanManualGo').click(); });
 function scanButton() { return makeButton('📷 Scan', () => scanner.open(), 'Read the card number with the camera'); }
+
+/* ---------- price check: every figure we can get for one card, in AUD, plus a guide price and an asking-price test ---------- */
+const pcCache = {};
+async function openPriceCheck(l, setId, setName, card, variant) {
+  const pc = $('pc'), body = pc.querySelector('.body');
+  pc.querySelector('img').src = card.image ? card.image + '/low.webp' : '';
+  pc.querySelector('b').textContent = card.name;
+  pc.querySelector('small').textContent = setName + ' · ' + card.localId;
+  body.innerHTML = '<div class="empty">Fetching prices…</div>';
+  pc.classList.add('open');
+  pc.querySelector('.x').onclick = () => pc.classList.remove('open');
+  pc.onclick = e => { if (e.target === pc) pc.classList.remove('open'); };
+  const key = l + ':' + card.id;
+  let d = pcCache[key];
+  if (!d) { try { d = await (await fetch('https://api.tcgdex.net/v2/' + l + '/cards/' + card.id)).json(); pcCache[key] = d; } catch (e) { body.innerHTML = '<div class="note">Could not fetch prices (no internet?).</div>'; return; } }
+  const avail = variantsFrom(d);
+  let v = variant && avail.includes(variant) ? variant : (avail.includes('h') && !avail.includes('n') ? 'h' : avail[0]);
+  const draw = () => {
+    body.innerHTML = '';
+    if (avail.length > 1) body.appendChild(makeSeg([...avail].map(k => [k, VNAME[k]]), v, k => { v = k; draw(); }));
+    const t = d.pricing && d.pricing.tcgplayer, m = d.pricing && d.pricing.cardmarket;
+    const tk = t && (TCGP_KEYS[v] || []).find(k => t[k] && t[k].marketPrice != null);
+    const tp = tk ? t[tk] : null;
+    const rows = [], guide = [];
+    const add = (src, label, val, unit, inGuide) => { if (val == null) return; rows.push([src, label, money(val, unit)]); if (inGuide) guide.push(toAUD(val, unit)); };
+    if (tp) {
+      add('TCGplayer', 'Market price', tp.marketPrice, 'USD', true);
+      add('TCGplayer', 'Low listing', tp.lowPrice, 'USD', false);
+      add('TCGplayer', 'Mid listing', tp.midPrice, 'USD', false);
+      add('TCGplayer', 'High listing', tp.highPrice, 'USD', false);
+    }
+    if (m) {
+      const holo = v !== 'n' && (m['trend-holo'] || m['avg7-holo']);
+      add('Cardmarket', 'Trend', holo ? m['trend-holo'] : m.trend, 'EUR', true);
+      add('Cardmarket', '7-day average', holo ? m['avg7-holo'] : m.avg7, 'EUR', true);
+      add('Cardmarket', '30-day average', holo ? m['avg30-holo'] : m.avg30, 'EUR', false);
+      add('Cardmarket', 'Lowest listing', holo ? m['low-holo'] : m.low, 'EUR', false);
+    }
+    if (!rows.length) { body.appendChild(el('div', 'note', 'No prices listed for this card yet. Use the links below to check live listings.')); }
+    else {
+      const tbl = el('table'); tbl.innerHTML = '<tr><th>Source</th><th></th><th></th></tr>' + rows.map(r => '<tr><td>' + r[0] + '</td><td><small>' + r[1] + '</small></td><td>' + r[2] + '</td></tr>').join('');
+      body.appendChild(tbl);
+      const g = guide.length ? guide.reduce((a, b) => a + b, 0) / guide.length : null;
+      const gbox = el('div', 'guide');
+      gbox.innerHTML = '<div><small>Guide price (' + VNAME[v] + ')</small><b>' + (g != null ? money(g, 'AUD') : '—') + '</b></div><div><small>average of ' + guide.length + ' market figure' + (guide.length === 1 ? '' : 's') + '</small><small>' + (fx.date ? 'ECB rates ' + fx.date : '') + '</small></div>';
+      body.appendChild(gbox);
+      if (g != null) {
+        const ask = el('div', 'ask'); ask.innerHTML = '<span>Vendor asking $</span><input type="number" inputmode="decimal" min="0" step="0.5" placeholder="0.00">';
+        const verdict = el('div', 'verdict');
+        ask.querySelector('input').addEventListener('input', e => {
+          const a = parseFloat(e.target.value);
+          if (!a) { verdict.textContent = ''; verdict.className = 'verdict'; return; }
+          const diff = (a - g) / g * 100;
+          verdict.textContent = Math.abs(diff) < 5 ? 'About guide price' : diff > 0 ? Math.round(diff) + '% above guide' : Math.round(-diff) + '% below guide — good buy';
+          verdict.className = 'verdict ' + (diff > 15 ? 'bad' : diff < 0 ? 'good' : '');
+        });
+        body.appendChild(ask); body.appendChild(verdict);
+      }
+    }
+    // live listings, including sold prices, which no free feed provides
+    const q = encodeURIComponent(card.name + ' ' + card.localId + ' ' + setName + (v === 'r' ? ' reverse holo' : ''));
+    const links = el('div', 'links');
+    links.innerHTML =
+      '<a target="_blank" rel="noopener" href="https://www.ebay.com.au/sch/i.html?_nkw=' + q + '&LH_Sold=1&LH_Complete=1">eBay AU sold</a>' +
+      '<a target="_blank" rel="noopener" href="https://www.ebay.com.au/sch/i.html?_nkw=' + q + '">eBay AU listings</a>' +
+      (tp && tp.productId ? '<a target="_blank" rel="noopener" href="https://www.tcgplayer.com/product/' + tp.productId + '">TCGplayer</a>' : '') +
+      (m && m.idProduct ? '<a target="_blank" rel="noopener" href="https://www.cardmarket.com/en/Pokemon/Products/Singles?idProduct=' + m.idProduct + '">Cardmarket</a>' : '') +
+      '<a target="_blank" rel="noopener" href="https://www.pricecharting.com/search-products?type=prices&q=' + q + '">PriceCharting</a>';
+    body.appendChild(links);
+    body.appendChild(el('div', 'note small', 'TCGplayer figures are US listings in USD and Cardmarket are European in EUR, both converted at today\'s rate. Australian shop prices usually sit above these once postage and GST are counted.'));
+  };
+  draw();
+}
 
 /* ---------- backup ---------- */
 function exportProgress() {
@@ -1788,6 +1989,7 @@ try {
   else family = localStorage.getItem(FAMILY_KEY) || '';
 } catch (e) {}
 renderSyncStatus();
+loadFX().then(() => rerender());          // once today's exchange rates are in, redraw whatever is showing
 applyTheme((() => { try { return localStorage.getItem(THEME_KEY) || ''; } catch (e) { return ''; } })());
 if (FIREBASE_CONFIG && family) sync.start(family);
 route();
