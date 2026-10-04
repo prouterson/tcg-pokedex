@@ -190,8 +190,10 @@
   #scan.open { display: flex; }
   #scan .cam { position: relative; flex: 1; min-height: 0; overflow: hidden; }
   #scan video { width: 100%; height: 100%; object-fit: cover; }
-  #scan .guide { position: absolute; left: 8%; right: 8%; top: 42%; height: 16%; border: 3px solid #ffd21f; border-radius: 10px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
+  /* a card-shaped outline (63:88); the reader looks at the bottom strip of it, where the number is printed */
+  #scan .guide { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(78vw, 56vh); aspect-ratio: 63 / 88; border: 3px solid #ffd21f; border-radius: 12px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
   #scan .guide span { position: absolute; left: 0; right: 0; top: -34px; text-align: center; font-size: 13px; color: #ffd21f; text-shadow: 0 1px 2px #000; }
+  #scan .guide .zone { position: absolute; left: 0; right: 0; bottom: 0; height: 12%; border-top: 2px dashed rgba(255,210,31,.8); border-radius: 0 0 9px 9px; }
   #scan .panel { background: #15171c; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); display: grid; gap: 10px; }
   #scan .status { font-size: 14px; color: #c9ccd4; min-height: 20px; }
   #scan .result { display: flex; gap: 12px; align-items: center; background: #1e2128; border-radius: 12px; padding: 10px; }
@@ -254,7 +256,7 @@
 <footer id="foot"><div id="syncStatus"></div>Tap a card to mark it owned by the user selected at the top. Use Export to back up. Card data and prices from TCGdex.</footer>
 <div id="lb"><img id="lbImg" alt=""></div>
 <div id="scan">
-  <div class="cam"><video playsinline autoplay muted></video><div class="guide"><span>Line up the card's number and set code here</span></div></div>
+  <div class="cam"><video playsinline autoplay muted></video><div class="guide"><span>Fit the whole card in the outline</span><i class="zone"></i></div></div>
   <div class="panel">
     <div class="status" id="scanStatus">Starting camera…</div>
     <div class="result" id="scanResult" hidden></div>
@@ -1371,7 +1373,7 @@ const scanner = {
       if (!window.Tesseract) await new Promise((ok, bad) => { const s = document.createElement('script'); s.src = TESS_URL; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
       if (!this.worker) this.worker = await Tesseract.createWorker('eng', 1);
       await this.worker.setParameters({ tessedit_char_whitelist: '0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ:. ', tessedit_pageseg_mode: '7' });
-      status(this.stream ? 'Hold the bottom-left corner of the card in the yellow box' : 'Type the number below.');
+      status(this.stream ? 'Fit the card in the outline, number along the bottom' : 'Type the number below.');
       if (this.stream) this.loop();
     } catch (e) { status('Could not load the text reader (no internet?). Type the number below.'); }
   },
@@ -1388,23 +1390,27 @@ const scanner = {
       try {
         const v = $('scan').querySelector('video');
         if (v.videoWidth) {
-          const g = $('scan').querySelector('.guide').getBoundingClientRect(), c = v.getBoundingClientRect();
-          // map the on-screen guide box back to video pixels (object-fit: cover)
+          this.tries = (this.tries || 0) + 1;
+          const wide = this.tries % 4 === 0;                  // every 4th go, read the whole card in case the number sits elsewhere
+          const g = $('scan').querySelector(wide ? '.guide' : '.guide .zone').getBoundingClientRect(), c = v.getBoundingClientRect();
+          // map the on-screen box back to video pixels (object-fit: cover)
           const scale = Math.max(c.width / v.videoWidth, c.height / v.videoHeight);
           const vw = v.videoWidth * scale, vh = v.videoHeight * scale, ox = (c.width - vw) / 2, oy = (c.height - vh) / 2;
-          const sx = (g.left - c.left - ox) / scale, sy = (g.top - c.top - oy) / scale, sw = g.width / scale, sh = g.height / scale;
+          const pad = wide ? 0 : g.height * 0.3;              // a little slack above and below the strip
+          const sx = (g.left - c.left - ox) / scale, sy = (g.top - pad - c.top - oy) / scale, sw = g.width / scale, sh = (g.height + pad * 2) / scale;
           const cv = document.createElement('canvas');
-          const k = Math.max(1, 1400 / sw);
+          const k = Math.max(1, (wide ? 1100 : 1400) / sw);
           cv.width = sw * k; cv.height = sh * k;
           const ctx = cv.getContext('2d');
           ctx.drawImage(v, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
           const img = ctx.getImageData(0, 0, cv.width, cv.height), d = img.data;
           for (let i = 0; i < d.length; i += 4) { const y = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; const t = y > 140 ? 255 : y < 90 ? 0 : (y - 90) * 5.1; d[i] = d[i + 1] = d[i + 2] = t; }
           ctx.putImageData(img, 0, 0);
+          await this.worker.setParameters({ tessedit_pageseg_mode: wide ? '11' : '6' });   // 11 = sparse text, 6 = a block of text
           const { data } = await this.worker.recognize(cv);
           const hit = parseScan(data.text);
           if (hit) { this.found = hit; this.resolve(hit); }
-          else $('scanStatus').textContent = 'Reading… ' + (data.text.trim().replace(/\s+/g, ' ').slice(0, 24) || 'move closer / more light');
+          else $('scanStatus').textContent = 'Reading… ' + (data.text.trim().replace(/\s+/g, ' ').slice(0, 24) || 'fill the outline with the card, good light helps');
         }
       } catch (e) {}
       this.busy = false;
