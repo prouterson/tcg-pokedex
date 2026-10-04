@@ -274,6 +274,7 @@
 <header>
   <div class="top">
     <button class="back" id="back" aria-label="Back" hidden>‹</button>
+    <button class="back" id="home" aria-label="Home" title="Home" hidden>⌂</button>
     <h1 id="title"><span>◆</span> TCG Pokédex</h1>
     <div class="count" id="count"></div>
   </div>
@@ -720,6 +721,10 @@ function setHeader({ title, back, count, progress, controls }) {
   $('title').innerHTML = title;
   $('back').hidden = !back;
   $('back').onclick = back ? () => { location.hash = back; } : null;
+  $('home').hidden = !back;                                   // anywhere but home: a straight way back to the start
+  $('home').onclick = () => { ui.q = ''; location.hash = '#/'; };
+  $('title').onclick = back ? () => { ui.q = ''; location.hash = '#/'; } : null;
+  $('title').style.cursor = back ? 'pointer' : '';
   $('count').textContent = count || '';
   $('bar').hidden = progress == null;
   $('stats').hidden = true;
@@ -1701,7 +1706,7 @@ function prepForOCR(video, sx, sy, sw, sh, targetW) {
   return [cv, bgc];
 }
 // "001/084 PBL", "25/198 SVI", "TG12/TG30", "001/084" -> { num, denom, code }
-function parseScan(text) {
+function parseScan(text, typed) {
   const t = (text || '').toUpperCase().replace(/[|]/g, '1').replace(/O(?=\d)|(?<=\d)O/g, '0');
   // number, with an optional letter prefix for trainer-gallery / galarian-gallery style numbering (TG12/TG30, GG05/GG70)
   const m = t.match(/\b([A-Z]{0,2})(\d{1,3})\s*[\/\\]\s*[A-Z]{0,2}(\d{2,3})\b/);
@@ -1719,13 +1724,13 @@ function parseScan(text) {
   }
   if (!code) code = tokens[0] || '';
   // a camera read with no recognised set code must at least look like a real number line, or "10" and "70" off the card body get through
-  if (!known.has(code) && !padded && !prefix) return null;
+  if (!typed && !known.has(code) && !padded && !prefix) return null;
   return { num, denom, code, prefix };
 }
 $('scanClose').onclick = () => scanner.close();
 $('scanTorch').onclick = () => scanner.toggleTorch();
 $('scanManualGo').onclick = () => {
-  const hit = parseScan($('scanManual').value);
+  const hit = parseScan($('scanManual').value, true);
   if (hit) { $('scanManual').value = ''; $('scanManual').blur(); scanner.found = hit; scanner.resolve(hit); }
   else $('scanStatus').textContent = 'Type it like 001/084 PBL';
 };
