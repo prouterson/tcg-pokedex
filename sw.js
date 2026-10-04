@@ -1,6 +1,6 @@
 // TCG Pokédex service worker: keeps the app and any card pictures you've seen available offline.
 // Bump VERSION whenever index.html changes so phones pick up the new one.
-const VERSION = 'v23';
+const VERSION = 'v24';
 const SHELL = 'tcg-shell-' + VERSION;
 const IMAGES = 'tcg-images';
 const SHELL_FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-180.png'];
@@ -23,7 +23,8 @@ self.addEventListener('fetch', e => {
   if (url.hostname === 'assets.tcgdex.net' || url.hostname === 'cdn.jsdelivr.net' || url.hostname === 'tessdata.projectnaptha.com') {
     e.respondWith(caches.open(IMAGES).then(async c => {
       const hit = await c.match(e.request);
-      if (hit) return hit;
+      // a picture saved from a plain <img> is opaque; the card scanner asks with CORS so it can read the pixels, so refetch for it
+      if (hit && !(hit.type === 'opaque' && e.request.mode === 'cors')) return hit;
       const res = await fetch(e.request);
       if (res.ok) c.put(e.request, res.clone());
       return res;

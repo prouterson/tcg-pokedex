@@ -84,6 +84,7 @@
   button:hover { border-color: var(--accent); }
   header button.on { background: var(--seg-on); border-color: var(--seg-on); color: var(--seg-fg); }
   select.person { font-weight: 600; border-color: var(--person, var(--ctrl-line)); }
+  select.cardlang.on { border-color: var(--accent); font-weight: 600; }
   .seg { display: flex; }
   .seg button { border-radius: 0; margin-left: -1px; }
   .seg button:first-child { border-radius: var(--radius) 0 0 var(--radius); margin-left: 0; }
@@ -201,7 +202,7 @@
   #scan video { width: 100%; height: 100%; object-fit: cover; }
   /* a card-shaped outline (63:88); the reader looks at the bottom strip of it, where the number is printed */
   /* kept smallish on purpose: a card that fills a big outline is too close for the phone to focus */
-  #scan .guide { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); width: min(58vw, 40vh); aspect-ratio: 63 / 88; border: 3px solid #ffd21f; border-radius: 10px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
+  #scan .guide { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); width: min(66vw, 42vh); aspect-ratio: 63 / 88; border: 3px solid #ffd21f; border-radius: 10px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
   #scan .guide span { position: absolute; left: -30vw; right: -30vw; top: -44px; text-align: center; font-size: 13px; line-height: 1.3; color: #ffd21f; text-shadow: 0 1px 2px #000; }
   #scan .guide .zone { position: absolute; left: 0; right: 0; bottom: 0; height: 14%; border-top: 2px dashed rgba(255,210,31,.8); border-radius: 0 0 7px 7px; }
   #scan .panel { background: #15171c; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); display: grid; gap: 10px; }
@@ -217,6 +218,9 @@
   #scan .result .t small { color: #9a9a92; }
   #scan .result .btns { display: flex; flex-direction: column; gap: 6px; }
   #scan .row2 { display: flex; gap: 8px; }
+  #scan .setrow { align-items: center; font-size: 14px; color: #c9ccd4; }
+  #scan .setrow select { flex: 1; min-width: 0; background: #262932; color: #fff; border-color: #3a3e48; }
+  #scan .choices img { width: 40px; vertical-align: middle; margin-right: 8px; border-radius: 3px; }
   #scan input { flex: 1; min-width: 0; padding: 10px; border-radius: 10px; border: 1px solid #3a3e48; background: #262932; color: #fff; font: inherit; }
   #scan button { background: #262932; color: #fff; border-color: #3a3e48; }
   #scan button.primary { background: #2e9e5b; border-color: #2e9e5b; }
@@ -242,6 +246,9 @@
   #sheet .acts button.want { color: #a07800; border-color: #e0a800; }
   #sheet .acts button.want.on { background: #e0a800; border-color: #e0a800; color: #fff; }
   #sheet .acts .hint { font-size: 12px; color: var(--muted); text-align: center; margin-top: 4px; }
+  #sheet .acts .langrow { display: flex; gap: 8px; align-items: center; justify-content: flex-end; font-size: 13px; color: var(--muted); margin-top: 4px; }
+  #sheet .acts .langrow select { color: var(--text); background: var(--bg); border-color: var(--line); padding: 6px 8px; font-size: 13px; }
+  #sheet .acts .langrow select.on { border-color: var(--accent); font-weight: 600; }
 
   /* price check */
   #pc { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: flex-end; justify-content: center; z-index: 27; }
@@ -317,8 +324,9 @@
 <footer id="foot"><div id="syncStatus"></div>Tap a card to mark it owned by the user selected at the top. Use Export to back up. Card data and prices from TCGdex.</footer>
 <div id="lb"><img id="lbImg" alt=""></div>
 <div id="scan">
-  <div class="cam"><video playsinline autoplay muted></video><div class="guide"><span>Fit the card in the outline, about 20 cm away.<br>Shiny card? Light off, tilt away from glare.</span><i class="zone"></i></div></div>
+  <div class="cam"><video playsinline autoplay muted></video><div class="guide"><span>Fill the outline with the card and hold still.<br>Glare is fine — it matches the picture, not the number.</span><i class="zone"></i></div></div>
   <div class="panel">
+    <div class="row2 setrow"><label for="scanSet">Set:</label><select id="scanSet"></select></div>
     <div class="status" id="scanStatus">Starting camera…</div>
     <div class="peek"><canvas id="scanPeek" width="10" height="10"></canvas><span id="scanRead"></span></div>
     <div class="result" id="scanResult" hidden></div>
@@ -462,11 +470,16 @@ function allWishes() {
   }));
   return out;
 }
-function cardLangSelect() {
-  const sel = el('select');
-  sel.title = 'The language printed on the cards you mark from now on';
-  sel.innerHTML = LANGS.map(l => '<option value="' + l[0] + '"' + (l[0] === cardLang ? ' selected' : '') + '>Cards in: ' + l[1].replace(/ \(.*/, '') + '</option>').join('');
-  sel.onchange = () => { cardLang = sel.value; try { localStorage.setItem(CARD_LANG_KEY, cardLang); } catch (e) {} };
+function cardLangSelect(onChange) {
+  const sel = el('select', 'cardlang' + (cardLang === 'en' ? '' : ' on'));
+  sel.title = 'The language printed on the cards you mark from now on (the app stays in English)';
+  sel.innerHTML = LANGS.map(l => '<option value="' + l[0] + '"' + (l[0] === cardLang ? ' selected' : '') + '>🌐 Cards in: ' + l[1].replace(/ \(.*/, '') + '</option>').join('');
+  sel.onchange = () => {
+    cardLang = sel.value; try { localStorage.setItem(CARD_LANG_KEY, cardLang); } catch (e) {}
+    sel.classList.toggle('on', cardLang !== 'en');
+    document.querySelectorAll('select.cardlang').forEach(s => { if (s !== sel) { s.value = cardLang; s.classList.toggle('on', cardLang !== 'en'); } });
+    if (onChange) onChange();
+  };
   return sel;
 }
 function savePerson(p) { saveState(); sync.writePerson(p); }
@@ -1108,7 +1121,7 @@ let lookoutJob = 0;
 async function viewHome() {
   const main = $('main');
   main.innerHTML = '<div class="empty">Loading…</div>';
-  setHeader({ title: '<span>◆</span> TCG Pokédex', controls: [personSelect(), themeSelect(), scanButton(), makeSearch('Search cards, sets or codes', () => renderHome())] });
+  setHeader({ title: '<span>◆</span> TCG Pokédex', controls: [personSelect(), cardLangSelect(), themeSelect(), scanButton(), makeSearch('Search cards, sets or codes', () => renderHome())] });
   try {
     window._series = await getJSON('series');
     window._sets = await getJSON('sets');
@@ -1201,6 +1214,7 @@ async function viewSet(id) {
   try { set = await getJSON('sets/' + id); }
   catch (e) { main.innerHTML = '<div class="note">Could not load this set. Sets load once online and then work offline.</div>'; return; }
   window._set = set;
+  try { localStorage.setItem('tcgPokedex.lastSet', id); } catch (e) {}   // the scanner matches against this set when opened from elsewhere
   ui.rarity = ''; ui.sort = 'num';
   if (window._jump) { ui.q = window._jump; ui.filter = 'all'; window._jump = null; }   // arrived from a card search: show just that card
   if (ui.filter === 'family' && state.people.length < 2) ui.filter = 'all';
@@ -1497,7 +1511,7 @@ function openCardSheet(card) {
   const d = details[card.localId] || {};
   sh.querySelector('img').src = card.image ? card.image + '/low.webp' : '';
   sh.querySelector('b').textContent = card.name;
-  sh.querySelector('small').textContent = set.name + ' · ' + cardNum(card) + (d.r ? ' · ' + d.r : '') + ' · marking ' + ((LANGS.find(l => l[0] === cardLang) || ['', cardLang])[1].replace(/ \(.*/, '')) + ' cards';
+  sh.querySelector('small').textContent = set.name + ' · ' + cardNum(card) + (d.r ? ' · ' + d.r : '');
   const acts = sh.querySelector('.acts');
   const close = () => sh.classList.remove('open');
   const draw = () => {
@@ -1524,6 +1538,11 @@ function openCardSheet(card) {
     const others = ownersOf(set.id, card.localId).filter(p => p.id !== state.current);
     if (others.length) acts.appendChild(el('div', 'hint', 'Also owned by ' + esc(others.map(p => p.name).join(', '))));
     if (!haveDetails()) acts.appendChild(el('div', 'hint', 'Printings and prices appear once the set has finished loading'));
+    // the language printed on the card being marked, changeable right here
+    const lrow = el('div', 'langrow');
+    lrow.appendChild(el('span', '', 'Marking as:'));
+    lrow.appendChild(cardLangSelect(draw));
+    acts.appendChild(lrow);
   };
   draw();
   sh.querySelector('.x').onclick = close;
@@ -1602,7 +1621,113 @@ async function buildPlaceholders(which, style) {
   window.print();
 }
 
-/* ---------- camera scan: read "001/084 PBL" off the card and jump to it ---------- */
+/* ---------- picture matching: recognise a card by comparing the camera view with the set's card images ----------
+   Holo and full-art cards defeat text reading (foil, glare, tiny print), so the main route is now the artwork:
+   every card in the set becomes a 24x33 thumbnail (brightness high-passed, edges, chroma) and the camera's
+   guide box is compared against all of them at a few scales, shifts and tilts. Glare pixels are masked out. */
+const FP_W = 24, FP_H = 33;
+function thumbOf(src, sx, sy, sw, sh) {
+  const cv = thumbOf.cv || (thumbOf.cv = document.createElement('canvas'));
+  cv.width = FP_W; cv.height = FP_H;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(src, sx, sy, sw, sh, 0, 0, FP_W, FP_H);
+  const d = ctx.getImageData(0, 0, FP_W, FP_H).data, n = FP_W * FP_H;
+  const g = new Float32Array(n), c = new Float32Array(n * 3);
+  for (let i = 0, p = 0; i < n; i++, p += 4) { g[i] = 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2]; c[i * 3] = d[p]; c[i * 3 + 1] = d[p + 1]; c[i * 3 + 2] = d[p + 2]; }
+  return { g, c };
+}
+// gradient magnitude: edges survive foil tint and uneven light better than brightness does
+function edgesOf(g) {
+  const e = new Float32Array(g.length);
+  for (let y = 1; y < FP_H - 1; y++) for (let x = 1; x < FP_W - 1; x++) { const i = y * FP_W + x; e[i] = Math.abs(g[i + 1] - g[i - 1]) + Math.abs(g[i + FP_W] - g[i - FP_W]); }
+  return e;
+}
+// subtract a 7x7 local mean so lighting gradients and sheen drop out
+function highpass(g) {
+  const out = new Float32Array(g.length), R = 3;
+  for (let y = 0; y < FP_H; y++) for (let x = 0; x < FP_W; x++) {
+    let s = 0, n = 0;
+    for (let yy = Math.max(0, y - R); yy <= Math.min(FP_H - 1, y + R); yy++) for (let xx = Math.max(0, x - R); xx <= Math.min(FP_W - 1, x + R); xx++) { s += g[yy * FP_W + xx]; n++; }
+    out[y * FP_W + x] = g[y * FP_W + x] - s / n;
+  }
+  return out;
+}
+// per-pixel colour independent of brightness
+function chromaOf(c) {
+  const n = c.length / 3, out = new Float32Array(n * 2);
+  for (let i = 0; i < n; i++) { const r = c[i * 3], g = c[i * 3 + 1], b = c[i * 3 + 2], s = r + g + b + 1; out[i * 2] = (r - g) / s; out[i * 2 + 1] = (b - (r + g) / 2) / s; }
+  return out;
+}
+// zero-mean normalised cross-correlation over the unmasked pixels
+function ncc(a, b, mask) {
+  let n = 0, sa = 0, sb = 0;
+  for (let i = 0; i < a.length; i++) { if (mask && !mask[i]) continue; n++; sa += a[i]; sb += b[i]; }
+  if (n < 20) return 0;
+  const ma = sa / n, mb = sb / n;
+  let sab = 0, saa = 0, sbb = 0;
+  for (let i = 0; i < a.length; i++) { if (mask && !mask[i]) continue; const da = a[i] - ma, db = b[i] - mb; sab += da * db; saa += da * da; sbb += db * db; }
+  return saa && sbb ? sab / Math.sqrt(saa * sbb) : 0;
+}
+function fingerprintOf(img) {
+  const m = 0.035, w = img.width, h = img.height;          // inset a touch so the card border does not count
+  const t = thumbOf(img, w * m, h * m, w * (1 - 2 * m), h * (1 - 2 * m));
+  return { g: highpass(t.g), e: edgesOf(t.g), ch: chromaOf(t.c) };
+}
+function scoreFP(cam, fp) { return 0.35 * ncc(cam.g, fp.g, cam.mask) + 0.4 * ncc(cam.e, fp.e, cam.mask) + 0.25 * ncc(cam.ch, fp.ch, cam.mask2); }
+function rotatedCrop(src, gx, gy, gw, gh, deg) {
+  const cv = document.createElement('canvas'); cv.width = Math.round(gw); cv.height = Math.round(gh);
+  const ctx = cv.getContext('2d');
+  ctx.translate(gw / 2, gh / 2); ctx.rotate(deg * Math.PI / 180); ctx.translate(-gw / 2, -gh / 2);
+  ctx.drawImage(src, gx, gy, gw, gh, 0, 0, gw, gh);
+  return cv;
+}
+// Compare the guide box of a video frame or photo with every fingerprint. Tries a few scales, shifts and (optionally)
+// tilts, keeps the one alignment that produces the strongest match anywhere, and returns that alignment's scores.
+function matchFrame(src, gx, gy, gw, gh, fps, tilt) {
+  const shifts = [-0.05, 0, 0.05], scales = [0.92, 1, 1.08], angles = tilt ? [-3, 0, 3] : [0];
+  let bestTop = -1, bestScores = null;
+  for (const a of angles) {
+    const pad = 0.1, base = a ? rotatedCrop(src, gx - gw * pad, gy - gh * pad, gw * (1 + 2 * pad), gh * (1 + 2 * pad), a) : src;
+    const bx = a ? gw * pad : gx, by = a ? gh * pad : gy;
+    for (const s of scales) for (const dx of shifts) for (const dy of shifts) {
+      const w = gw * s, h = gh * s, t = thumbOf(base, bx + gw / 2 - w / 2 + dx * gw, by + gh / 2 - h / 2 + dy * gh, w, h);
+      const mask = new Uint8Array(t.g.length), mask2 = new Uint8Array(t.g.length * 2);
+      for (let i = 0; i < t.g.length; i++) { const ok = t.g[i] < 243; mask[i] = ok; mask2[i * 2] = mask2[i * 2 + 1] = ok; }   // blown-out glare does not vote
+      const cam = { g: highpass(t.g), e: edgesOf(t.g), ch: chromaOf(t.c), mask, mask2 };
+      const sc = new Float32Array(fps.length); let top = -1;
+      for (let k = 0; k < fps.length; k++) { sc[k] = fps[k] ? scoreFP(cam, fps[k]) : 0; if (sc[k] > top) top = sc[k]; }
+      if (top > bestTop) { bestTop = top; bestScores = sc; }
+    }
+  }
+  return bestScores || new Float32Array(fps.length);
+}
+// fingerprints for one set, built from the catalogue pictures (kept for the session; the pictures themselves are cached by the service worker)
+const fpBook = {};
+async function fingerprintsFor(set, onProgress) {
+  const old = fpBook[set.id];
+  if (old && old.fps.every(Boolean)) return old;
+  const cards = old ? old.cards : set.cards.filter(c => c.image), fps = old ? old.fps : new Array(cards.length).fill(null);   // a picture that failed last time is tried again
+  let done = 0, next = 0;
+  const load = url => new Promise((ok, bad) => { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => ok(im); im.onerror = bad; im.src = url; });
+  const worker = async () => {
+    while (next < cards.length) {
+      const i = next++;
+      if (fps[i]) { done++; continue; }
+      try {
+        // a copy saved by the service worker without CORS cannot be read back; a query string gets a fresh readable one
+        const im = await load(cards[i].image + '/low.webp').catch(() => load(cards[i].image + '/low.webp?fp'))
+          .catch(() => new Promise(r => setTimeout(r, 1500)).then(() => load(cards[i].image + '/low.webp?fp2')));   // a flaky connection gets one more go
+        fps[i] = fingerprintOf(im);
+      } catch (e) {}
+      done++; if (onProgress) onProgress(done, cards.length);
+    }
+  };
+  await Promise.all([0, 1, 2, 3, 4, 5].map(worker));
+  return (fpBook[set.id] = { cards, fps });
+}
+
+/* ---------- camera scan: match the picture, or read "001/084 PBL" off the card, and jump to it ---------- */
 const TESS_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
 const scanner = {
   stream: null, worker: null, timer: null, busy: false, found: null,
@@ -1610,7 +1735,7 @@ const scanner = {
     const box = $('scan');
     box.classList.add('open');
     $('scanResult').hidden = true; $('scanResult').innerHTML = '';
-    this.found = null;
+    this.found = null; this.book = null; this.matchSet = null; this.hist = []; this.tries = 0; this.shown = null;
     const status = m => { $('scanStatus').textContent = m; };
     $('scanManual').value = '';
     this.torch = false; $('scanTorch').hidden = true; $('scanTorch').textContent = '🔦 Light'; $('scanSnap').hidden = true;
@@ -1629,14 +1754,41 @@ const scanner = {
     } catch (e) {
       status('Camera not available (' + (e.name || e) + '). You can still type the number below.');
     }
-    status('Loading text reader…');
-    try {
-      if (!window.Tesseract) await new Promise((ok, bad) => { const s = document.createElement('script'); s.src = TESS_URL; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
-      if (!this.worker) this.worker = await Tesseract.createWorker('eng', 1);
-      await this.worker.setParameters({ tessedit_char_whitelist: '0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ:. ', tessedit_pageseg_mode: '7' });
-      status(this.stream ? 'Fit the card in the outline, then tap Snap when it looks sharp' : 'Type the number below.');
-      if (this.stream) { $('scanSnap').hidden = false; this.loop(); }
-    } catch (e) { status('Could not load the text reader (no internet?). Type the number below.'); }
+    // the text reader loads in the background; picture matching does not need it
+    this.ocrReady = (async () => {
+      try {
+        if (!window.Tesseract) await new Promise((ok, bad) => { const s = document.createElement('script'); s.src = TESS_URL; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
+        if (!this.worker) this.worker = await Tesseract.createWorker('eng', 1);
+        await this.worker.setParameters({ tessedit_char_whitelist: '0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ:. ', tessedit_pageseg_mode: '7' });
+        return true;
+      } catch (e) { return false; }
+    })();
+    // which set to match pictures against: the open set, else the last one opened
+    const sets = window._sets || await getJSON('sets').catch(() => []);
+    if (!window._sets) window._sets = sets;
+    let setId = (window._set && (location.hash || '').startsWith('#/set/')) ? window._set.id : null;
+    if (!setId) { try { setId = localStorage.getItem('tcgPokedex.lastSet'); } catch (e) {} }
+    if (!setId && sets.length) setId = sets[sets.length - 1].id;
+    const sel = $('scanSet');
+    sel.innerHTML = sets.slice().reverse().map(s => '<option value="' + s.id + '"' + (s.id === setId ? ' selected' : '') + '>' + esc(s.name) + (abbrOf(s.id) ? ' (' + abbrOf(s.id) + ')' : '') + '</option>').join('');
+    sel.onchange = () => this.learn(sel.value);
+    if (this.stream) { $('scanSnap').hidden = false; this.loop(); }
+    if (setId) await this.learn(setId);
+    else status(this.stream ? 'Pick a set above, or type the number below.' : 'Type the number below.');
+  },
+  // build (or fetch from the session cache) the picture fingerprints of one set
+  async learn(setId) {
+    const status = m => { $('scanStatus').textContent = m; };
+    this.book = null; this.hist = []; this.found = null; $('scanResult').hidden = true;
+    let set;
+    try { set = window._set && window._set.id === setId ? window._set : await getJSON('sets/' + setId); } catch (e) { status('Could not load that set.'); return; }
+    this.matchSet = set;
+    if (!set.cards.some(c => c.image)) { status('No pictures for ' + set.name + ' — type the number below.'); return; }
+    const t0 = Date.now();
+    const book = await fingerprintsFor(set, (d, n) => { if (this.matchSet === set && Date.now() - t0 > 600) status('Learning ' + set.name + ' pictures… ' + d + '/' + n); });
+    if (this.matchSet !== set) return;                       // the set was changed while loading
+    this.book = book;
+    status(this.stream ? 'Fill the outline with the card and hold still.' : 'Type the number below.');
   },
   close() {
     clearTimeout(this.timer); this.timer = null;
@@ -1648,8 +1800,29 @@ const scanner = {
     $('scan').classList.remove('open');
   },
   // Tap to read: a full-resolution still photo where the phone offers one (ImageCapture), else the live frame.
+  // the on-screen guide (or its number strip) in the coordinates of a source that shares the video's width of view
+  guideBox(which, src) {
+    const v = $('scan').querySelector('video');
+    const g = $('scan').querySelector(which === 'zone' ? '.guide .zone' : '.guide').getBoundingClientRect(), c = v.getBoundingClientRect();
+    const scale = Math.max(c.width / v.videoWidth, c.height / v.videoHeight);
+    const vw = v.videoWidth * scale, vh = v.videoHeight * scale, ox = (c.width - vw) / 2, oy = (c.height - vh) / 2;
+    const sw0 = src ? src.width : v.videoWidth, sh0 = src ? src.height : v.videoHeight;
+    const kx = sw0 / v.videoWidth, cy = sh0 / 2 - (v.videoHeight / 2) * kx;
+    return { x: (g.left - c.left - ox) / scale * kx, y: (g.top - c.top - oy) / scale * kx + cy, w: g.width / scale * kx, h: g.height / scale * kx };
+  },
+  // picture match of one frame or photo against the learnt set: { card, score, margin, top } or null
+  matchPicture(src, box, tilt) {
+    const scores = matchFrame(src, box.x, box.y, box.w, box.h, this.book.fps, tilt);
+    if (!tilt) { this.hist.push(scores); if (this.hist.length > 3) this.hist.shift(); }
+    const avg = new Float32Array(scores.length);
+    const use = tilt ? [scores] : this.hist;
+    use.forEach(s => { for (let k = 0; k < s.length; k++) avg[k] += s[k] / use.length; });
+    const order = [...avg.keys()].sort((a, b) => avg[b] - avg[a]);
+    const pk = $('scanPeek'); pk.width = 36; pk.height = 50; pk.getContext('2d').drawImage(src, box.x, box.y, box.w, box.h, 0, 0, 36, 50);
+    return { top: order.slice(0, 3).map(k => ({ card: this.book.cards[k], score: avg[k] })), score: avg[order[0]], margin: avg[order[0]] - avg[order[1]] };
+  },
   async snap() {
-    if (!this.stream || !this.worker || this.snapping) return;
+    if (!this.stream || this.snapping) return;
     this.snapping = true; this.found = null; $('scanResult').hidden = true;
     const status = m => { $('scanStatus').textContent = m; };
     const v = $('scan').querySelector('video');
@@ -1664,32 +1837,45 @@ const scanner = {
         } catch (e) {}
       }
       // map the on-screen outline into the source: the photo shares the video's width of view, with extra height either side
-      const g = $('scan').querySelector('.guide').getBoundingClientRect(), z = $('scan').querySelector('.guide .zone').getBoundingClientRect(), c = v.getBoundingClientRect();
-      const scale = Math.max(c.width / v.videoWidth, c.height / v.videoHeight);
-      const vw = v.videoWidth * scale, vh = v.videoHeight * scale, ox = (c.width - vw) / 2, oy = (c.height - vh) / 2;
-      const kx = sw0 / v.videoWidth, cy = sh0 / 2 - (v.videoHeight / 2) * kx;
-      const box = r => ({ x: (r.left - c.left - ox) / scale * kx, y: (r.top - c.top - oy) / scale * kx + cy, w: r.width / scale * kx, h: r.height / scale * kx });
-      const G = box(g), Z = box(z), pad = Z.h * 0.4;
-      const tries = [
-        ['strip', Z.x, Z.y - pad, Z.w, Z.h + 2 * pad, 1600, '6'],
-        ['card', G.x, G.y, G.w, G.h, 1400, '11']
-      ];
+      const G = this.guideBox('guide', src !== v ? src : null), Z = this.guideBox('zone', src !== v ? src : null);
+      // 1. the picture, with tilt search, against the chosen set
+      let pic = null;
+      if (this.book) {
+        pic = this.matchPicture(src, G, true);
+        $('scanRead').textContent = sw0 + '×' + sh0 + ' ' + note + ': ' + pic.top.map(t => t.card.name + ' ' + t.score.toFixed(2)).join(', ');
+        if (pic.score >= 0.4 && pic.margin >= 0.04) { this.found = { localId: pic.top[0].card.localId }; await this.show(this.matchSet.id, this.found); if (src !== v && src.close) src.close(); this.snapping = false; return; }
+      }
+      // 2. the printed number, in case the card is from another set or the picture match is unsure
       let hit = null, read = '';
-      for (const [name, x, y, w, h, tw, psm] of tries) {
-        const [plain, inv] = prepForOCR(src, x, y, w, h, tw);
-        if (name === 'strip') { const pk = $('scanPeek'); pk.width = plain.width / 4; pk.height = plain.height / 4; pk.getContext('2d').drawImage(plain, 0, 0, pk.width, pk.height); }
-        await this.worker.setParameters({ tessedit_pageseg_mode: psm });
-        for (const img of [plain, inv]) {
-          const { data } = await this.worker.recognize(img);
-          read = read || data.text.trim().replace(/\s+/g, ' ');
-          hit = parseScan(data.text);
+      if (await this.ocrReady) {
+        status('Reading the number…');
+        const pad = Z.h * 0.4;
+        const tries = [['strip', Z.x, Z.y - pad, Z.w, Z.h + 2 * pad, 1600, '6'], ['card', G.x, G.y, G.w, G.h, 1400, '11']];
+        for (const [name, x, y, w, h, tw, psm] of tries) {
+          const [plain, inv] = prepForOCR(src, x, y, w, h, tw);
+          await this.worker.setParameters({ tessedit_pageseg_mode: psm });
+          for (const img of [plain, inv]) {
+            const { data } = await this.worker.recognize(img);
+            read = read || data.text.trim().replace(/\s+/g, ' ');
+            hit = parseScan(data.text);
+            if (hit) break;
+          }
           if (hit) break;
         }
-        if (hit) break;
       }
-      $('scanRead').textContent = sw0 + '×' + sh0 + ' ' + note + ': ' + read.slice(0, 32);
       if (hit) { this.found = hit; await this.resolve(hit); }
-      else status('Could not read it. Closer in on the bottom line, sharp focus, no glare — then Snap again, or type it.');
+      else if (pic && pic.score >= 0.25) {
+        // 3. not sure: offer the closest pictures and let the eye decide
+        status('Not certain — is it one of these?');
+        const r = $('scanResult'); r.hidden = false; r.innerHTML = '<div class="choices"></div><button class="dismiss" aria-label="Dismiss">✕</button>';
+        pic.top.forEach(t => {
+          const b = makeButton('', () => { this.found = { localId: t.card.localId }; this.show(this.matchSet.id, this.found); });
+          b.innerHTML = (t.card.image ? '<img alt="" src="' + t.card.image + '/low.webp">' : '') + esc(t.card.name) + ' · ' + esc(t.card.localId);
+          r.querySelector('.choices').appendChild(b);
+        });
+        r.querySelector('.dismiss').onclick = () => { r.hidden = true; status('Fill the outline with the card and hold still, then Snap again.'); };
+      }
+      else status('Could not match it. Fill the outline with the card, hold still, Snap again — or type the number.');
       if (src !== v && src.close) src.close();
     } catch (e) { status('Snap failed: ' + (e.message || e)); }
     this.snapping = false;
@@ -1701,7 +1887,7 @@ const scanner = {
     try { await track.applyConstraints({ advanced: [{ torch: this.torch }] }); } catch (e) { this.torch = false; }
     $('scanTorch').textContent = this.torch ? '🔦 Light off' : '🔦 Light';
   },
-  // grab the guide box from the video, enlarge and sharpen it, then read it
+  // live: match the picture in the guide box every pass (fast); every few passes also try reading the number strip (slow)
   async loop() {
     if (!$('scan').classList.contains('open') || !this.stream) return;
     if (!this.busy && !this.found) {
@@ -1710,28 +1896,31 @@ const scanner = {
         const v = $('scan').querySelector('video');
         if (v.videoWidth) {
           this.tries = (this.tries || 0) + 1;
-          const wide = this.tries % 2 === 0;                  // alternate: the bottom strip, then the whole card
-          const g = $('scan').querySelector(wide ? '.guide' : '.guide .zone').getBoundingClientRect(), c = v.getBoundingClientRect();
-          // map the on-screen box back to video pixels (object-fit: cover)
-          const scale = Math.max(c.width / v.videoWidth, c.height / v.videoHeight);
-          const vw = v.videoWidth * scale, vh = v.videoHeight * scale, ox = (c.width - vw) / 2, oy = (c.height - vh) / 2;
-          const pad = wide ? 0 : g.height * 0.3;              // a little slack above and below the strip
-          const sx = (g.left - c.left - ox) / scale, sy = (g.top - pad - c.top - oy) / scale, sw = g.width / scale, sh = (g.height + pad * 2) / scale;
-          const [plain, inverted] = prepForOCR(v, sx, sy, sw, sh, wide ? 1100 : 1400);
-          // show what the reader sees, so framing problems are obvious
-          const pk = $('scanPeek'); pk.width = plain.width / 4; pk.height = plain.height / 4; pk.getContext('2d').drawImage(plain, 0, 0, pk.width, pk.height);
-          await this.worker.setParameters({ tessedit_pageseg_mode: wide ? '11' : '6' });   // 11 = sparse text, 6 = a block of text
-          let { data } = await this.worker.recognize(plain);
-          let hit = parseScan(data.text);
-          if (!hit && !wide) { const r2 = await this.worker.recognize(inverted); if (parseScan(r2.data.text)) { data = r2.data; hit = parseScan(data.text); } }   // white-on-foil text
-          $('scanRead').textContent = v.videoWidth + '×' + v.videoHeight + (wide ? ' card' : ' strip') + ': ' + data.text.trim().replace(/\s+/g, ' ').slice(0, 32);
-          if (hit) { this.found = hit; this.resolve(hit); }
-          else $('scanStatus').textContent = 'Reading… tilt the card so the number is not in glare';
+          if (this.book) {
+            const pic = this.matchPicture(v, this.guideBox('guide'), false);
+            const best = pic.top[0];
+            $('scanRead').textContent = v.videoWidth + '×' + v.videoHeight + ': ' + pic.top.map(t => t.card.name + ' ' + t.score.toFixed(2)).join(', ');
+            const again = this.shown && this.shown.setId === this.matchSet.id && this.shown.localId === best.card.localId && Date.now() - this.shown.at < 6000;
+            if (this.hist.length >= 2 && pic.score >= 0.42 && pic.margin >= 0.05 && !again) { this.found = { localId: best.card.localId }; this.show(this.matchSet.id, this.found); }
+            else if (again) {}
+            else if (pic.score >= 0.3) $('scanStatus').textContent = 'Looks like ' + best.card.name + ' — hold still…';
+            else $('scanStatus').textContent = 'Looking… fill the outline with the card, or tap Snap.';
+          }
+          // the number strip tells us the set when the card is not from the chosen one
+          if (!this.found && this.tries % 4 === 0 && this.worker) {
+            const Z = this.guideBox('zone'), pad = Z.h * 0.3;
+            const [plain, inverted] = prepForOCR(v, Z.x, Z.y - pad, Z.w, Z.h + pad * 2, 1400);
+            await this.worker.setParameters({ tessedit_pageseg_mode: '6' });
+            let hit = parseScan((await this.worker.recognize(plain)).data.text);
+            if (!hit) hit = parseScan((await this.worker.recognize(inverted)).data.text);   // white-on-foil text
+            if (hit && !this.found) { this.found = hit; this.resolve(hit); }
+            if (!this.book) { const pk = $('scanPeek'); pk.width = plain.width / 4; pk.height = plain.height / 4; pk.getContext('2d').drawImage(plain, 0, 0, pk.width, pk.height); }
+          }
         }
       } catch (e) {}
       this.busy = false;
     }
-    this.timer = setTimeout(() => this.loop(), 400);
+    this.timer = setTimeout(() => this.loop(), this.book ? 250 : 400);
   },
   async resolve(hit) {
     const status = m => { $('scanStatus').textContent = m; };
@@ -1760,14 +1949,15 @@ const scanner = {
     const status = m => { $('scanStatus').textContent = m; };
     let set;
     try { set = await getJSON('sets/' + setId); } catch (e) { status('Could not load that set.'); this.found = null; return; }
-    const card = hit.prefix
-      ? set.cards.find(c => c.localId.toUpperCase().replace(/^([A-Z]+)0*/, '$1') === hit.prefix + hit.num)
+    const card = hit.localId ? set.cards.find(c => c.localId === hit.localId)
+      : hit.prefix ? set.cards.find(c => c.localId.toUpperCase().replace(/^([A-Z]+)0*/, '$1') === hit.prefix + hit.num)
       : set.cards.find(c => /^\d+$/.test(c.localId) && +c.localId === hit.num) || set.cards.find(c => c.localId.toUpperCase() === String(hit.num));
     if (!card) { status('No card ' + hit.num + ' in ' + set.name + '. Try again.'); this.found = null; return; }
     const key = setKey(set.id);
     const r = $('scanResult'); r.hidden = false;
     r.innerHTML = (card.image ? '<img alt="" src="' + card.image + '/low.webp">' : '') + '<div class="t"><b></b><small></small></div><div class="btns"></div><button class="dismiss" title="Wrong card — keep scanning" aria-label="Dismiss">✕</button>';
-    r.querySelector('.dismiss').onclick = () => { this.found = null; r.hidden = true; status('Fit the next card in the outline, then Snap'); };
+    r.querySelector('.dismiss').onclick = () => { this.found = null; this.hist = []; r.hidden = true; status('Fill the outline with the next card.'); };
+    this.shown = { localId: card.localId, setId: set.id, at: Date.now() };
     r.querySelector('b').textContent = card.name;
     r.querySelector('small').textContent = set.name + ' · ' + card.localId + (set.cardCount.official ? '/' + String(set.cardCount.official).padStart(card.localId.length, '0') : '');
     status('Found ' + card.name + ' — which printing?');
@@ -1785,14 +1975,15 @@ const scanner = {
         const b = makeButton((got ? '✓ ' : '+ ') + (avail.length > 1 ? VNAME[v] : 'Owned'), () => {
           setCard(state.current, key, card.localId, !got, v);
           if (window._set && window._set.id === set.id && (location.hash || '').startsWith('#/set/')) renderSet();   // keep the page behind in step
-          status(card.name + (got ? ' — ' + VNAME[v] + ' removed' : ' — ' + VNAME[v] + ' marked owned for ' + me().name) + '. Pick another or scan the next card.');
+          status(card.name + (got ? ' — ' + VNAME[v] + ' removed' : ' — ' + VNAME[v] + ' marked owned for ' + me().name) + '. Pick another or hold up the next card.');
+          this.found = null; this.hist = []; this.shown.at = Date.now();      // scanning carries on; the same card is not re-announced for a few seconds
           draw();
         }, got ? 'Owned — tap to remove' : 'Mark this printing owned');
         if (got) b.className = 'primary';
         btns.appendChild(b);
       });
       btns.appendChild(makeButton('Open set', () => { this.close(); ui.q = card.localId; location.hash = '#/set/' + set.id; }));
-      btns.appendChild(makeButton('✕ Wrong card', () => { this.found = null; r.hidden = true; status('Fit the next card in the outline, then Snap'); }, 'Dismiss and keep scanning'));
+      btns.appendChild(makeButton('✕ Wrong card', () => { this.found = null; this.hist = []; r.hidden = true; status('Fill the outline with the next card.'); }, 'Dismiss and keep scanning'));
     };
     draw();
   }
