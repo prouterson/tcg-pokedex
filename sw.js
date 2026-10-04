@@ -1,6 +1,6 @@
 // TCG Pokédex service worker: keeps the app and any card pictures you've seen available offline.
 // Bump VERSION whenever index.html changes so phones pick up the new one.
-const VERSION = 'v11';
+const VERSION = 'v13';
 const SHELL = 'tcg-shell-' + VERSION;
 const IMAGES = 'tcg-images';
 const SHELL_FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-180.png'];
@@ -33,7 +33,8 @@ self.addEventListener('fetch', e => {
 
   // the app itself: try the network so updates arrive, fall back to the saved copy offline
   if (url.origin === location.origin) {
-    e.respondWith(fetch(e.request).then(res => {
+    // bypass the host's 10-minute cache so a freshly uploaded index.html shows up on the next open
+    e.respondWith(fetch(e.request, { cache: 'no-cache' }).then(res => {
       if (res.ok) caches.open(SHELL).then(c => c.put(e.request, res.clone()));
       return res;
     }).catch(() => caches.match(e.request, { ignoreSearch: true }).then(hit => hit || caches.match('./index.html'))));

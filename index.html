@@ -110,6 +110,11 @@
   .row .mini { height: 4px; background: var(--card-miss); border-radius: 2px; margin-top: 6px; overflow: hidden; }
   .row .mini i { display: block; height: 100%; background: var(--owned); }
   .row.lookout { width: 100%; margin-bottom: 14px; border-color: #e0a800; }
+  .joinbox { border-color: var(--accent); color: var(--text); margin-bottom: 14px; }
+  .joinbox .add { display: flex; gap: 8px; margin: 10px 0 8px; }
+  .joinbox .add input { flex: 1; min-width: 0; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg); color: var(--text); font: inherit; font-size: 16px; letter-spacing: .06em; }
+  .joinbox .add button { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .joinbox a { color: var(--muted); font-size: 13px; }
   .row.lookout .dot { width: 36px; height: 36px; border-radius: 50%; background: #e0a800; color: #fff; font-size: 20px; display: flex; align-items: center; justify-content: center; flex: none; }
 
   /* card grid */
@@ -210,6 +215,25 @@
   #scan .choices { display: grid; gap: 6px; }
   #scan .choices button { text-align: left; }
 
+  /* card action sheet: tap a card, pick what to do */
+  #sheet { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: flex-end; justify-content: center; z-index: 24; }
+  #sheet.open { display: flex; }
+  #sheet .box { background: var(--panel); color: var(--text); border-radius: 18px 18px 0 0; padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); width: 100%; max-width: 520px; box-shadow: 0 -4px 24px rgba(0,0,0,.3); }
+  #sheet .head { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+  #sheet .head img { width: 56px; aspect-ratio: 63/88; object-fit: contain; border-radius: 4px; background: var(--card-miss); }
+  #sheet .head .t { flex: 1; min-width: 0; }
+  #sheet .head b { display: block; font-size: 17px; }
+  #sheet .head small { color: var(--muted); }
+  #sheet .x { width: 36px; height: 36px; padding: 0; border-radius: 50%; font-size: 14px; }
+  #sheet .acts { display: grid; gap: 8px; }
+  #sheet .acts button { display: flex; justify-content: space-between; align-items: center; padding: 13px 14px; font-size: 16px; border-radius: 12px; text-align: left; }
+  #sheet .acts button span { color: var(--muted); font-size: 14px; }
+  #sheet .acts button.on { background: var(--owned); border-color: var(--owned); color: #fff; }
+  #sheet .acts button.on span { color: rgba(255,255,255,.85); }
+  #sheet .acts button.want { color: #a07800; border-color: #e0a800; }
+  #sheet .acts button.want.on { background: #e0a800; border-color: #e0a800; color: #fff; }
+  #sheet .acts .hint { font-size: 12px; color: var(--muted); text-align: center; margin-top: 4px; }
+
   /* print options dialog */
   #printOpts { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 25; padding: 16px; }
   #printOpts.open { display: flex; }
@@ -268,6 +292,10 @@
     <div class="row2"><button id="scanTorch" hidden>🔦 Light</button><button id="scanClose">Close</button></div>
   </div>
 </div>
+<div id="sheet"><div class="box">
+  <div class="head"><img alt=""><div class="t"><b></b><small></small></div><button class="x" aria-label="Close">✕</button></div>
+  <div class="acts"></div>
+</div></div>
 <div id="printOpts"><div class="box">
   <h3></h3>
   <p>Real-size placeholders, 9 per A4 page, in binder order. Cut along the dashed lines.</p>
@@ -518,10 +546,12 @@ function viewSync() {
   }
   if (sync.code) {
     const link = location.origin + location.pathname + '?family=' + sync.code;
-    box.appendChild(el('div', 'note', 'This phone is in family <b>' + esc(sync.code) + '</b>. Status: ' + esc(sync.status) + '.<br>Other phones join by opening this link, or by typing the code here:'));
+    const live = sync.status === 'live';
+    box.appendChild(el('div', 'note', (live ? '✅ This phone is in family' : 'This phone is joining family') + ' <b style="font-size:20px;letter-spacing:.08em">' + esc(sync.code) + '</b>' + (live ? '' : ' — ' + esc(sync.status)) + '.<br>Others join by typing that code into their app (home screen → "Not in a family yet"), or by opening this link <i>in the same browser or app they will use</i>:'));
     const l = el('div', 'p'); l.innerHTML = '<b style="overflow-wrap:anywhere;font-weight:400"></b>'; l.querySelector('b').textContent = link;
-    l.appendChild(makeButton('Copy link', () => { navigator.clipboard && navigator.clipboard.writeText(link).then(() => alert('Link copied')); }));
-    if (navigator.share) l.appendChild(makeButton('Share…', () => navigator.share({ title: 'TCG Pokédex family', url: link }).catch(() => {})));
+    const msg = 'Join our TCG Pokédex family: open ' + link + ' — if it asks for a code, enter ' + sync.code;
+    l.appendChild(makeButton('Copy', () => { navigator.clipboard && navigator.clipboard.writeText(msg).then(() => alert('Copied, with the code')); }));
+    if (navigator.share) l.appendChild(makeButton('Share…', () => navigator.share({ title: 'TCG Pokédex family', text: msg }).catch(() => {})));
     box.appendChild(l);
     box.appendChild(makeButton('Leave family (keeps a copy on this phone)', () => { if (confirm('Leave the family? This phone keeps a copy of the data but will stop syncing.')) { sync.leave(); viewSync(); } }));
   } else {
@@ -1031,6 +1061,16 @@ function renderHome() {
     return;
   }
 
+  if (FIREBASE_CONFIG && !sync.code) {
+    // not sharing yet: make joining obvious, since a shared link can land in a different browser than the app
+    const jb = el('div', 'note joinbox');
+    jb.innerHTML = '<b>Not in a family yet.</b> Ask whoever started it for the 10-letter code shown at the bottom of their app.<div class="add"><input placeholder="Family code" autocapitalize="off" autocomplete="off"><button>Join</button></div><a href="#/sync">Start a new family instead</a>';
+    const inp = jb.querySelector('input');
+    jb.querySelector('button').onclick = () => joinFamily(inp.value.trim().toLowerCase());
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') joinFamily(inp.value.trim().toLowerCase()); });
+    main.appendChild(jb);
+  }
+
   const wanted = allWishes().length;
   const lk = el('button', 'row lookout');
   lk.innerHTML = '<span class="dot">★</span><div class="t"><b>Be on the lookout</b><small>' + (wanted ? wanted + ' card' + (wanted === 1 ? '' : 's') + ' the family is hunting' : 'Tap ☆ on any card you want to find') + '</small></div><div class="pct">›</div>';
@@ -1349,17 +1389,58 @@ function onCardClick(e) {
   }
   const chip = e.target.closest('button.var');
   if (chip) {
-    // one printing on or off
+    // one printing on or off, straight from the chip
     setCard(state.current, setKey(set.id), id, !ownedVariants(card).includes(chip.dataset.v), chip.dataset.v);
-  } else if (ownedIn(set.id)[id]) {
-    setCard(state.current, setKey(set.id), id, false, '*');                 // tap an owned card: clear every printing
-  } else {
-    setCard(state.current, setKey(set.id), id, true, primaryVariant(card)); // tap a needed card: the normal printing (or its only one)
+    refreshCardNode(card);
+    return;
   }
-  // swap just this card so the page does not jump
-  if (cardVisible(card)) node.replaceWith(makeCard(card)); else node.remove();
+  openCardSheet(card);
+}
+// redraw one card in place so the page does not jump, then the counts
+function refreshCardNode(card) {
+  const node = document.querySelector('#cards [data-id="' + CSS.escape(card.localId) + '"]');
+  if (node) { if (cardVisible(card)) node.replaceWith(makeCard(card)); else node.remove(); }
   renderCount();
   renderStats();
+}
+
+/* ---------- tap a card: a sheet with big buttons for each printing, the lookout list and a close-up ---------- */
+function openCardSheet(card) {
+  const set = window._set, key = setKey(set.id), sh = $('sheet');
+  const d = details[card.localId] || {};
+  sh.querySelector('img').src = card.image ? card.image + '/low.webp' : '';
+  sh.querySelector('b').textContent = card.name;
+  sh.querySelector('small').textContent = set.name + ' · ' + cardNum(card) + (d.r ? ' · ' + d.r : '') + ' · marking ' + ((LANGS.find(l => l[0] === cardLang) || ['', cardLang])[1].replace(/ \(.*/, '')) + ' cards';
+  const acts = sh.querySelector('.acts');
+  const close = () => sh.classList.remove('open');
+  const draw = () => {
+    acts.innerHTML = '';
+    const avail = variantsOf(card), got = ownedVariants(card);
+    [...avail].forEach(v => {
+      const on = got.includes(v);
+      const label = avail.length > 1 ? VNAME[v] : 'Owned';
+      const price = d.p != null ? money(variantPrice(d, v), d.u) : '';
+      const b = el('button', on ? 'on' : '', '<em>' + (on ? '✓ ' : '') + esc(label) + (on ? ' — tap to remove' : '') + '</em><span>' + price + '</span>');
+      b.querySelector('em').style.fontStyle = 'normal';
+      b.onclick = () => { setCard(state.current, key, card.localId, !on, v); refreshCardNode(card); close(); };
+      acts.appendChild(b);
+    });
+    if (!got.length) {
+      const want = !!wishedBy(state.current, key)[card.localId];
+      const w = el('button', 'want' + (want ? ' on' : ''), '<em>' + (want ? '★ On your lookout list — tap to remove' : '☆ Be on the lookout') + '</em><span>' + esc(wishersOf(set.id, card.localId).filter(p => p.id !== state.current).map(p => p.name).join(', ')) + '</span>');
+      w.querySelector('em').style.fontStyle = 'normal';
+      w.onclick = () => { setWish(state.current, key, card.localId, !want); refreshCardNode(card); close(); };
+      acts.appendChild(w);
+    }
+    if (card.image) acts.appendChild(makeButton('View card', () => { close(); $('lbImg').src = card.image + '/high.webp'; $('lb').classList.add('open'); }));
+    const others = ownersOf(set.id, card.localId).filter(p => p.id !== state.current);
+    if (others.length) acts.appendChild(el('div', 'hint', 'Also owned by ' + esc(others.map(p => p.name).join(', '))));
+    if (!haveDetails()) acts.appendChild(el('div', 'hint', 'Printings and prices appear once the set has finished loading'));
+  };
+  draw();
+  sh.querySelector('.x').onclick = close;
+  sh.onclick = e => { if (e.target === sh) close(); };
+  sh.classList.add('open');
 }
 // header count: cards, or printings when Master set is on
 function setTotals() {
@@ -1653,7 +1734,7 @@ loadState();
 let family = '';
 try {
   const q = new URLSearchParams(location.search).get('family');
-  if (q) { family = q.trim().toLowerCase(); localStorage.setItem(FAMILY_KEY, family); history.replaceState(null, '', location.pathname + location.hash); }
+  if (q) { family = q.trim().toLowerCase(); localStorage.setItem(FAMILY_KEY, family); history.replaceState(null, '', location.pathname + '#/sync'); }   // land on the sync page so joining is visible
   else family = localStorage.getItem(FAMILY_KEY) || '';
 } catch (e) {}
 renderSyncStatus();
