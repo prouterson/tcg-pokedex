@@ -197,11 +197,15 @@
   #scan .cam { position: relative; flex: 1; min-height: 0; overflow: hidden; }
   #scan video { width: 100%; height: 100%; object-fit: cover; }
   /* a card-shaped outline (63:88); the reader looks at the bottom strip of it, where the number is printed */
-  #scan .guide { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(78vw, 56vh); aspect-ratio: 63 / 88; border: 3px solid #ffd21f; border-radius: 12px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
-  #scan .guide span { position: absolute; left: 0; right: 0; top: -34px; text-align: center; font-size: 13px; color: #ffd21f; text-shadow: 0 1px 2px #000; }
-  #scan .guide .zone { position: absolute; left: 0; right: 0; bottom: 0; height: 12%; border-top: 2px dashed rgba(255,210,31,.8); border-radius: 0 0 9px 9px; }
+  /* kept smallish on purpose: a card that fills a big outline is too close for the phone to focus */
+  #scan .guide { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); width: min(58vw, 40vh); aspect-ratio: 63 / 88; border: 3px solid #ffd21f; border-radius: 10px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
+  #scan .guide span { position: absolute; left: -30vw; right: -30vw; top: -44px; text-align: center; font-size: 13px; line-height: 1.3; color: #ffd21f; text-shadow: 0 1px 2px #000; }
+  #scan .guide .zone { position: absolute; left: 0; right: 0; bottom: 0; height: 14%; border-top: 2px dashed rgba(255,210,31,.8); border-radius: 0 0 7px 7px; }
   #scan .panel { background: #15171c; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); display: grid; gap: 10px; }
   #scan .status { font-size: 14px; color: #c9ccd4; min-height: 20px; }
+  #scan .peek { display: flex; gap: 10px; align-items: center; min-height: 28px; }
+  #scan .peek canvas { height: 28px; width: auto; max-width: 55%; border-radius: 4px; background: #fff; }
+  #scan .peek span { font: 12px/1.2 ui-monospace, Consolas, monospace; color: #9a9a92; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #scan .result { display: flex; gap: 12px; align-items: center; background: #1e2128; border-radius: 12px; padding: 10px; }
   #scan .result img { width: 64px; border-radius: 4px; }
   #scan .result .t { flex: 1; min-width: 0; }
@@ -281,9 +285,10 @@
 <footer id="foot"><div id="syncStatus"></div>Tap a card to mark it owned by the user selected at the top. Use Export to back up. Card data and prices from TCGdex.</footer>
 <div id="lb"><img id="lbImg" alt=""></div>
 <div id="scan">
-  <div class="cam"><video playsinline autoplay muted></video><div class="guide"><span>Fit the whole card in the outline</span><i class="zone"></i></div></div>
+  <div class="cam"><video playsinline autoplay muted></video><div class="guide"><span>Fit the card in the outline, about 20 cm away.<br>Shiny card? Light off, tilt away from glare.</span><i class="zone"></i></div></div>
   <div class="panel">
     <div class="status" id="scanStatus">Starting camera…</div>
+    <div class="peek"><canvas id="scanPeek" width="10" height="10"></canvas><span id="scanRead"></span></div>
     <div class="result" id="scanResult" hidden></div>
     <div class="row2">
       <input id="scanManual" placeholder="or type it: 001/084 PBL" autocapitalize="characters" autocomplete="off">
@@ -1527,12 +1532,17 @@ const scanner = {
     $('scanManual').value = '';
     this.torch = false; $('scanTorch').hidden = true; $('scanTorch').textContent = '🔦 Light';
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+      // ask for the sharpest feed the phone will give: the number is small print, and the card sits further away now
+      this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false });
       box.querySelector('video').srcObject = this.stream;
       // the phone's flash, where the browser allows it (Android Chrome; iPhones do not expose it to web pages)
       const track = this.stream.getVideoTracks()[0];
       const caps = track.getCapabilities ? track.getCapabilities() : {};
       if (caps.torch) $('scanTorch').hidden = false;
+      // keep the camera focusing on something held close
+      const adv = [];
+      if (caps.focusMode && caps.focusMode.includes('continuous')) adv.push({ focusMode: 'continuous' });
+      if (adv.length) track.applyConstraints({ advanced: adv }).catch(() => {});
     } catch (e) {
       status('Camera not available (' + (e.name || e) + '). You can still type the number below.');
     }
@@ -1570,26 +1580,23 @@ const scanner = {
         const v = $('scan').querySelector('video');
         if (v.videoWidth) {
           this.tries = (this.tries || 0) + 1;
-          const wide = this.tries % 4 === 0;                  // every 4th go, read the whole card in case the number sits elsewhere
+          const wide = this.tries % 2 === 0;                  // alternate: the bottom strip, then the whole card
           const g = $('scan').querySelector(wide ? '.guide' : '.guide .zone').getBoundingClientRect(), c = v.getBoundingClientRect();
           // map the on-screen box back to video pixels (object-fit: cover)
           const scale = Math.max(c.width / v.videoWidth, c.height / v.videoHeight);
           const vw = v.videoWidth * scale, vh = v.videoHeight * scale, ox = (c.width - vw) / 2, oy = (c.height - vh) / 2;
           const pad = wide ? 0 : g.height * 0.3;              // a little slack above and below the strip
           const sx = (g.left - c.left - ox) / scale, sy = (g.top - pad - c.top - oy) / scale, sw = g.width / scale, sh = (g.height + pad * 2) / scale;
-          const cv = document.createElement('canvas');
-          const k = Math.max(1, (wide ? 1100 : 1400) / sw);
-          cv.width = sw * k; cv.height = sh * k;
-          const ctx = cv.getContext('2d');
-          ctx.drawImage(v, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
-          const img = ctx.getImageData(0, 0, cv.width, cv.height), d = img.data;
-          for (let i = 0; i < d.length; i += 4) { const y = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; const t = y > 140 ? 255 : y < 90 ? 0 : (y - 90) * 5.1; d[i] = d[i + 1] = d[i + 2] = t; }
-          ctx.putImageData(img, 0, 0);
+          const [plain, inverted] = prepForOCR(v, sx, sy, sw, sh, wide ? 1100 : 1400);
+          // show what the reader sees, so framing problems are obvious
+          const pk = $('scanPeek'); pk.width = plain.width / 4; pk.height = plain.height / 4; pk.getContext('2d').drawImage(plain, 0, 0, pk.width, pk.height);
           await this.worker.setParameters({ tessedit_pageseg_mode: wide ? '11' : '6' });   // 11 = sparse text, 6 = a block of text
-          const { data } = await this.worker.recognize(cv);
-          const hit = parseScan(data.text);
+          let { data } = await this.worker.recognize(plain);
+          let hit = parseScan(data.text);
+          if (!hit && !wide) { const r2 = await this.worker.recognize(inverted); if (parseScan(r2.data.text)) { data = r2.data; hit = parseScan(data.text); } }   // white-on-foil text
+          $('scanRead').textContent = v.videoWidth + '×' + v.videoHeight + (wide ? ' card' : ' strip') + ': ' + data.text.trim().replace(/\s+/g, ' ').slice(0, 32);
           if (hit) { this.found = hit; this.resolve(hit); }
-          else $('scanStatus').textContent = 'Reading… ' + (data.text.trim().replace(/\s+/g, ' ').slice(0, 24) || 'fill the outline with the card, good light helps');
+          else $('scanStatus').textContent = 'Reading… tilt the card so the number is not in glare';
         }
       } catch (e) {}
       this.busy = false;
@@ -1658,6 +1665,41 @@ const scanner = {
     draw();
   }
 };
+// Crop a region of the video, enlarge it, flatten the background (foil, gradients, glare), then threshold.
+// Returns two black-and-white canvases: text-dark-on-light and the inverse, for white text on full-art cards.
+function prepForOCR(video, sx, sy, sw, sh, targetW) {
+  const k = Math.max(1, targetW / sw);
+  const W = Math.round(sw * k), H = Math.round(sh * k);
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, W, H);
+  const img = ctx.getImageData(0, 0, W, H), d = img.data, n = W * H;
+  const lum = new Float32Array(n);
+  for (let i = 0, p = 0; i < n; i++, p += 4) { lum[i] = 0.299 * d[p] + 0.587 * d[p + 1] + 0.114 * d[p + 2]; d[p] = d[p + 1] = d[p + 2] = lum[i]; }
+  ctx.putImageData(img, 0, 0);
+  // background estimate: shrink hard, then stretch back with smoothing
+  const small = document.createElement('canvas'); small.width = Math.max(1, Math.round(W / 24)); small.height = Math.max(1, Math.round(H / 24));
+  small.getContext('2d').drawImage(cv, 0, 0, small.width, small.height);
+  const bgc = document.createElement('canvas'); bgc.width = W; bgc.height = H;
+  const bctx = bgc.getContext('2d', { willReadFrequently: true }); bctx.imageSmoothingEnabled = true; bctx.imageSmoothingQuality = 'high';
+  bctx.drawImage(small, 0, 0, W, H);
+  const bg = bctx.getImageData(0, 0, W, H).data;
+  // normalise against the background, then Otsu's threshold
+  const norm = new Uint8ClampedArray(n), hist = new Uint32Array(256);
+  for (let i = 0, p = 0; i < n; i++, p += 4) { const v = 128 + (lum[i] - bg[p]) * 2.2; norm[i] = v < 0 ? 0 : v > 255 ? 255 : v; hist[norm[i]]++; }
+  let sum = 0; for (let t = 0; t < 256; t++) sum += t * hist[t];
+  let sumB = 0, wB = 0, best = 0, thr = 128;
+  for (let t = 0; t < 256; t++) {
+    wB += hist[t]; if (!wB) continue; const wF = n - wB; if (!wF) break;
+    sumB += t * hist[t];
+    const mB = sumB / wB, mF = (sum - sumB) / wF, between = wB * wF * (mB - mF) * (mB - mF);
+    if (between > best) { best = between; thr = t; }
+  }
+  const out = ctx.createImageData(W, H), o = out.data, inv = bctx.createImageData(W, H), q = inv.data;
+  for (let i = 0, p = 0; i < n; i++, p += 4) { const w = norm[i] > thr ? 255 : 0; o[p] = o[p + 1] = o[p + 2] = w; o[p + 3] = 255; q[p] = q[p + 1] = q[p + 2] = 255 - w; q[p + 3] = 255; }
+  ctx.putImageData(out, 0, 0); bctx.putImageData(inv, 0, 0);
+  return [cv, bgc];
+}
 // "001/084 PBL", "25/198 SVI", "TG12/TG30", "001/084" -> { num, denom, code }
 function parseScan(text) {
   const t = (text || '').toUpperCase().replace(/[|]/g, '1').replace(/O(?=\d)|(?<=\d)O/g, '0');
@@ -1666,6 +1708,7 @@ function parseScan(text) {
   if (!m) return null;
   const prefix = m[1], num = +m[2], denom = +m[3];
   if (!num || num > 999) return null;
+  const padded = m[2].length === m[3].length;      // "002/084": real card numbers are zero-padded to the denominator's width
   const known = new Set(Object.values(ABBR).map(a => a.toUpperCase()));
   const tokens = [...t.replace(m[0], ' ').matchAll(/\b([A-Z]{2,5}(?::[A-Z]{2})?\d{0,2})\b/g)].map(x => x[1]).filter(x => !/^(HP|EX|GX|LV|NO|ST|BY|ND|EN|FR|DE|ES|IT|PT|JP|KO)$/.test(x));
   let code = '';
@@ -1675,6 +1718,8 @@ function parseScan(text) {
     if (stripped !== tok && known.has(stripped)) { code = stripped; break; }
   }
   if (!code) code = tokens[0] || '';
+  // a camera read with no recognised set code must at least look like a real number line, or "10" and "70" off the card body get through
+  if (!known.has(code) && !padded && !prefix) return null;
   return { num, denom, code, prefix };
 }
 $('scanClose').onclick = () => scanner.close();
