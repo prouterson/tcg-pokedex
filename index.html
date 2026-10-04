@@ -82,6 +82,7 @@
   button, select { font: inherit; color: var(--ctrl-fg); background: var(--ctrl-bg); border: 1px solid var(--ctrl-line); border-radius: var(--radius); padding: 7px 11px; cursor: pointer; }
   main button, main select, main input { color: var(--text); background: var(--bg); border-color: var(--line); }
   button:hover { border-color: var(--accent); }
+  header button.on { background: var(--seg-on); border-color: var(--seg-on); color: var(--seg-fg); }
   select.person { font-weight: 600; border-color: var(--person, var(--ctrl-line)); }
   .seg { display: flex; }
   .seg button { border-radius: 0; margin-left: -1px; }
@@ -108,6 +109,8 @@
   .row .pct.done { color: var(--owned); }
   .row .mini { height: 4px; background: var(--card-miss); border-radius: 2px; margin-top: 6px; overflow: hidden; }
   .row .mini i { display: block; height: 100%; background: var(--owned); }
+  .row.lookout { width: 100%; margin-bottom: 14px; border-color: #e0a800; }
+  .row.lookout .dot { width: 36px; height: 36px; border-radius: 50%; background: #e0a800; color: #fff; font-size: 20px; display: flex; align-items: center; justify-content: center; flex: none; }
 
   /* card grid */
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 10px; }
@@ -124,7 +127,22 @@
   .card .meta .price { font-weight: 600; color: var(--text); }
   .card .tick { position: absolute; top: 6px; left: 6px; width: 24px; height: 24px; border-radius: 50%; background: var(--owned); color: #fff; font-weight: 700; display: none; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
   .card.owned .tick { display: flex; }
+  .card .tick b { position: absolute; left: 0; top: 26px; font-size: 9px; letter-spacing: .02em; background: var(--text); color: var(--bg); border-radius: 4px; padding: 1px 4px; white-space: nowrap; }
   .card .zoom { position: absolute; top: 6px; right: 6px; width: 28px; height: 28px; padding: 0; border-radius: 50%; background: var(--panel); font-size: 14px; line-height: 1; }
+  .vars { display: flex; gap: 3px; justify-content: center; flex-wrap: wrap; margin-top: 3px; }
+  .vars .var { padding: 1px 6px; font-size: 10px; font-weight: 700; border-radius: 6px; line-height: 1.5; color: var(--muted); background: var(--bg); border-color: var(--line); }
+  .vars .var.on { background: var(--owned); border-color: var(--owned); color: #fff; }
+  .line .vars { margin: 0; }
+  .card.partial { border-style: dashed; }
+  .card.partial .tick { font-size: 10px; width: auto; padding: 0 6px; border-radius: 12px; }
+  .line.partial { opacity: .85; }
+  .card .want { position: absolute; top: 40px; right: 6px; width: 28px; height: 28px; padding: 0; border-radius: 50%; background: var(--panel); font-size: 16px; line-height: 1; color: var(--muted); }
+  .card .want.on, .line .want.on { color: #e0a800; border-color: #e0a800; }
+  .card.want { border-color: #e0a800; }
+  .card.want img { filter: none; }
+  .line.want { border-left-color: #e0a800; }
+  .line .want { padding: 2px 8px; font-size: 16px; line-height: 1; color: var(--muted); }
+  .who.want { color: #e0a800; font-size: 12px; align-items: center; }
 
   /* compact list for checking in a shop */
   .list { display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
@@ -151,6 +169,10 @@
   .people .p .dot { width: 22px; height: 22px; border-radius: 50%; flex: none; color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
   .people .p b { flex: 1; }
   .people .p small { color: var(--muted); }
+  .people .p .val { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .people .p.total { border-color: var(--accent); }
+  .people .note.small { font-size: 12px; margin: 0; }
+  #valuePanel { max-width: none; margin-bottom: 6px; }
   .people .add { display: flex; gap: 8px; margin-top: 12px; }
   .people .add input { flex: 1; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font: inherit; }
 
@@ -163,20 +185,57 @@
   #lb.open { display: flex; }
   #lb img { max-width: 100%; max-height: 90vh; border-radius: 12px; }
 
-  /* printable binder placeholders: 3 x 3 real-size cards per A4 page */
+  /* camera scanner */
+  #scan { position: fixed; inset: 0; background: #000; color: #fff; z-index: 26; display: none; flex-direction: column; }
+  #scan.open { display: flex; }
+  #scan .cam { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+  #scan video { width: 100%; height: 100%; object-fit: cover; }
+  #scan .guide { position: absolute; left: 8%; right: 8%; top: 42%; height: 16%; border: 3px solid #ffd21f; border-radius: 10px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
+  #scan .guide span { position: absolute; left: 0; right: 0; top: -34px; text-align: center; font-size: 13px; color: #ffd21f; text-shadow: 0 1px 2px #000; }
+  #scan .panel { background: #15171c; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); display: grid; gap: 10px; }
+  #scan .status { font-size: 14px; color: #c9ccd4; min-height: 20px; }
+  #scan .result { display: flex; gap: 12px; align-items: center; background: #1e2128; border-radius: 12px; padding: 10px; }
+  #scan .result img { width: 64px; border-radius: 4px; }
+  #scan .result .t { flex: 1; min-width: 0; }
+  #scan .result .t b { display: block; font-size: 16px; }
+  #scan .result .t small { color: #9a9a92; }
+  #scan .result .btns { display: flex; flex-direction: column; gap: 6px; }
+  #scan .row2 { display: flex; gap: 8px; }
+  #scan input { flex: 1; min-width: 0; padding: 10px; border-radius: 10px; border: 1px solid #3a3e48; background: #262932; color: #fff; font: inherit; }
+  #scan button { background: #262932; color: #fff; border-color: #3a3e48; }
+  #scan button.primary { background: #2e9e5b; border-color: #2e9e5b; }
+  #scan .choices { display: grid; gap: 6px; }
+  #scan .choices button { text-align: left; }
+
+  /* print options dialog */
+  #printOpts { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 25; padding: 16px; }
+  #printOpts.open { display: flex; }
+  #printOpts .box { background: var(--panel); color: var(--text); border-radius: 14px; padding: 18px; max-width: 420px; width: 100%; }
+  #printOpts h3 { margin: 0 0 6px; font-size: 16px; }
+  #printOpts p { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+  #printOpts label { display: block; padding: 6px 0; cursor: pointer; }
+  #printOpts hr { border: 0; border-top: 1px solid var(--line); margin: 8px 0; }
+  #printOpts .btns { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  #printOpts .go { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+  /* printable binder placeholders: 3 x 3 real-size cards per A4 page, binder order */
   #print { display: none; }
   @media print {
     @page { size: A4; margin: 8mm; }
     body { background: #fff; color: #000; }
-    header, main, footer, #lb { display: none !important; }
+    header, main, footer, #lb, #printOpts, #toast { display: none !important; }
     #print { display: block; }
     .page { display: grid; grid-template-columns: repeat(3, 63mm); grid-auto-rows: 88mm; gap: 2mm; justify-content: center; break-after: page; }
     .page:last-child { break-after: auto; }
-    .slot { position: relative; border: 0.3mm dashed #999; border-radius: 3mm; overflow: hidden; }
-    .slot img { width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) opacity(.35); }
-    .slot .lbl { position: absolute; left: 0; right: 0; bottom: 0; background: rgba(255,255,255,.92); padding: 2mm 3mm; font-size: 9pt; line-height: 1.25; }
-    .slot .lbl b { display: block; font-size: 11pt; }
-    .slot .tag { position: absolute; top: 4mm; left: -14mm; transform: rotate(-35deg); background: #e3350d; color: #fff; font-weight: 700; font-size: 9pt; letter-spacing: .1em; padding: 1mm 16mm; }
+    .phead { grid-column: 1 / -1; height: 7mm; display: flex; justify-content: space-between; align-items: end; font-size: 8pt; color: #555; border-bottom: 0.3mm solid #ccc; padding-bottom: 1mm; }
+    .phead b { font-size: 10pt; color: #000; }
+    .slot { position: relative; border: 0.3mm dashed #999; border-radius: 3mm; overflow: hidden; display: flex; flex-direction: column; align-items: center; text-align: center; font-family: system-ui, "Segoe UI", sans-serif; }
+    .slot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) opacity(.22); }
+    .slot .top { position: relative; margin-top: 3mm; font-size: 8pt; color: #555; }
+    .slot .mid { position: relative; flex: 1; display: flex; align-items: center; font-size: 13pt; font-weight: 700; padding: 0 4mm; }
+    .slot .lbl { position: relative; margin-bottom: 3mm; font-size: 7.5pt; font-weight: 700; letter-spacing: .08em; color: #555; }
+    .slot.rev .lbl, .slot.rev .top { color: #2b6fd6; }
+    .slot .tag { position: absolute; top: 5mm; left: -14mm; transform: rotate(-35deg); background: #e3350d; color: #fff; font-weight: 700; font-size: 8pt; letter-spacing: .1em; padding: 0.8mm 16mm; }
   }
 </style>
 </head>
@@ -194,6 +253,28 @@
 <main id="main"></main>
 <footer id="foot"><div id="syncStatus"></div>Tap a card to mark it owned by the user selected at the top. Use Export to back up. Card data and prices from TCGdex.</footer>
 <div id="lb"><img id="lbImg" alt=""></div>
+<div id="scan">
+  <div class="cam"><video playsinline autoplay muted></video><div class="guide"><span>Line up the card's number and set code here</span></div></div>
+  <div class="panel">
+    <div class="status" id="scanStatus">Starting camera…</div>
+    <div class="result" id="scanResult" hidden></div>
+    <div class="row2">
+      <input id="scanManual" placeholder="or type it: 001/084 PBL" autocapitalize="characters" autocomplete="off">
+      <button id="scanManualGo">Find</button>
+    </div>
+    <div class="row2"><button id="scanClose">Close</button></div>
+  </div>
+</div>
+<div id="printOpts"><div class="box">
+  <h3></h3>
+  <p>Real-size placeholders, 9 per A4 page, in binder order. Cut along the dashed lines.</p>
+  <label><input type="radio" name="pw" value="need" checked> Only what I still need</label>
+  <label><input type="radio" name="pw" value="all"> The whole set, every printing (fill an empty binder)</label>
+  <hr>
+  <label><input type="radio" name="ps" value="text" checked> Text only (saves ink)</label>
+  <label><input type="radio" name="ps" value="art"> With faint card artwork</label>
+  <div class="btns"><button class="cancel">Cancel</button><button class="go">Print</button></div>
+</div></div>
 <div id="print"></div>
 
 <div id="toast" hidden><span>A new version is ready.</span><button id="toastBtn">Update</button></div>
@@ -202,8 +283,8 @@
 try { const t = localStorage.getItem('tcgPokedex.theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
 
 const LANGS = [
-  ['en', 'English'], ['ja', '日本語 Japanese'], ['zh-cn', '简体中文 Simplified Chinese'], ['zh-tw', '繁體中文 Traditional Chinese'],
-  ['ko', '한국어 Korean'], ['th', 'ไทย Thai'], ['id', 'Indonesian'], ['fr', 'Français'], ['de', 'Deutsch'], ['es', 'Español'], ['it', 'Italiano'], ['pt', 'Português']
+  ['en', 'English'], ['ja', 'Japanese (日本語)'], ['zh-cn', 'Simplified Chinese (简体中文)'], ['zh-tw', 'Traditional Chinese (繁體中文)'],
+  ['ko', 'Korean (한국어)'], ['th', 'Thai (ไทย)'], ['id', 'Indonesian'], ['fr', 'French'], ['de', 'German'], ['es', 'Spanish'], ['it', 'Italian'], ['pt', 'Portuguese']
 ];
 // ---- Shared family database (optional) ----
 // Paste the "firebaseConfig" object from your Firebase project here to turn on syncing between phones.
@@ -218,6 +299,10 @@ const FIREBASE_CONFIG = {
   appId: "1:389795033906:web:f1037626eef4d8208e5d2b"
 };
 const FIREBASE_SDK = 'https://www.gstatic.com/firebasejs/10.12.0/';
+
+// Official set codes (the letters printed on cards, e.g. PBL = Pitch Black). TCGdex only serves these per set,
+// so they are baked in here from a one-off pull on 4 Oct 2026; any set opened on the phone also fills in its own.
+const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","gym1":"G1","neo1":"N1","gym2":"G2","neo2":"N2","si1":"SI","neo3":"N3","neo4":"N4","lc":"LC","ecard1":"EX","ecard3":"SK","ex1":"RS","ex2":"SS","ecard2":"AQ","ex3":"DR","ex4":"MA","ex5":"HL","tk-ex-latia":"TK1A","tk-ex-latio":"TK1O","ex6":"RG","pop1":"P1","ex7":"TR","ex8":"DX","ex9":"EM","pop2":"P2","ex10":"UF","ex11":"DS","ex12":"LM","tk-ex-m":"TK2M","tk-ex-p":"TK2P","pop3":"P3","ex13":"HP","pop4":"P4","ex14":"CG","ex15":"DF","ex16":"PK","pop5":"P5","dp1":"DP","dp2":"MT","tk-dp-l":"TK3L","tk-dp-m":"TK3M","pop6":"P6","dp3":"SW","dp4":"GE","pop7":"P7","dp5":"MD","dp6":"LA","pop8":"P8","dp7":"SF","pl1":"PL","pop9":"P9","pl2":"RR","pl3":"SV","pl4":"AR","ru1":"RM","hgss1":"HS","tk-hs-r":"TK4R","tk-hs-g":"TK4G","hgss2":"UL","hgss3":"UND","col1":"COL","hgss4":"TRI","bw1":"BLW","bwp":"BWP","2011bw":"MCD11","bw2":"EP","tk-bw-e":"TK5E","tk-bw-z":"TK5Z","bw3":"NVI","bw4":"NXD","bw5":"DEX","2012bw":"MCD12","bw6":"DRX","dv1":"DRV","bw7":"BCR","bw8":"PLS","bw9":"PLF","bw10":"PLB","xyp":"XYP","bw11":"LTR","xy0":"KSS","xy1":"XY","tk-xy-n":"TK6N","tk-xy-sy":"TK6S","xy2":"FLF","2014xy":"MCD14","xy3":"FFI","tk-xy-b":"TK7A","tk-xy-w":"TK7B","xy4":"PHF","xy5":"PRC","dc1":"DCR","tk-xy-latio":"TK8O","tk-xy-latia":"TK8A","xy6":"ROS","xy7":"AOR","2015xy":"MCD15","xy8":"BKT","xy9":"BKP","g1":"GEN","tk-xy-p":"TK9P","tk-xy-su":"TK9S","xy10":"FCO","xy11":"STS","2016xy":"MCD16","xy12":"EVO","sm1":"SUM","smp":"SMP","tk-sm-r":"TK10A","tk-sm-l":"TK10L","sm2":"GRI","2017sm":"MCD17","sm3":"BUS","sm3.5":"SLG","sm4":"CIN","sm5":"UPR","sm6":"FLI","sm7.5":"DRM","sm7":"CES","2018sm":"MCD18","sm8":"LOT","det1":"DET","sm9":"TEU","sm10":"UNB","sm11":"UNM","sm115":"HIF","2019sm":"MCD19","swsh2":"RCL","swsh1":"SSH","sm12":"CEC","swsh3":"DAA","fut2020":"FUT20","swsh3.5":"CPA","swsh4":"VIV","2021swsh":"MCD21","swsh4.5":"SHF","swsh4.5sv":"SHF:SV","swsh5":"BST","swsh6":"CRE","cel25cc":"CEL:CC","swsh7":"EVS","cel25":"CEL","swsh8":"FST","swsh9tg":"BRS:TG","swsh9":"BRS","swsh10":"ASR","swsh10tg":"ASR:TG","swsh10.5":"PGO","2022swsh":"MCD22","swsh11":"LOR","swsh11tg":"LOR:TG","swsh12":"SIT","swsh12tg":"SIT:TG","swsh12.5":"CRZ","swsh12.5gg":"CRZ:GG","sv01":"SVI","sve":"SVE","svp":"SVP","2023sv":"MCD23","sv02":"PAL","sv03":"OBF","sv03.5":"MEW","mfb":"MFB","sv04":"PAR","sv04.5":"PAF","sv06":"TWM","sv06.5":"SFA","sv05":"TEF","sv07":"SCR","2024sv":"MCD24","sv08":"SSP","sv08.5":"PRE","sv09":"JTG","sv10":"DRI","sv10.5b":"BLK","sv10.5w":"WHT","mee":"MEE","me01":"MEG","mep":"MEP","me02":"PFL","me03":"POR","me02.5":"ASC","me04":"CRI","me05":"PBL","30th":"30C","30th-c":"30C"};
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
@@ -256,6 +341,7 @@ function loadState() {
 function normalise() {
   if (!Array.isArray(state.people)) state.people = [];
   if (!state.owned || typeof state.owned !== 'object') state.owned = {};
+  if (!state.wish || typeof state.wish !== 'object') state.wish = {};     // wish[pid][setKey][localId] = 1: "be on the lookout"
   if (!state.people.length) { state.people = [{ id: 'p1', name: 'User 1', c: 0 }]; state.current = 'p1'; }
   if (!state.people.some(p => p.id === state.current)) state.current = state.people[0].id;
 }
@@ -264,13 +350,51 @@ function saveState() {
 }
 
 /* ---------- changes go through here so the family database stays in step ---------- */
-function setCard(pid, key, localId, on) {
+// An owned mark holds the language the physical card is printed in ('en', 'ja', 'zh-cn'...). Old saves hold 1, meaning English.
+const CARD_LANG_KEY = 'tcgPokedex.cardLang';
+let cardLang = (() => { try { return localStorage.getItem(CARD_LANG_KEY) || 'en'; } catch (e) { return 'en'; } })();
+const langOf = v => (v === 1 || v === true || v === '1') ? 'en' : String(v);
+const langShort = l => l === 'en' ? '' : l.toUpperCase();
+// variant: a printing code ('n', 'r', ...) to toggle; '*' with on=false clears every printing of the card
+function setCard(pid, key, localId, on, variant) {
   const person = state.owned[pid] || (state.owned[pid] = {});
+  const mine = person[key] || (person[key] = {});
+  let m = marks(mine[localId]);
+  if (on) m = { ...m, [variant || 'n']: cardLang };
+  else if (variant && variant !== '*') { m = { ...m }; delete m[variant]; }
+  else m = {};
+  if (Object.keys(m).length) mine[localId] = m; else delete mine[localId];
+  if (!Object.keys(mine).length) delete person[key];
+  saveState();
+  sync.writeCard(pid, key, localId, Object.keys(m).length ? m : false);
+  if (on && wishedBy(pid, key)[localId]) setWish(pid, key, localId, false);   // found it: off the lookout list
+}
+function wishedBy(pid, key) { return (state.wish[pid] || {})[key] || {}; }
+function wishersOf(setId, localId) { return state.people.filter(p => wishedBy(p.id, setKey(setId))[localId]); }
+function setWish(pid, key, localId, on) {
+  const person = state.wish[pid] || (state.wish[pid] = {});
   const mine = person[key] || (person[key] = {});
   if (on) mine[localId] = 1; else delete mine[localId];
   if (!Object.keys(mine).length) delete person[key];
+  if (!Object.keys(person).length) delete state.wish[pid];
   saveState();
-  sync.writeCard(pid, key, localId, on);
+  sync.writeWish(pid, key, localId, on);
+}
+// every wished card as { pid, lang, setId, localId }
+function allWishes() {
+  const out = [];
+  state.people.forEach(p => Object.entries(state.wish[p.id] || {}).forEach(([key, cards]) => {
+    const m = key.match(/^([a-z]{2}(?:-[a-z]{2})?)\/(.+)$/);
+    Object.keys(cards).forEach(localId => out.push({ pid: p.id, lang: m ? m[1] : 'en', setId: m ? m[2] : key, localId }));
+  }));
+  return out;
+}
+function cardLangSelect() {
+  const sel = el('select');
+  sel.title = 'The language printed on the cards you mark from now on';
+  sel.innerHTML = LANGS.map(l => '<option value="' + l[0] + '"' + (l[0] === cardLang ? ' selected' : '') + '>Cards in: ' + l[1].replace(/ \(.*/, '') + '</option>').join('');
+  sel.onchange = () => { cardLang = sel.value; try { localStorage.setItem(CARD_LANG_KEY, cardLang); } catch (e) {} };
+  return sel;
 }
 function savePerson(p) { saveState(); sync.writePerson(p); }
 function removePerson(p) {
@@ -316,31 +440,46 @@ const sync = {
       const owned = {};
       Object.entries(data.owned || {}).forEach(([pid, sets]) => {
         owned[pid] = {};
-        Object.entries(sets || {}).forEach(([k, cards]) => { owned[pid][unKey(k)] = {}; Object.keys(cards || {}).forEach(id => { owned[pid][unKey(k)][unKey(id)] = 1; }); });
+        Object.entries(sets || {}).forEach(([k, cards]) => { owned[pid][unKey(k)] = {}; Object.entries(cards || {}).forEach(([id, v]) => { owned[pid][unKey(k)][unKey(id)] = marks(v); }); });
       });
       state.owned = owned;
+      const wish = {};
+      Object.entries(data.wish || {}).forEach(([pid, sets]) => {
+        wish[pid] = {};
+        Object.entries(sets || {}).forEach(([k, cards]) => { wish[pid][unKey(k)] = {}; Object.keys(cards || {}).forEach(id => { wish[pid][unKey(k)][unKey(id)] = 1; }); });
+      });
+      state.wish = wish;
       normalise(); saveState();
     }
     renderSyncStatus();
     rerender();
   },
   path(...parts) { return this.fb.db.ref(this.fb.database, 'families/' + dbKey(this.code) + '/' + parts.map(dbKey).join('/')); },
-  writeCard(pid, key, localId, on) {
+  writeCard(pid, key, localId, value) {
     if (!this.on) return;
     const r = this.path('owned', pid, key, localId);
+    (value ? this.fb.db.set(r, value) : this.fb.db.remove(r)).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
+  },
+  writeWish(pid, key, localId, on) {
+    if (!this.on) return;
+    const r = this.path('wish', pid, key, localId);
     (on ? this.fb.db.set(r, 1) : this.fb.db.remove(r)).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
   },
   writePerson(p) { if (this.on) this.fb.db.set(this.path('people', p.id), { name: p.name, c: p.c || 0 }).catch(() => {}); },
-  removePerson(pid) { if (this.on) { this.fb.db.remove(this.path('people', pid)).catch(() => {}); this.fb.db.remove(this.path('owned', pid)).catch(() => {}); } },
+  removePerson(pid) { if (this.on) ['people', 'owned', 'wish'].forEach(k => this.fb.db.remove(this.path(k, pid)).catch(() => {})); },
   uploadAll() {
     if (!this.on) return;
-    const people = {}, owned = {};
+    const people = {}, owned = {}, wish = {};
     state.people.forEach(p => { people[dbKey(p.id)] = { name: p.name, c: p.c || 0 }; });
     Object.entries(state.owned).forEach(([pid, sets]) => {
       owned[dbKey(pid)] = {};
-      Object.entries(sets).forEach(([k, cards]) => { owned[dbKey(pid)][dbKey(k)] = {}; Object.keys(cards).forEach(id => { owned[dbKey(pid)][dbKey(k)][dbKey(id)] = 1; }); });
+      Object.entries(sets).forEach(([k, cards]) => { owned[dbKey(pid)][dbKey(k)] = {}; Object.entries(cards).forEach(([id, v]) => { owned[dbKey(pid)][dbKey(k)][dbKey(id)] = marks(v); }); });
     });
-    this.fb.db.set(this.root, { people, owned }).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
+    Object.entries(state.wish || {}).forEach(([pid, sets]) => {
+      wish[dbKey(pid)] = {};
+      Object.entries(sets).forEach(([k, cards]) => { wish[dbKey(pid)][dbKey(k)] = {}; Object.keys(cards).forEach(id => { wish[dbKey(pid)][dbKey(k)][dbKey(id)] = 1; }); });
+    });
+    this.fb.db.set(this.root, { people, owned, wish }).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
   }
 };
 function newFamilyCode() {
@@ -361,6 +500,7 @@ function rerender() {
   if (h.startsWith('#/set/') && window._set) renderSet();
   else if (h === '#/people') viewPeople();
   else if (h === '#/sync') viewSync();
+  else if (h === '#/lookout') viewLookout();
   else if (h === '#/' && window._sets) renderHome();
 }
 
@@ -507,6 +647,14 @@ function viewPeople() {
   box.appendChild(add);
   box.appendChild(el('h2', '', 'Sharing'));
   box.appendChild(el('div', 'note', sync.on ? 'This phone syncs with family <b>' + esc(sync.code) + '</b>. <a href="#/sync">Manage</a>' : 'Only on this phone. <a href="#/sync">Family sync</a> lets everyone use their own phone.'));
+  box.appendChild(el('h2', '', 'Backup'));
+  const bk = el('div', 'add');
+  bk.appendChild(makeButton('Export', exportProgress, 'Download everyone\'s cards as a file'));
+  bk.appendChild(makeButton('Import', importProgress, 'Replace everything with an exported file'));
+  box.appendChild(bk);
+  box.appendChild(el('h2', '', 'Catalogue language'));
+  box.appendChild(el('div', 'note', 'Normally leave this on English. Japanese, Chinese and Korean releases are different sets with their own numbering, so switch this only if you collect those releases. To record that you own the Chinese or Japanese print of an English-catalogue card, use "Cards in" on the set page instead.'));
+  box.appendChild(langSelect());
   main.appendChild(box);
 }
 
@@ -560,15 +708,36 @@ function makeSeg(items, current, onPick) {
 }
 function makeButton(label, onClick, title) { const b = el('button', '', label); b.onclick = onClick; if (title) b.title = title; return b; }
 
+function abbrOf(setId) {
+  const full = cacheGet('sets/' + setId);
+  return (full && full.abbreviation && full.abbreviation.official) || (lang === 'en' && ABBR[setId]) || '';
+}
+function dateOf(setId) {
+  const full = cacheGet('sets/' + setId);
+  return (full && full.releaseDate) || (window._dates && window._dates[setId]) || '';
+}
+// release dates for every set in one GraphQL call, cached per device
+async function loadDates() {
+  window._dates = cacheGet('dates');
+  if (window._dates) return;
+  try {
+    const r = await fetch('https://api.tcgdex.net/v2/graphql', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: '{ sets { id releaseDate } }' }) });
+    const j = await r.json();
+    const m = {}; (j.data && j.data.sets || []).forEach(s => { if (s.releaseDate) m[s.id] = s.releaseDate; });
+    if (Object.keys(m).length) { window._dates = m; cacheSet('dates', m); }
+  } catch (e) {}
+}
+function setMatches(s, q) {
+  return s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q) || abbrOf(s.id).toLowerCase() === q || abbrOf(s.id).toLowerCase().startsWith(q);
+}
+
 function setRow(set) {
   const total = set.cardCount.total, have = ownedCount(set.id);
-  const full = cacheGet('sets/' + set.id);           // opened before: we know abbreviation and date
-  const abbr = full && full.abbreviation && full.abbreviation.official;
-  const date = full && full.releaseDate;
+  const abbr = abbrOf(set.id), date = dateOf(set.id);
   const row = el('button', 'row');
   row.innerHTML =
     (set.logo ? '<img loading="lazy" alt="" src="' + set.logo + '.webp">' : (set.symbol ? '<img class="sym" loading="lazy" alt="" src="' + set.symbol + '.webp">' : '')) +
-    '<div class="t"><b></b><small>' + (abbr ? abbr + ' · ' : '') + total + ' cards' + (date ? ' · ' + date : '') + '</small>' +
+    '<div class="t"><b></b><small>' + (abbr ? abbr + ' · ' : '') + (set.cardCount.official && total > set.cardCount.official ? set.cardCount.official + ' + ' + (total - set.cardCount.official) + ' secret' : total + ' cards') + (date ? ' · ' + date : '') + '</small>' +
     '<div class="mini"><i style="width:' + pct(have, total) + '%"></i></div></div>' +
     '<div class="pct' + (have >= total && total ? ' done' : '') + '">' + have + '/' + total + '</div>';
   row.querySelector('b').textContent = set.name;
@@ -576,14 +745,189 @@ function setRow(set) {
   return row;
 }
 
+/* ---------- collection value across every set and language ---------- */
+// Prices for cards in sets opened on this phone are in the per-set cache; anything else is fetched
+// card by card (only the owned ones) and kept here for a week.
+const PRICES_KEY = CACHE_PFX + 'prices';
+let priceBook = (() => { try { return JSON.parse(localStorage.getItem(PRICES_KEY)) || {}; } catch (e) { return {}; } })();
+let valueJob = 0;
+
+// every owned card as { pid, lang, setId, localId }
+function allOwnedCards() {
+  const out = [];
+  state.people.forEach(p => Object.entries(state.owned[p.id] || {}).forEach(([key, cards]) => {
+    const m = key.match(/^([a-z]{2}(?:-[a-z]{2})?)\/(.+)$/);
+    const l = m ? m[1] : 'en', setId = m ? m[2] : key;
+    Object.entries(cards).forEach(([localId, mark]) => out.push({ pid: p.id, lang: l, setId, localId, mark }));
+  }));
+  return out;
+}
+function knownPrice(c) {
+  let set = null;
+  try { set = JSON.parse(localStorage.getItem(CACHE_PFX + c.lang + ':details2/' + c.setId)); } catch (e) {}
+  const d = set && set.cards && set.cards[c.localId];
+  if (d && d.p != null) return d;
+  if (d && set.at) return { p: null };                       // set priced recently, this card just has no price
+  const k = c.lang + ':' + c.setId + ':' + c.localId, b = priceBook[k];
+  if (b && Date.now() - b.at < PRICE_MAX_AGE) return b;
+  return undefined;                                         // not known yet
+}
+function valueTotals() {
+  const per = {}, fam = { n: 0, usd: 0, eur: 0, unknown: 0, unpriced: 0 };
+  state.people.forEach(p => { per[p.id] = { n: 0, usd: 0, eur: 0, unknown: 0, unpriced: 0 }; });
+  allOwnedCards().forEach(c => {
+    const t = per[c.pid]; if (!t) return;
+    const d = knownPrice(c);
+    const printings = Object.keys(marks(c.mark));             // each printing owned is worth its own price
+    [t, fam].forEach(x => {
+      x.n += printings.length;
+      if (d === undefined) x.unknown += printings.length;
+      else if (d.p == null) x.unpriced += printings.length;
+      else printings.forEach(v => { const p = variantPrice(d, v); if (d.u === 'EUR') x.eur += p; else x.usd += p; });
+    });
+  });
+  return { per, fam };
+}
+function fmtValue(t) {
+  const parts = [];
+  if (t.usd || !t.eur) parts.push(money(t.usd, 'USD'));
+  if (t.eur) parts.push(money(t.eur, 'EUR'));
+  return parts.join(' + ');
+}
+function valuePanel() {
+  const { per, fam } = valueTotals();
+  const box = el('div', 'people'); box.id = 'valuePanel';
+  state.people.forEach(p => {
+    const t = per[p.id]; if (!t.n) return;
+    const row = el('div', 'p');
+    row.innerHTML = '<span class="dot" style="background:' + colour(p) + '">' + esc(initial(p)) + '</span><b></b><small>' + t.n + ' card' + (t.n === 1 ? '' : 's') + '</small><span class="val">' + fmtValue(t) + '</span>';
+    row.querySelector('b').textContent = p.name;
+    box.appendChild(row);
+  });
+  const tot = el('div', 'p total');
+  tot.innerHTML = '<span class="dot" style="background:var(--accent)">Σ</span><b>' + (state.people.length > 1 ? 'Family' : 'Total') + '</b><small>' + fam.n + ' card' + (fam.n === 1 ? '' : 's') + '</small><span class="val">' + fmtValue(fam) + '</span>';
+  box.appendChild(tot);
+  const foot = [];
+  if (fam.unknown) foot.push('Fetching prices for ' + fam.unknown + ' card' + (fam.unknown === 1 ? '' : 's') + '…');
+  if (fam.unpriced) foot.push(fam.unpriced + ' with no market price yet');
+  foot.push('TCGplayer market (USD); Cardmarket (EUR) where TCGplayer has none');
+  box.appendChild(el('div', 'note small', foot.join(' · ')));
+  return box;
+}
+function loadFamilyValues() { loadPrices(allOwnedCards(), refreshValuePanel, refreshValuePanel); }
+// fetch prices for the given cards that are not known yet; onProgress every 10 cards, onDone at the end
+async function loadPrices(list, onDone, onProgress) {
+  const job = ++valueJob;
+  const todo = list.filter(c => knownPrice(c) === undefined);
+  // the same card wanted or owned by two people only needs fetching once
+  const seen = new Set(), queue = todo.filter(c => { const k = c.lang + ':' + c.setId + ':' + c.localId; if (seen.has(k)) return false; seen.add(k); return true; });
+  if (!queue.length) return;
+  let dirty = 0;
+  const worker = async () => {
+    while (queue.length && job === valueJob) {
+      const c = queue.shift(), k = c.lang + ':' + c.setId + ':' + c.localId;
+      try {
+        const r = await fetch('https://api.tcgdex.net/v2/' + c.lang + '/cards/' + c.setId + '-' + c.localId);
+        if (!r.ok) throw new Error(r.status);
+        const d = await r.json();
+        priceBook[k] = { at: Date.now(), ...bestPrice(d.pricing) };
+        if (priceBook[k].p === undefined) priceBook[k].p = null;
+      } catch (e) { priceBook[k] = { at: Date.now() - PRICE_MAX_AGE + 3600 * 1000, p: null }; }   // retry in an hour
+      if (++dirty % 10 === 0 && onProgress && job === valueJob) onProgress();
+    }
+  };
+  await Promise.all(Array.from({ length: 4 }, worker));
+  try { localStorage.setItem(PRICES_KEY, JSON.stringify(priceBook)); } catch (e) {}
+  if (job === valueJob && onDone) onDone();
+}
+function refreshValuePanel() { const old = $('valuePanel'); if (old) old.replaceWith(valuePanel()); }
+
+/* ---------- Lookout: every card anyone in the family is hunting, for card shows and shops ---------- */
+let lookoutWho = 'all';
+async function getJSONL(l, path) {
+  let cached = null;
+  try { cached = JSON.parse(localStorage.getItem(CACHE_PFX + l + ':' + path)); } catch (e) {}
+  if (cached) return cached;
+  const r = await fetch('https://api.tcgdex.net/v2/' + l + '/' + path);
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  const data = await r.json();
+  try { localStorage.setItem(CACHE_PFX + l + ':' + path, JSON.stringify(data)); } catch (e) {}
+  return data;
+}
+async function viewLookout() {
+  const main = $('main');
+  main.innerHTML = '<div class="empty">Loading…</div>';
+  const whoSel = el('select');
+  whoSel.innerHTML = '<option value="all">Everyone</option>' + state.people.map(p => '<option value="' + p.id + '"' + (p.id === lookoutWho ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('');
+  whoSel.onchange = () => { lookoutWho = whoSel.value; viewLookout(); };
+  setHeader({ title: '★ Lookout', back: '#/', controls: [whoSel, makeSeg([['grid', '▦', 'Pictures'], ['list', '☰', 'Compact list']], ui.mode, k => { ui.mode = k; viewLookout(); })] });
+  const wishes = allWishes().filter(w => lookoutWho === 'all' || w.pid === lookoutWho);
+  if (!wishes.length) {
+    main.innerHTML = '<div class="note">Nothing on the lookout list' + (lookoutWho === 'all' ? '' : ' for ' + esc((state.people.find(p => p.id === lookoutWho) || {}).name)) + '. On any set page, tap ☆ on a card you want to find — it shows up here for the whole family, with its price, and drops off automatically once it is marked owned.</div>';
+    return;
+  }
+  // group by set, keeping release order (newest first)
+  const groups = {};
+  wishes.forEach(w => { const k = w.lang + '/' + w.setId; (groups[k] = groups[k] || { lang: w.lang, setId: w.setId, cards: {} }); (groups[k].cards[w.localId] = groups[k].cards[w.localId] || []).push(w.pid); });
+  const order = (window._sets || []).map(s => s.id);
+  const list = Object.values(groups).sort((a, b) => order.indexOf(b.setId) - order.indexOf(a.setId));
+  const token = ++lookoutJob;
+  main.innerHTML = '';
+  let total = 0;
+  for (const g of list) {
+    let set;
+    try { set = await getJSONL(g.lang, 'sets/' + g.setId); } catch (e) { set = null; }
+    if (token !== lookoutJob) return;
+    const name = set ? set.name : g.setId;
+    const abbr = g.lang === 'en' ? ((set && set.abbreviation && set.abbreviation.official) || ABBR[g.setId] || '') : g.lang.toUpperCase();
+    main.appendChild(el('h2', '', esc(name) + (abbr ? ' · ' + esc(abbr) : '')));
+    const box = el('div', ui.mode === 'list' ? 'list' : 'grid');
+    const ids = Object.keys(g.cards).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    ids.forEach(localId => {
+      const c = set && set.cards.find(x => x.localId === localId) || { localId, name: '#' + localId };
+      const price = knownPrice({ lang: g.lang, setId: g.setId, localId });
+      const ptxt = price && price.p != null ? money(price.p, price.u) : '';
+      const wanters = g.cards[localId].map(pid => state.people.find(p => p.id === pid)).filter(Boolean);
+      const badges = '<span class="who">' + wanters.map(p => '<i style="background:' + colour(p) + '" title="' + esc(p.name) + '">' + esc(initial(p)) + '</i>').join('') + '</span>';
+      const off = set ? set.cardCount.official : 0;
+      const num = localId + (off && /^\d+$/.test(localId) ? '/' + String(off).padStart(localId.length, '0') : '');
+      const mineToo = wanters.some(p => p.id === state.current);
+      const drop = mineToo ? '<button class="want on" title="Found it / no longer looking">★</button>' : '';
+      let n;
+      if (ui.mode === 'list') {
+        n = el('div', 'line want');
+        n.innerHTML = '<span class="n">' + esc(num) + '</span><span class="name"></span>' + badges + (ptxt ? '<span class="price">' + ptxt + '</span>' : '') + drop;
+        n.querySelector('.name').textContent = c.name;
+      } else {
+        n = el('div', 'card want' + (c.image ? '' : ' noimg'));
+        n.innerHTML = (c.image ? '<button class="zoom" title="View card">⤢</button><img loading="lazy" alt="" src="' + c.image + '/low.webp">' : '<img alt="">') + '<div class="ph"></div>' +
+          '<div class="num">' + esc(num) + '</div><div class="name"></div><div class="meta">' + badges + '<span class="price">' + ptxt + '</span></div>' + drop;
+        n.querySelector('.ph').textContent = c.name; n.querySelector('.name').textContent = c.name;
+      }
+      n.onclick = e => {
+        if (e.target.closest('.zoom')) { $('lbImg').src = c.image + '/high.webp'; $('lb').classList.add('open'); return; }
+        if (e.target.closest('button.want')) { setWish(state.current, g.lang === 'en' ? g.setId : g.lang + '/' + g.setId, localId, false); viewLookout(); return; }
+        if (g.lang === lang) location.hash = '#/set/' + g.setId;
+      };
+      box.appendChild(n); total++;
+    });
+    main.appendChild(box);
+  }
+  main.appendChild(el('div', 'note small', total + ' card' + (total === 1 ? '' : 's') + ' wanted · tap a card to open its set · ★ removes it from your own list'));
+  // fetch any prices we do not have yet, then redraw
+  loadPrices(wishes.map(w => ({ lang: w.lang, setId: w.setId, localId: w.localId })), () => { if (token === lookoutJob && location.hash === '#/lookout') viewLookout(); });
+}
+let lookoutJob = 0;
+
 /* ---------- Home: your sets, search all sets, series list ---------- */
 async function viewHome() {
   const main = $('main');
   main.innerHTML = '<div class="empty">Loading…</div>';
-  setHeader({ title: '<span>◆</span> TCG Pokédex', controls: [personSelect(), themeSelect(), langSelect(), makeSearch('Search sets', () => renderHome())] });
+  setHeader({ title: '<span>◆</span> TCG Pokédex', controls: [personSelect(), themeSelect(), scanButton(), makeSearch('Search sets or codes', () => renderHome())] });
   try {
     window._series = await getJSON('series');
     window._sets = await getJSON('sets');
+    if (lang === 'en' && !window._dates) loadDates().then(() => { if ((location.hash || '#/') === '#/') renderHome(); });
   } catch (e) {
     main.innerHTML = '<div class="note">Could not load the set list (no internet?). Sets you have opened before still work from the list below.</div>';
     window._sets = window._sets || []; window._series = window._series || [];
@@ -598,12 +942,20 @@ function renderHome() {
   const q = ui.q.toLowerCase();
 
   if (q) {
-    const hits = sets.filter(s => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q));
+    const hits = sets.filter(s => setMatches(s, q));
     main.appendChild(el('h2', '', hits.length + ' set' + (hits.length === 1 ? '' : 's')));
     const rows = el('div', 'rows'); hits.forEach(s => rows.appendChild(setRow(s))); main.appendChild(rows);
     if (!hits.length) main.appendChild(el('div', 'empty', 'No set matches.'));
     return;
   }
+
+  const wanted = allWishes().length;
+  const lk = el('button', 'row lookout');
+  lk.innerHTML = '<span class="dot">★</span><div class="t"><b>Be on the lookout</b><small>' + (wanted ? wanted + ' card' + (wanted === 1 ? '' : 's') + ' the family is hunting' : 'Tap ☆ on any card you want to find') + '</small></div><div class="pct">›</div>';
+  lk.onclick = () => { location.hash = '#/lookout'; };
+  main.appendChild(lk);
+
+  if (allOwnedCards().length) { main.appendChild(el('h2', '', 'Collection value')); main.appendChild(valuePanel()); loadFamilyValues(); }
 
   const mine = sets.filter(s => ownedCount(s.id) > 0);
   if (mine.length) {
@@ -653,11 +1005,36 @@ async function viewSet(id) {
   window._set = set;
   ui.rarity = ''; ui.sort = 'num';
   if (ui.filter === 'family' && state.people.length < 2) ui.filter = 'all';
-  const cached = cacheGet('details/' + id);
+  const cached = cacheGet('details2/' + id);
   details = (cached && cached.cards) || {};
   renderSet();
   loadDetails(set, cached);
 }
+
+/* ---------- printings (variants): n = normal, r = reverse holo, h = holo, f = 1st edition, w = W promo ---------- */
+const VARIANTS = [['n', 'N', 'Normal'], ['r', 'RH', 'Reverse Holo'], ['h', 'H', 'Holo'], ['f', '1st', '1st Edition'], ['w', 'W', 'W Promo']];
+const VNAME = Object.fromEntries(VARIANTS.map(v => [v[0], v[2]]));
+const VSHORT = Object.fromEntries(VARIANTS.map(v => [v[0], v[1]]));
+function variantsFrom(d) {          // TCGdex card detail -> "nr", "h", ...
+  const v = d.variants || {};
+  return (v.normal ? 'n' : '') + (v.reverse ? 'r' : '') + (v.holo ? 'h' : '') + (v.firstEdition ? 'f' : '') + (v.wPromo ? 'w' : '') || 'n';
+}
+function variantsOf(c) { const d = details[c.localId]; return (d && d.v) || 'n'; }
+function primaryVariant(c) { const v = variantsOf(c); return v.includes('n') ? 'n' : v[0]; }
+// an owned mark is { variant: language }; older saves hold a bare language (or 1) meaning one printing
+function marks(v) {
+  if (!v) return {};
+  if (typeof v === 'object') return v;
+  return { n: langOf(v) };
+}
+function ownedVariants(c) {
+  const m = marks(ownedIn(window._set.id)[c.localId]);
+  const avail = variantsOf(c);
+  // a legacy "n" on a holo-only card counts as that card's one printing
+  return [...avail].filter(k => m[k] || (k === avail[0] && m.n && !avail.includes('n')));
+}
+const MASTER_KEY = 'tcgPokedex.master';
+let master = (() => { try { return localStorage.getItem(MASTER_KEY) === '1'; } catch (e) { return false; } })();
 
 // Rarity and price come from the per-card endpoint, so fill them in behind the grid.
 async function loadDetails(set, cached) {
@@ -675,7 +1052,7 @@ async function loadDetails(set, cached) {
         const r = await fetch(base + 'cards/' + c.id);
         if (!r.ok) throw new Error(r.status);
         const d = await r.json();
-        details[c.localId] = { r: d.rarity && d.rarity !== 'None' ? d.rarity : '', ...bestPrice(d.pricing) };
+        details[c.localId] = { r: d.rarity && d.rarity !== 'None' ? d.rarity : '', v: variantsFrom(d), ...bestPrice(d.pricing) };
       } catch (e) { failed++; }
       done++;
       if (job === detailJob) renderStats(done, set.cards.length);
@@ -683,23 +1060,29 @@ async function loadDetails(set, cached) {
   };
   await Promise.all(Array.from({ length: DETAIL_BATCH }, worker));
   if (job !== detailJob) return;
-  cacheSet('details/' + set.id, { at: failed ? 0 : Date.now(), cards: details });   // partial: retry next open
+  cacheSet('details2/' + set.id, { at: failed ? 0 : Date.now(), cards: details });   // partial: retry next open
   renderSet();
 }
 
-// TCGplayer market price in USD when there is one, else Cardmarket trend in EUR.
+// Prices: TCGplayer market in USD per printing (pv), with p the headline price; else Cardmarket trend in EUR.
+const TCGP_KEYS = { n: ['normal', '1st-edition', 'unlimited'], r: ['reverse-holofoil'], h: ['holofoil', 'unlimited-holofoil'], f: ['1st-edition-holofoil', '1st-edition'], w: ['normal', 'holofoil'] };
 function bestPrice(p) {
   if (!p) return {};
   const t = p.tcgplayer;
   if (t) {
-    for (const k of ['holofoil', 'normal', 'reverseHolofoil', '1stEditionHolofoil', '1stEditionNormal', 'unlimitedHolofoil']) {
-      if (t[k] && t[k].marketPrice != null) return { p: t[k].marketPrice, u: 'USD' };
-    }
+    const pv = {};
+    Object.entries(TCGP_KEYS).forEach(([v, keys]) => { const k = keys.find(k => t[k] && t[k].marketPrice != null); if (k) pv[v] = t[k].marketPrice; });
+    const first = ['h', 'n', 'r', 'f', 'w'].find(v => pv[v] != null);
+    if (first) return { p: pv[first], u: 'USD', pv };
   }
   const m = p.cardmarket;
-  if (m && (m.trend != null || m.avg != null)) return { p: m.trend != null ? m.trend : m.avg, u: 'EUR' };
+  if (m && (m.trend != null || m.avg != null)) {
+    const base = m.trend != null ? m.trend : m.avg, holo = m['trend-holo'] || m['avg-holo'];
+    return { p: base, u: 'EUR', pv: holo ? { n: base, r: holo, h: holo } : {} };
+  }
   return {};
 }
+function variantPrice(d, v) { if (!d || d.p == null) return null; return d.pv && d.pv[v] != null ? d.pv[v] : d.p; }
 
 function priceOf(c) { const d = details[c.localId]; return d && d.p != null ? d.p : null; }
 function rarityOf(c) { const d = details[c.localId]; return d ? d.r : ''; }
@@ -707,7 +1090,8 @@ function haveDetails() { return Object.keys(details).length > 0; }
 
 function cardVisible(c) {
   const have = !!ownedIn(window._set.id)[c.localId];
-  if (ui.filter === 'need' && have) return false;
+  const complete = master ? ownedVariants(c).length === variantsOf(c).length : have;   // Master set: a card is only done when every printing is
+  if (ui.filter === 'need' && complete) return false;
   if (ui.filter === 'owned' && !have) return false;
   if (ui.filter === 'family' && ownersOf(window._set.id, c.localId).length) return false;
   if (ui.rarity && rarityOf(c) !== ui.rarity) return false;
@@ -730,28 +1114,42 @@ function cardNum(c) {
 }
 
 function makeCard(c) {
-  const have = !!ownedIn(window._set.id)[c.localId];
+  const m = marks(ownedIn(window._set.id)[c.localId]);
+  const have = Object.keys(m).length > 0;
+  const langs = [...new Set(Object.values(m))];
+  const tag = !have ? '' : langs.length > 1 ? 'MIX' : langShort(langs[0]);   // e.g. ZH-CN when the card you own is not the English print
   const d = details[c.localId] || {};
+  const avail = variantsOf(c), got = ownedVariants(c);
+  const complete = have && got.length === avail.length;
+  // one chip per printing when the card has more than one (or Master set is on)
+  const chips = (avail.length > 1 || master) && haveDetails()
+    ? '<div class="vars">' + [...avail].map(v => '<button class="var' + (got.includes(v) ? ' on' : '') + '" data-v="' + v + '" title="' + VNAME[v] + (d.pv && d.pv[v] != null ? ' · ' + money(d.pv[v], d.u) : '') + '">' + VSHORT[v] + '</button>').join('') + '</div>'
+    : '';
   const price = d.p != null ? money(d.p, d.u) : '';
   const who = whoBadges(window._set.id, c.localId);
+  const want = !!wishedBy(state.current, setKey(window._set.id))[c.localId];
+  const otherWant = wishersOf(window._set.id, c.localId).filter(p => p.id !== state.current);
+  const wantBadge = otherWant.length ? '<span class="who want" title="On the lookout list for ' + esc(otherWant.map(p => p.name).join(', ')) + '">★' + otherWant.map(p => '<i style="background:' + colour(p) + '">' + esc(initial(p)) + '</i>').join('') + '</span>' : '';
+  const star = have ? '' : '<button class="want' + (want ? ' on' : '') + '" title="' + (want ? 'Remove from my lookout list' : 'Be on the lookout for this card') + '" aria-label="Lookout">' + (want ? '★' : '☆') + '</button>';
+  const status = !have ? 'NEED' : complete || !master ? 'OWNED' : got.length + '/' + avail.length;
   if (ui.mode === 'list') {
-    const n = el('div', 'line' + (have ? ' owned' : ''));
+    const n = el('div', 'line' + (have ? ' owned' : '') + (have && !complete && master ? ' partial' : '') + (want ? ' want' : ''));
     n.dataset.id = c.localId;
-    n.innerHTML = '<span class="n">' + esc(cardNum(c)) + '</span><span class="name"></span>' + who +
-      (price ? '<span class="price">' + price + '</span>' : '') +
-      '<span class="st">' + (have ? 'OWNED' : 'NEED') + '</span>';
+    n.innerHTML = '<span class="n">' + esc(cardNum(c)) + '</span><span class="name"></span>' + who + wantBadge + chips +
+      (price ? '<span class="price">' + price + '</span>' : '') + star +
+      '<span class="st">' + status + (tag ? ' · ' + tag : '') + '</span>';
     n.querySelector('.name').innerHTML = esc(c.name) + (d.r ? '<small>' + esc(d.r) + '</small>' : '');
     return n;
   }
-  const n = el('div', 'card' + (have ? ' owned' : '') + (c.image ? '' : ' noimg'));
+  const n = el('div', 'card' + (have ? ' owned' : '') + (have && !complete && master ? ' partial' : '') + (want ? ' want' : '') + (c.image ? '' : ' noimg'));
   n.dataset.id = c.localId;
   n.innerHTML =
-    '<span class="tick">✓</span>' +
-    (c.image ? '<button class="zoom" title="View card" aria-label="View card">⤢</button>' : '') +
+    '<span class="tick">' + (have && !complete && master ? got.length + '/' + avail.length : '✓') + (tag ? '<b>' + tag + '</b>' : '') + '</span>' +
+    (c.image ? '<button class="zoom" title="View card" aria-label="View card">⤢</button>' : '') + star +
     '<img loading="lazy" alt="" src="' + (c.image ? c.image + '/low.webp' : '') + '">' +
     '<div class="ph"></div>' +
-    '<div class="num">' + esc(cardNum(c)) + '</div><div class="name"></div>' +
-    '<div class="meta"><span class="rar"></span>' + who + '<span class="price">' + price + '</span></div>';
+    '<div class="num">' + esc(cardNum(c)) + '</div><div class="name"></div>' + chips +
+    '<div class="meta"><span class="rar"></span>' + who + wantBadge + '<span class="price">' + price + '</span></div>';
   n.querySelector('.ph').textContent = c.name;
   n.querySelector('.name').textContent = c.name;
   n.querySelector('.rar').textContent = shortRarity(d.r);
@@ -779,7 +1177,14 @@ function renderStats(done, total) {
     const d = details[c.localId];
     if (!d || d.p == null) return;
     priced++; unit = unit || d.u;
-    if (ownedIn(set.id)[c.localId]) own += d.p; else need += d.p;
+    if (master) {
+      // every printing counts, each at its own price
+      const got = ownedVariants(c);
+      [...variantsOf(c)].forEach(v => { const p = variantPrice(d, v); if (got.includes(v)) own += p; else need += p; });
+    } else {
+      const got = ownedVariants(c);
+      if (got.length) own += variantPrice(d, got[0]); else need += variantPrice(d, primaryVariant(c));
+    }
   });
   const parts = [];
   if (priced) parts.push('Owned <b>' + money(own, unit) + '</b>', 'Need <b>' + money(need, unit) + '</b>');
@@ -794,11 +1199,13 @@ function renderStats(done, total) {
 }
 
 function renderSetHeader() {
-  const set = window._set, total = set.cards.length, have = ownedCount(set.id);
+  const set = window._set, t = setTotals();
   const filters = [['all', 'All'], ['need', 'Need'], ['owned', 'Owned']];
   if (state.people.length > 1) filters.push(['family', 'Family', 'Cards nobody in the family has']);
   const controls = [
     personSelect(),
+    cardLangSelect(),
+    scanButton(),
     makeSearch('Search name or number', () => renderCards()),
     makeSeg(filters, ui.filter, k => { ui.filter = k; renderSet(); }),
     makeSeg([['grid', '▦', 'Card grid'], ['list', '☰', 'Compact list']], ui.mode, k => { ui.mode = k; renderSet(); })
@@ -809,13 +1216,15 @@ function renderSetHeader() {
     sel.onchange = () => { ui.rarity = sel.value; renderCards(); };
     controls.push(sel);
     controls.push(makeSeg([['num', '#', 'Number order'], ['price', '$↓', 'Price, highest first']], ui.sort, k => { ui.sort = k; renderSet(); }));
+    const ms = makeButton((master ? '☑' : '☐') + ' Master set', () => { master = !master; try { localStorage.setItem(MASTER_KEY, master ? '1' : '0'); } catch (e) {} renderSet(); },
+      'Master set: count and chase every printing (normal, reverse holo, holo) rather than one of each card');
+    if (master) ms.classList.add('on');
+    controls.push(ms);
   }
   controls.push(makeButton('Print placeholders', printPlaceholders, 'Print the cards you still need at real size, to fill binder pockets'));
-  controls.push(makeButton('Export', exportProgress));
-  controls.push(makeButton('Import', importProgress));
   setHeader({
     title: esc(set.name), back: set.serie ? '#/series/' + set.serie.id : '#/',
-    count: have + ' / ' + total, progress: pct(have, total), controls
+    count: t.have + ' / ' + t.total + t.label, progress: pct(t.have, t.total), controls
   });
   renderStats();
 }
@@ -850,35 +1259,87 @@ function onCardClick(e) {
     $('lb').classList.add('open');
     return;
   }
-  setCard(state.current, setKey(set.id), id, !ownedIn(set.id)[id]);
+  if (e.target.closest('button.want')) {
+    setWish(state.current, setKey(set.id), id, !wishedBy(state.current, setKey(set.id))[id]);
+    node.replaceWith(makeCard(card));
+    return;
+  }
+  const chip = e.target.closest('button.var');
+  if (chip) {
+    // one printing on or off
+    setCard(state.current, setKey(set.id), id, !ownedVariants(card).includes(chip.dataset.v), chip.dataset.v);
+  } else if (ownedIn(set.id)[id]) {
+    setCard(state.current, setKey(set.id), id, false, '*');                 // tap an owned card: clear every printing
+  } else {
+    setCard(state.current, setKey(set.id), id, true, primaryVariant(card)); // tap a needed card: the normal printing (or its only one)
+  }
   // swap just this card so the page does not jump
   if (cardVisible(card)) node.replaceWith(makeCard(card)); else node.remove();
-  const have = ownedCount(set.id), total = set.cards.length;
-  $('count').textContent = have + ' / ' + total;
-  $('barFill').style.width = pct(have, total) + '%';
+  renderCount();
   renderStats();
+}
+// header count: cards, or printings when Master set is on
+function setTotals() {
+  const set = window._set;
+  if (!master || !haveDetails()) return { have: ownedCount(set.id), total: set.cards.length, label: '' };
+  let have = 0, total = 0;
+  set.cards.forEach(c => { total += variantsOf(c).length; have += ownedVariants(c).length; });
+  return { have, total, label: ' printings' };
+}
+function renderCount() {
+  const t = setTotals();
+  $('count').textContent = t.have + ' / ' + t.total + t.label;
+  $('barFill').style.width = pct(t.have, t.total) + '%';
 }
 $('lb').onclick = () => { $('lb').classList.remove('open'); $('lbImg').src = ''; };
 
 /* ---------- printable binder placeholders ---------- */
-async function printPlaceholders() {
+// Ask what to print, then lay out 9-pocket pages in binder order (left to right, top to bottom).
+function printPlaceholders() {
   const set = window._set;
-  // the cards still needed in the current view (current person, or the whole family on the Family filter), in set order
-  const family = ui.filter === 'family';
-  const need = set.cards.filter(c => (family ? !ownersOf(set.id, c.localId).length : !ownedIn(set.id)[c.localId]) && (!ui.rarity || rarityOf(c) === ui.rarity) && (!ui.q || cardVisible(c)));
-  if (!need.length) { alert('Nothing needed — nothing to print.'); return; }
-  const pages = Math.ceil(need.length / 9);
-  if (!confirm('Print ' + need.length + ' placeholder' + (need.length === 1 ? '' : 's') + ' for ' + (family ? 'the family' : me().name) + ' — ' + set.name + ' (' + pages + ' A4 page' + (pages === 1 ? '' : 's') + ', 9 per page)?')) return;
+  const dlg = $('printOpts');
+  dlg.querySelector('h3').textContent = set.name + ' — binder placeholders';
+  dlg.classList.add('open');
+  dlg.querySelector('.go').onclick = () => {
+    const which = dlg.querySelector('input[name=pw]:checked').value, style = dlg.querySelector('input[name=ps]:checked').value;
+    dlg.classList.remove('open');
+    buildPlaceholders(which, style);
+  };
+  dlg.querySelector('.cancel').onclick = () => dlg.classList.remove('open');
+}
+async function buildPlaceholders(which, style) {
+  const set = window._set;
+  const family = ui.filter === 'family', all = which === 'all';
+  const inView = c => all || ((!ui.rarity || rarityOf(c) === ui.rarity) && (!ui.q || cardVisible(c)));
+  const multi = haveDetails() && [...set.cards].some(c => variantsOf(c).length > 1);
+  // one slot per card, or per printing when the set has reverse holos and Master set is on (or printing the whole set)
+  const slots = [];
+  set.cards.filter(inView).forEach(c => {
+    const vs = (master || all) && multi ? [...variantsOf(c)] : [primaryVariant(c)];
+    const got = ownedVariants(c);
+    vs.forEach(v => {
+      const owned = family ? ownersOf(set.id, c.localId).length > 0 : ((master || all) && multi ? got.includes(v) : got.length > 0);
+      if (all || !owned) slots.push({ c, v, label: variantsOf(c).length > 1 ? VNAME[v] : (rarityOf(c) || VNAME[v]) });
+    });
+  });
+  if (!slots.length) { alert('Nothing needed — nothing to print.'); return; }
+  const pages = Math.ceil(slots.length / 9);
+  if (!confirm('Print ' + slots.length + ' placeholder' + (slots.length === 1 ? '' : 's') + (all ? ' (whole set)' : ' for ' + (family ? 'the family' : me().name)) + ' — ' + pages + ' A4 page' + (pages === 1 ? '' : 's') + ', 9 per page?')) return;
   const box = $('print');
   box.innerHTML = '';
-  for (let i = 0; i < need.length; i += 9) {
+  box.className = style === 'text' ? 'text' : '';
+  for (let i = 0; i < slots.length; i += 9) {
     const page = el('div', 'page');
-    need.slice(i, i + 9).forEach(c => {
-      const s = el('div', 'slot');
-      s.innerHTML = (c.image ? '<img alt="" src="' + c.image + '/high.webp">' : '') +
-        '<span class="tag">NEEDED</span><div class="lbl"><b></b><span></span></div>';
-      s.querySelector('b').textContent = c.name;
-      s.querySelector('span:last-child').textContent = set.name + ' · ' + cardNum(c) + (family ? '' : ' · ' + me().name);
+    page.innerHTML = '<div class="phead"><b></b><span>Page ' + (i / 9 + 1) + ' of ' + pages + ' · 9-pocket binder · TCG Pokédex</span></div>';
+    page.querySelector('b').textContent = set.name + (abbrOf(set.id) ? ' (' + abbrOf(set.id) + ')' : '');
+    slots.slice(i, i + 9).forEach(({ c, v, label }) => {
+      const s = el('div', 'slot' + (v === 'r' ? ' rev' : ''));
+      s.innerHTML = (style !== 'text' && c.image ? '<img alt="" src="' + c.image + '/low.webp">' : '') +
+        (all ? '' : '<span class="tag">NEEDED</span>') +
+        '<div class="top"></div><div class="mid"></div><div class="lbl"></div>';
+      s.querySelector('.top').textContent = cardNum(c);
+      s.querySelector('.mid').textContent = c.name;
+      s.querySelector('.lbl').textContent = label.toUpperCase();
       page.appendChild(s);
     });
     box.appendChild(page);
@@ -888,6 +1349,139 @@ async function printPlaceholders() {
   await Promise.all(imgs.map(im => im.complete ? null : new Promise(r => { im.onload = im.onerror = r; })));
   window.print();
 }
+
+/* ---------- camera scan: read "001/084 PBL" off the card and jump to it ---------- */
+const TESS_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+const scanner = {
+  stream: null, worker: null, timer: null, busy: false, found: null,
+  async open() {
+    const box = $('scan');
+    box.classList.add('open');
+    $('scanResult').hidden = true; $('scanResult').innerHTML = '';
+    this.found = null;
+    const status = m => { $('scanStatus').textContent = m; };
+    try {
+      this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
+      box.querySelector('video').srcObject = this.stream;
+    } catch (e) {
+      status('Camera not available (' + (e.name || e) + '). You can still type the number below.');
+    }
+    status('Loading text reader…');
+    try {
+      if (!window.Tesseract) await new Promise((ok, bad) => { const s = document.createElement('script'); s.src = TESS_URL; s.onload = ok; s.onerror = bad; document.head.appendChild(s); });
+      if (!this.worker) this.worker = await Tesseract.createWorker('eng', 1);
+      await this.worker.setParameters({ tessedit_char_whitelist: '0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ:. ', tessedit_pageseg_mode: '7' });
+      status(this.stream ? 'Hold the bottom-left corner of the card in the yellow box' : 'Type the number below.');
+      if (this.stream) this.loop();
+    } catch (e) { status('Could not load the text reader (no internet?). Type the number below.'); }
+  },
+  close() {
+    clearTimeout(this.timer); this.timer = null;
+    if (this.stream) { this.stream.getTracks().forEach(t => t.stop()); this.stream = null; }
+    $('scan').classList.remove('open');
+  },
+  // grab the guide box from the video, enlarge and sharpen it, then read it
+  async loop() {
+    if (!$('scan').classList.contains('open') || !this.stream) return;
+    if (!this.busy && !this.found) {
+      this.busy = true;
+      try {
+        const v = $('scan').querySelector('video');
+        if (v.videoWidth) {
+          const g = $('scan').querySelector('.guide').getBoundingClientRect(), c = v.getBoundingClientRect();
+          // map the on-screen guide box back to video pixels (object-fit: cover)
+          const scale = Math.max(c.width / v.videoWidth, c.height / v.videoHeight);
+          const vw = v.videoWidth * scale, vh = v.videoHeight * scale, ox = (c.width - vw) / 2, oy = (c.height - vh) / 2;
+          const sx = (g.left - c.left - ox) / scale, sy = (g.top - c.top - oy) / scale, sw = g.width / scale, sh = g.height / scale;
+          const cv = document.createElement('canvas');
+          const k = Math.max(1, 1400 / sw);
+          cv.width = sw * k; cv.height = sh * k;
+          const ctx = cv.getContext('2d');
+          ctx.drawImage(v, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
+          const img = ctx.getImageData(0, 0, cv.width, cv.height), d = img.data;
+          for (let i = 0; i < d.length; i += 4) { const y = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; const t = y > 140 ? 255 : y < 90 ? 0 : (y - 90) * 5.1; d[i] = d[i + 1] = d[i + 2] = t; }
+          ctx.putImageData(img, 0, 0);
+          const { data } = await this.worker.recognize(cv);
+          const hit = parseScan(data.text);
+          if (hit) { this.found = hit; this.resolve(hit); }
+          else $('scanStatus').textContent = 'Reading… ' + (data.text.trim().replace(/\s+/g, ' ').slice(0, 24) || 'move closer / more light');
+        }
+      } catch (e) {}
+      this.busy = false;
+    }
+    this.timer = setTimeout(() => this.loop(), 400);
+  },
+  async resolve(hit) {
+    const status = m => { $('scanStatus').textContent = m; };
+    let candidates = [];
+    const sets = window._sets || await getJSON('sets').catch(() => []);
+    if (!window._sets) window._sets = sets;
+    if (hit.code) {
+      const code = hit.code.toUpperCase();
+      candidates = sets.filter(s => abbrOf(s.id).toUpperCase() === code);
+      if (!candidates.length) candidates = sets.filter(s => abbrOf(s.id).toUpperCase().replace(/[^A-Z0-9]/g, '') === code.replace(/[^A-Z0-9]/g, ''));
+    }
+    if (!candidates.length && window._set && (location.hash || '').startsWith('#/set/') && (!hit.denom || window._set.cardCount.official === hit.denom)) candidates = [window._set];
+    if (!candidates.length && hit.denom) candidates = sets.filter(s => s.cardCount.official === hit.denom);
+    candidates = candidates.slice().reverse();          // newest first
+    if (!candidates.length) { status('Read ' + hit.num + '/' + (hit.denom || '?') + (hit.code ? ' ' + hit.code : '') + ' but no set matches. Try again or type it with the set code.'); this.found = null; return; }
+    if (candidates.length > 1) {
+      status('Read ' + hit.num + '/' + hit.denom + ' — which set?');
+      const r = $('scanResult'); r.hidden = false; r.innerHTML = '<div class="choices"></div>';
+      candidates.slice(0, 8).forEach(s => { const b = makeButton(s.name + (abbrOf(s.id) ? ' (' + abbrOf(s.id) + ')' : '') + (dateOf(s.id) ? ' · ' + dateOf(s.id).slice(0, 4) : ''), () => this.show(s.id, hit)); r.querySelector('.choices').appendChild(b); });
+      return;
+    }
+    this.show(candidates[0].id, hit);
+  },
+  async show(setId, hit) {
+    const status = m => { $('scanStatus').textContent = m; };
+    let set;
+    try { set = await getJSON('sets/' + setId); } catch (e) { status('Could not load that set.'); this.found = null; return; }
+    const card = hit.prefix
+      ? set.cards.find(c => c.localId.toUpperCase().replace(/^([A-Z]+)0*/, '$1') === hit.prefix + hit.num)
+      : set.cards.find(c => /^\d+$/.test(c.localId) && +c.localId === hit.num) || set.cards.find(c => c.localId.toUpperCase() === String(hit.num));
+    if (!card) { status('No card ' + hit.num + ' in ' + set.name + '. Try again.'); this.found = null; return; }
+    const key = setKey(set.id);
+    const r = $('scanResult'); r.hidden = false;
+    const have = !!ownedIn(set.id)[card.localId];
+    r.innerHTML = (card.image ? '<img alt="" src="' + card.image + '/low.webp">' : '') + '<div class="t"><b></b><small></small></div><div class="btns"></div>';
+    r.querySelector('b').textContent = card.name;
+    r.querySelector('small').textContent = set.name + ' · ' + card.localId + (set.cardCount.official ? '/' + String(set.cardCount.official).padStart(card.localId.length, '0') : '') + (have ? ' · already owned by ' + me().name : '');
+    const btns = r.querySelector('.btns');
+    if (!have) btns.appendChild(Object.assign(makeButton('✓ Owned', () => {
+      setCard(state.current, key, card.localId, true, 'n');
+      if (window._set && window._set.id === set.id && (location.hash || '').startsWith('#/set/')) renderSet();   // keep the page behind in step
+      status(card.name + ' marked owned for ' + me().name + '. Scan the next card.');
+      this.found = null; r.hidden = true;
+    }), { className: 'primary' }));
+    btns.appendChild(makeButton('Open set', () => { this.close(); ui.q = card.localId; location.hash = '#/set/' + set.id; }));
+    btns.appendChild(makeButton('Scan again', () => { this.found = null; r.hidden = true; status('Hold the next card in the box'); }));
+    status('Found ' + card.name);
+  }
+};
+// "001/084 PBL", "25/198 SVI", "TG12/TG30", "001/084" -> { num, denom, code }
+function parseScan(text) {
+  const t = (text || '').toUpperCase().replace(/[|]/g, '1').replace(/O(?=\d)|(?<=\d)O/g, '0');
+  // number, with an optional letter prefix for trainer-gallery / galarian-gallery style numbering (TG12/TG30, GG05/GG70)
+  const m = t.match(/\b([A-Z]{0,2})(\d{1,3})\s*[\/\\]\s*[A-Z]{0,2}(\d{2,3})\b/);
+  if (!m) return null;
+  const prefix = m[1], num = +m[2], denom = +m[3];
+  if (!num || num > 999) return null;
+  const known = new Set(Object.values(ABBR).map(a => a.toUpperCase()));
+  const tokens = [...t.replace(m[0], ' ').matchAll(/\b([A-Z]{2,5}(?::[A-Z]{2})?\d{0,2})\b/g)].map(x => x[1]).filter(x => !/^(HP|EX|GX|LV|NO|ST|BY|ND|EN|FR|DE|ES|IT|PT|JP|KO)$/.test(x));
+  let code = '';
+  for (const tok of tokens) {
+    if (known.has(tok)) { code = tok; break; }
+    const stripped = tok.replace(/(EN|FR|DE|ES|IT|PT|JP|KO|ZH)$/, '');      // "PBLEN" read as one word
+    if (stripped !== tok && known.has(stripped)) { code = stripped; break; }
+  }
+  if (!code) code = tokens[0] || '';
+  return { num, denom, code, prefix };
+}
+$('scanClose').onclick = () => scanner.close();
+$('scanManualGo').onclick = () => { const hit = parseScan($('scanManual').value); if (hit) { scanner.found = hit; scanner.resolve(hit); } else $('scanStatus').textContent = 'Type it like 001/084 PBL'; };
+$('scanManual').addEventListener('keydown', e => { if (e.key === 'Enter') $('scanManualGo').click(); });
+function scanButton() { return makeButton('📷 Scan', () => scanner.open(), 'Read the card number with the camera'); }
 
 /* ---------- backup ---------- */
 function exportProgress() {
@@ -925,6 +1519,7 @@ function route() {
   let m;
   if (h === '#/people') return viewPeople();
   if (h === '#/sync') return viewSync();
+  if (h === '#/lookout') return viewLookout();
   if ((m = h.match(/^#\/set\/([^/]+)/))) return viewSet(m[1]);
   if ((m = h.match(/^#\/series\/([^/]+)/))) return viewSeries(m[1]);
   return viewHome();
