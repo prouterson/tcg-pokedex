@@ -125,6 +125,7 @@
   .card .name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card .meta { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; gap: 4px; min-height: 16px; }
   .card .meta .price { font-weight: 600; color: var(--text); }
+  .card .meta .setname { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card .tick { position: absolute; top: 6px; left: 6px; width: 24px; height: 24px; border-radius: 50%; background: var(--owned); color: #fff; font-weight: 700; display: none; align-items: center; justify-content: center; font-size: 14px; box-shadow: 0 1px 3px rgba(0,0,0,.4); }
   .card.owned .tick { display: flex; }
   .card .tick b { position: absolute; left: 0; top: 26px; font-size: 9px; letter-spacing: .02em; background: var(--text); color: var(--bg); border-radius: 4px; padding: 1px 4px; white-space: nowrap; }
@@ -136,12 +137,12 @@
   .card.partial { border-style: dashed; }
   .card.partial .tick { font-size: 10px; width: auto; padding: 0 6px; border-radius: 12px; }
   .line.partial { opacity: .85; }
-  .card .want { position: absolute; top: 40px; right: 6px; width: 28px; height: 28px; padding: 0; border-radius: 50%; background: var(--panel); font-size: 16px; line-height: 1; color: var(--muted); }
-  .card .want.on, .line .want.on { color: #e0a800; border-color: #e0a800; }
+  .card .want { position: absolute; top: 40px; right: 6px; width: 30px; height: 30px; padding: 0; border-radius: 50%; background: var(--panel); font-size: 19px; line-height: 1; color: #e0a800; border: 2px solid #e0a800; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
+  .card .want.on, .line .want.on { color: #fff; background: #e0a800; border-color: #e0a800; }
+  .line .want { color: #e0a800; border: 2px solid #e0a800; border-radius: 50%; width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex: none; }
   .card.want { border-color: #e0a800; }
   .card.want img { filter: none; }
   .line.want { border-left-color: #e0a800; }
-  .line .want { padding: 2px 8px; font-size: 16px; line-height: 1; color: var(--muted); }
   .who.want { color: #e0a800; font-size: 12px; align-items: center; }
 
   /* compact list for checking in a shop */
@@ -227,9 +228,9 @@
     body { background: #fff; color: #000; }
     header, main, footer, #lb, #printOpts, #toast { display: none !important; }
     #print { display: block; }
-    .page { display: grid; grid-template-columns: repeat(3, 63mm); grid-auto-rows: 88mm; gap: 2mm; justify-content: center; break-after: page; }
+    .page { display: grid; grid-template-columns: repeat(3, 63mm); grid-template-rows: 7mm repeat(3, 88mm); gap: 2mm; justify-content: center; align-content: start; height: 277mm; break-after: page; break-inside: avoid; }
     .page:last-child { break-after: auto; }
-    .phead { grid-column: 1 / -1; height: 7mm; display: flex; justify-content: space-between; align-items: end; font-size: 8pt; color: #555; border-bottom: 0.3mm solid #ccc; padding-bottom: 1mm; }
+    .phead { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: end; font-size: 8pt; color: #555; border-bottom: 0.3mm solid #ccc; padding-bottom: 1mm; }
     .phead b { font-size: 10pt; color: #000; }
     .slot { position: relative; border: 0.3mm dashed #999; border-radius: 3mm; overflow: hidden; display: flex; flex-direction: column; align-items: center; text-align: center; font-family: system-ui, "Segoe UI", sans-serif; }
     .slot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) opacity(.22); }
@@ -264,7 +265,7 @@
       <input id="scanManual" placeholder="or type it: 001/084 PBL" autocapitalize="characters" autocomplete="off">
       <button id="scanManualGo">Find</button>
     </div>
-    <div class="row2"><button id="scanClose">Close</button></div>
+    <div class="row2"><button id="scanTorch" hidden>🔦 Light</button><button id="scanClose">Close</button></div>
   </div>
 </div>
 <div id="printOpts"><div class="box">
@@ -844,6 +845,82 @@ async function loadPrices(list, onDone, onProgress) {
 }
 function refreshValuePanel() { const old = $('valuePanel'); if (old) old.replaceWith(valuePanel()); }
 
+/* ---------- card search across every set ---------- */
+// Community nicknames -> the card name and set they mean. The search then shows that card's printings to pick from.
+const NICKS = {
+  'bubble mew': { name: 'Mew ex', set: 'sv03.5' },
+  'moonbreon': { name: 'Umbreon VMAX', set: 'swsh7' },
+  'zard 151': { name: 'Charizard ex', set: 'sv03.5' }, 'charizard 151': { name: 'Charizard ex', set: 'sv03.5' },
+  'van gogh pikachu': { name: 'Pikachu', set: 'svp' }, 'felt hat pikachu': { name: 'Pikachu', set: 'svp' }, 'grey felt hat': { name: 'Pikachu', set: 'svp' },
+  'giratina alt': { name: 'Giratina V', set: 'swsh11' },
+  'rayquaza alt': { name: 'Rayquaza VMAX', set: 'swsh7' },
+  'lugia alt': { name: 'Lugia V', set: 'swsh12' },
+  'gengar alt': { name: 'Gengar VMAX', set: 'swsh8' },
+  'umbreon sir': { name: 'Umbreon ex', set: 'sv08.5' }, 'prismatic umbreon': { name: 'Umbreon ex', set: 'sv08.5' },
+  'baby charizard': { name: 'Charmander', set: 'sv03.5' },
+  'pikachu ex sir': { name: 'Pikachu ex', set: 'sv08' }, 'surging pikachu': { name: 'Pikachu ex', set: 'sv08' },
+  'greninja sir': { name: 'Greninja ex', set: 'sv06' },
+  'blastoise 151': { name: 'Blastoise ex', set: 'sv03.5' }, 'venusaur 151': { name: 'Venusaur ex', set: 'sv03.5' }
+};
+let cardIndex = null;        // [[setId, localId, name], ...] for the English catalogue
+let serieOf = null;          // setId -> serie id, for building picture URLs
+async function loadCardIndex() {
+  if (cardIndex) return cardIndex;
+  const cached = cacheGet('cardindex');
+  if (cached && Date.now() - cached.at < PRICE_MAX_AGE) { cardIndex = cached.rows; serieOf = cached.serieOf; return cardIndex; }
+  const gql = async q => (await fetch('https://api.tcgdex.net/v2/graphql', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: q }) })).json();
+  const [c, s] = await Promise.all([gql('{ cards { localId name set { id } } }'), gql('{ series { id sets { id } } }')]);
+  const rows = (c.data && c.data.cards || []).map(x => [x.set.id, x.localId, x.name]);
+  const so = {}; (s.data && s.data.series || []).forEach(sr => (sr.sets || []).forEach(st => { so[st.id] = sr.id; }));
+  if (!rows.length) throw new Error('empty');
+  cardIndex = rows; serieOf = so;
+  cacheSet('cardindex', { at: Date.now(), rows, serieOf: so });
+  return rows;
+}
+function cardImg(setId, localId) { return serieOf && serieOf[setId] ? 'https://assets.tcgdex.net/en/' + serieOf[setId] + '/' + setId + '/' + localId + '/low.webp' : ''; }
+function searchCards(q) {
+  const nick = Object.keys(NICKS).find(k => q.includes(k));
+  let rows;
+  if (nick) { const n = NICKS[nick]; rows = cardIndex.filter(r => r[0] === n.set && r[2] === n.name); }
+  else {
+    const words = q.split(/\s+/).filter(Boolean);
+    rows = cardIndex.filter(r => { const n = r[2].toLowerCase(); return words.every(w => n.includes(w)); });
+  }
+  const order = (window._sets || []).map(s => s.id);
+  rows.sort((a, b) => order.indexOf(b[0]) - order.indexOf(a[0]) || a[1].localeCompare(b[1], undefined, { numeric: true }));
+  return { rows, nick };
+}
+function renderCardResults(main, q) {
+  if (!cardIndex) {
+    const note = el('div', 'note', 'Loading the card list for name search…');
+    main.appendChild(note);
+    loadCardIndex().then(() => { if (ui.q.toLowerCase() === q) renderHome(); }).catch(() => { note.textContent = 'Could not load the card list (no internet?). Set search still works.'; });
+    return;
+  }
+  const { rows, nick } = searchCards(q);
+  const names = Object.fromEntries((window._sets || []).map(s => [s.id, s.name]));
+  main.appendChild(el('h2', '', rows.length + ' card' + (rows.length === 1 ? '' : 's') + (nick ? ' · "' + esc(nick) + '" = ' + esc(NICKS[nick].name) + ' in ' + esc(names[NICKS[nick].set] || NICKS[nick].set) : '')));
+  if (!rows.length) { main.appendChild(el('div', 'empty', 'No card called that.')); return; }
+  const grid = el('div', 'grid');
+  rows.slice(0, 60).forEach(([setId, localId, name]) => {
+    const owners = ownersOf(setId, localId), mine = owners.some(p => p.id === state.current);
+    const wanters = wishersOf(setId, localId);
+    const img = cardImg(setId, localId);
+    const n = el('div', 'card' + (mine ? ' owned' : '') + (img ? '' : ' noimg'));
+    n.innerHTML = (mine ? '<span class="tick">✓</span>' : '') + '<img loading="lazy" alt="" src="' + img + '"><div class="ph"></div><div class="num"></div><div class="name"></div>' +
+      '<div class="meta"><span class="setname"></span>' +
+      (owners.length ? '<span class="who">' + owners.map(p => '<i style="background:' + colour(p) + '">' + esc(initial(p)) + '</i>').join('') + '</span>' : '') +
+      (wanters.length ? '<span class="who want">★' + wanters.map(p => '<i style="background:' + colour(p) + '">' + esc(initial(p)) + '</i>').join('') + '</span>' : '') + '</div>';
+    n.querySelector('.ph').textContent = name; n.querySelector('.name').textContent = name;
+    n.querySelector('.num').textContent = '#' + localId + (abbrOf(setId) ? ' · ' + abbrOf(setId) : '');
+    n.querySelector('.setname').textContent = names[setId] || setId;
+    n.onclick = () => { window._jump = localId; location.hash = '#/set/' + setId; };
+    grid.appendChild(n);
+  });
+  main.appendChild(grid);
+  if (rows.length > 60) main.appendChild(el('div', 'note small', 'Showing the first 60 — add a word to narrow it down.'));
+}
+
 /* ---------- Lookout: every card anyone in the family is hunting, for card shows and shops ---------- */
 let lookoutWho = 'all';
 async function getJSONL(l, path) {
@@ -925,7 +1002,7 @@ let lookoutJob = 0;
 async function viewHome() {
   const main = $('main');
   main.innerHTML = '<div class="empty">Loading…</div>';
-  setHeader({ title: '<span>◆</span> TCG Pokédex', controls: [personSelect(), themeSelect(), scanButton(), makeSearch('Search sets or codes', () => renderHome())] });
+  setHeader({ title: '<span>◆</span> TCG Pokédex', controls: [personSelect(), themeSelect(), scanButton(), makeSearch('Search cards, sets or codes', () => renderHome())] });
   try {
     window._series = await getJSON('series');
     window._sets = await getJSON('sets');
@@ -945,9 +1022,12 @@ function renderHome() {
 
   if (q) {
     const hits = sets.filter(s => setMatches(s, q));
-    main.appendChild(el('h2', '', hits.length + ' set' + (hits.length === 1 ? '' : 's')));
-    const rows = el('div', 'rows'); hits.forEach(s => rows.appendChild(setRow(s))); main.appendChild(rows);
-    if (!hits.length) main.appendChild(el('div', 'empty', 'No set matches.'));
+    if (hits.length) {
+      main.appendChild(el('h2', '', hits.length + ' set' + (hits.length === 1 ? '' : 's')));
+      const rows = el('div', 'rows'); hits.forEach(s => rows.appendChild(setRow(s))); main.appendChild(rows);
+    }
+    if (q.length >= 2 && lang === 'en') renderCardResults(main, q);
+    else if (!hits.length) main.appendChild(el('div', 'empty', 'No set matches.'));
     return;
   }
 
@@ -1006,6 +1086,7 @@ async function viewSet(id) {
   catch (e) { main.innerHTML = '<div class="note">Could not load this set. Sets load once online and then work offline.</div>'; return; }
   window._set = set;
   ui.rarity = ''; ui.sort = 'num';
+  if (window._jump) { ui.q = window._jump; ui.filter = 'all'; window._jump = null; }   // arrived from a card search: show just that card
   if (ui.filter === 'family' && state.people.length < 2) ui.filter = 'all';
   const cached = cacheGet('details2/' + id);
   details = (cached && cached.cards) || {};
@@ -1362,9 +1443,15 @@ const scanner = {
     $('scanResult').hidden = true; $('scanResult').innerHTML = '';
     this.found = null;
     const status = m => { $('scanStatus').textContent = m; };
+    $('scanManual').value = '';
+    this.torch = false; $('scanTorch').hidden = true; $('scanTorch').textContent = '🔦 Light';
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false });
       box.querySelector('video').srcObject = this.stream;
+      // the phone's flash, where the browser allows it (Android Chrome; iPhones do not expose it to web pages)
+      const track = this.stream.getVideoTracks()[0];
+      const caps = track.getCapabilities ? track.getCapabilities() : {};
+      if (caps.torch) $('scanTorch').hidden = false;
     } catch (e) {
       status('Camera not available (' + (e.name || e) + '). You can still type the number below.');
     }
@@ -1380,7 +1467,18 @@ const scanner = {
   close() {
     clearTimeout(this.timer); this.timer = null;
     if (this.stream) { this.stream.getTracks().forEach(t => t.stop()); this.stream = null; }
+    const v = $('scan').querySelector('video'); v.pause(); v.srcObject = null;   // iPhones otherwise keep the camera light on
+    this.found = null; this.busy = false;
+    $('scanResult').hidden = true; $('scanResult').innerHTML = '';
+    $('scanManual').blur();
     $('scan').classList.remove('open');
+  },
+  async toggleTorch() {
+    const track = this.stream && this.stream.getVideoTracks()[0];
+    if (!track) return;
+    this.torch = !this.torch;
+    try { await track.applyConstraints({ advanced: [{ torch: this.torch }] }); } catch (e) { this.torch = false; }
+    $('scanTorch').textContent = this.torch ? '🔦 Light off' : '🔦 Light';
   },
   // grab the guide box from the video, enlarge and sharpen it, then read it
   async loop() {
@@ -1499,7 +1597,12 @@ function parseScan(text) {
   return { num, denom, code, prefix };
 }
 $('scanClose').onclick = () => scanner.close();
-$('scanManualGo').onclick = () => { const hit = parseScan($('scanManual').value); if (hit) { scanner.found = hit; scanner.resolve(hit); } else $('scanStatus').textContent = 'Type it like 001/084 PBL'; };
+$('scanTorch').onclick = () => scanner.toggleTorch();
+$('scanManualGo').onclick = () => {
+  const hit = parseScan($('scanManual').value);
+  if (hit) { $('scanManual').value = ''; $('scanManual').blur(); scanner.found = hit; scanner.resolve(hit); }
+  else $('scanStatus').textContent = 'Type it like 001/084 PBL';
+};
 $('scanManual').addEventListener('keydown', e => { if (e.key === 'Enter') $('scanManualGo').click(); });
 function scanButton() { return makeButton('📷 Scan', () => scanner.open(), 'Read the card number with the camera'); }
 
