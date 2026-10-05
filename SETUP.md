@@ -57,8 +57,14 @@ GitHub Pages is free and needs no software installed.
 
 The app is these files, and all of them go in the repository:
 `index.html`, `sw.js`, `manifest.webmanifest`, `icon-180.png`, `icon-192.png`, `icon-512.png`,
-`cards-1.fp` (the card-picture fingerprints the camera scanner matches against; about 6 MB,
-rebuilt now and then as new sets come out — the number in the name goes up each time).
+`cards-1.fp` (the card-picture fingerprints the camera scanner matches against; about 6 MB).
+New sets and promos that TCGdex adds later are picked up by the app itself, so this file only
+needs replacing occasionally (the number in the name goes up each time).
+
+A card TCGdex does not list at all (a brand-new promo, a stamped version) can be added by hand:
+open the set, tap **＋ Card not listed? Add it** at the end, give its number and name. It then
+behaves like any other card (owned, lookout, printing) for the whole family, and drops away by
+itself once TCGdex lists the real one.
 
 Optional — set symbols: TCGdex has no picture for some sets (30th Celebration, Trainer
 Galleries, promos). To add one, save a PNG of the symbol named after the set id, e.g.

@@ -156,6 +156,9 @@
 
   /* compact list for checking in a shop */
   .list { display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  .addcard { border: 2px dashed var(--line); background: transparent; color: var(--muted); border-radius: var(--radius); padding: 14px 10px; font-size: 13px; min-height: 60px; }
+  .grid .addcard { aspect-ratio: 63 / 100; }
+  .addcard:hover { color: var(--text); border-color: var(--accent); }
   .line { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--need); border-radius: var(--radius); padding: 8px 10px; cursor: pointer; user-select: none; }
   .line.owned { border-left-color: var(--owned); opacity: .6; }
   .line .n { font-variant-numeric: tabular-nums; color: var(--muted); width: 64px; flex: none; }
@@ -209,7 +212,9 @@
   #scan .status { font-size: 14px; color: #c9ccd4; min-height: 20px; }
   #scan .peek { display: flex; gap: 10px; align-items: center; min-height: 28px; }
   #scan .peek canvas { height: 28px; width: auto; max-width: 55%; border-radius: 4px; background: #fff; }
-  #scan .peek span { font: 12px/1.2 ui-monospace, Consolas, monospace; color: #9a9a92; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #scan .peek span { flex: 1; min-width: 0; font: 12px/1.2 ui-monospace, Consolas, monospace; color: #9a9a92; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #scan .panel { overflow: hidden; }
+  #scan .panel > * { min-width: 0; }     /* nothing in the panel may push it wider than the screen */
   #scan .result { display: grid; grid-template-columns: 64px 1fr; gap: 10px 12px; align-items: center; background: #1e2128; border-radius: 12px; padding: 10px; position: relative; }
   #scan .result .dismiss { position: absolute; top: -8px; right: -8px; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: #e3350d; border-color: #e3350d; font-size: 14px; }
   #scan .result img { width: 64px; border-radius: 4px; }
@@ -424,6 +429,7 @@ function normalise() {
   if (!Array.isArray(state.people)) state.people = [];
   if (!state.owned || typeof state.owned !== 'object') state.owned = {};
   if (!state.wish || typeof state.wish !== 'object') state.wish = {};     // wish[pid][setKey][localId] = 1: "be on the lookout"
+  if (!state.custom || typeof state.custom !== 'object') state.custom = {};   // custom[setKey][localId] = name: cards TCGdex does not list (yet), added by the family
   if (!state.people.length) { state.people = [{ id: 'p1', name: 'User 1', c: 0 }]; state.current = 'p1'; }
   if (!state.people.some(p => p.id === state.current)) state.current = state.people[0].id;
 }
@@ -470,6 +476,34 @@ function allWishes() {
     Object.keys(cards).forEach(localId => out.push({ pid: p.id, lang: m ? m[1] : 'en', setId: m ? m[2] : key, localId }));
   }));
   return out;
+}
+// Cards the catalogue lacks (new promos, stamped versions): the family adds them by number and name, shared like everything else.
+function customIn(setId) { return state.custom[setKey(setId)] || {}; }
+function addCustom(setId, localId, name) {
+  const key = setKey(setId);
+  (state.custom[key] = state.custom[key] || {})[localId] = name;
+  saveState(); sync.writeCustom(key, localId, name);
+}
+function removeCustom(setId, localId) {
+  const key = setKey(setId), cards = state.custom[key];
+  if (!cards) return;
+  delete cards[localId]; if (!Object.keys(cards).length) delete state.custom[key];
+  saveState(); sync.writeCustom(key, localId, false);
+}
+// slot the family's added cards into a set's card list (skipping any the catalogue has since picked up), in number order
+function mergeCustom(set) {
+  if (!set || !set.cards) return set;
+  set.cards = set.cards.filter(c => !c.custom);
+  const num = x => /^\d+$/.test(x) ? +x : null;
+  Object.entries((state.custom || {})[setKey(set.id)] || {}).forEach(([localId, name]) => {
+    if (set.cards.some(c => c.localId === localId)) return;
+    const card = { id: set.id + '-' + localId, localId, name, image: null, custom: true };
+    const n = num(localId);
+    let at = set.cards.length;
+    if (n != null) { for (let i = 0; i < set.cards.length; i++) { const m = num(set.cards[i].localId); if (m != null && m > n) { at = i; break; } } }
+    set.cards.splice(at, 0, card);
+  });
+  return set;
 }
 function cardLangSelect(onChange) {
   const sel = el('select', 'cardlang' + (cardLang === 'en' ? '' : ' on'));
@@ -536,6 +570,9 @@ const sync = {
         Object.entries(sets || {}).forEach(([k, cards]) => { wish[pid][unKey(k)] = {}; Object.keys(cards || {}).forEach(id => { wish[pid][unKey(k)][unKey(id)] = 1; }); });
       });
       state.wish = wish;
+      const custom = {};
+      Object.entries(data.custom || {}).forEach(([k, cards]) => { custom[unKey(k)] = {}; Object.entries(cards || {}).forEach(([id, name]) => { custom[unKey(k)][unKey(id)] = String(name); }); });
+      state.custom = custom;
       normalise(); saveState();
     }
     renderSyncStatus();
@@ -552,11 +589,16 @@ const sync = {
     const r = this.path('wish', pid, key, localId);
     (on ? this.fb.db.set(r, 1) : this.fb.db.remove(r)).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
   },
+  writeCustom(key, localId, name) {
+    if (!this.on) return;
+    const r = this.path('custom', key, localId);
+    (name ? this.fb.db.set(r, name) : this.fb.db.remove(r)).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
+  },
   writePerson(p) { if (this.on) this.fb.db.set(this.path('people', p.id), { name: p.name, c: p.c || 0 }).catch(() => {}); },
   removePerson(pid) { if (this.on) ['people', 'owned', 'wish'].forEach(k => this.fb.db.remove(this.path(k, pid)).catch(() => {})); },
   uploadAll() {
     if (!this.on) return;
-    const people = {}, owned = {}, wish = {};
+    const people = {}, owned = {}, wish = {}, custom = {};
     state.people.forEach(p => { people[dbKey(p.id)] = { name: p.name, c: p.c || 0 }; });
     Object.entries(state.owned).forEach(([pid, sets]) => {
       owned[dbKey(pid)] = {};
@@ -566,7 +608,8 @@ const sync = {
       wish[dbKey(pid)] = {};
       Object.entries(sets).forEach(([k, cards]) => { wish[dbKey(pid)][dbKey(k)] = {}; Object.keys(cards).forEach(id => { wish[dbKey(pid)][dbKey(k)][dbKey(id)] = 1; }); });
     });
-    this.fb.db.set(this.root, { people, owned, wish }).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
+    Object.entries(state.custom || {}).forEach(([k, cards]) => { custom[dbKey(k)] = {}; Object.entries(cards).forEach(([id, name]) => { custom[dbKey(k)][dbKey(id)] = name; }); });
+    this.fb.db.set(this.root, { people, owned, wish, custom }).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
   }
 };
 function newFamilyCode() {
@@ -631,12 +674,12 @@ function cacheSet(k, v) { try { localStorage.setItem(CACHE_PFX + lang + ':' + k,
 // Fetch with a cache so sets already opened still load without signal.
 async function getJSON(path) {
   const cached = cacheGet(path);
-  if (cached) return cached;
+  if (cached) return path.startsWith('sets/') ? mergeCustom(cached) : cached;
   const r = await fetch(API() + path);
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const data = await r.json();
   cacheSet(path, data);
-  return data;
+  return path.startsWith('sets/') ? mergeCustom(data) : data;
 }
 
 /* ---------- people ---------- */
@@ -1045,12 +1088,12 @@ let lookoutWho = 'all';
 async function getJSONL(l, path) {
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem(CACHE_PFX + l + ':' + path)); } catch (e) {}
-  if (cached) return cached;
+  if (cached) return l === lang && path.startsWith('sets/') ? mergeCustom(cached) : cached;
   const r = await fetch('https://api.tcgdex.net/v2/' + l + '/' + path);
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const data = await r.json();
   try { localStorage.setItem(CACHE_PFX + l + ':' + path, JSON.stringify(data)); } catch (e) {}
-  return data;
+  return l === lang && path.startsWith('sets/') ? mergeCustom(data) : data;
 }
 async function viewLookout() {
   const main = $('main');
@@ -1465,6 +1508,11 @@ function renderCards() {
   const cards = visibleCards();
   cards.forEach(c => frag.appendChild(makeCard(c)));
   box.appendChild(frag);
+  // a card the catalogue does not list yet (a new promo, a stamped version): add it by number and name
+  const add = el('button', 'addcard', '＋ Card not listed? Add it');
+  add.title = 'Add a card TCGdex does not have yet, by its number and name';
+  add.onclick = () => addCustomPrompt(window._set);
+  box.appendChild(add);
   main.appendChild(box);
   if (!cards.length) {
     const msg = !window._set.cards.length ? 'TCGdex has no card list for this set in ' + (LANGS.find(l => l[0] === lang) || [lang, lang])[1] + ' yet. Try the same set in English or Japanese.'
@@ -1474,6 +1522,17 @@ function renderCards() {
   box.addEventListener('click', onCardClick);
 }
 
+function addCustomPrompt(set, presetId) {
+  const localId = (presetId || prompt('Card number as printed (e.g. 100, or TG12):', '') || '').trim().replace(/\/.*$/, '');
+  if (!localId) return;
+  if (set.cards.some(c => c.localId === localId && !c.custom)) { alert('Card ' + localId + ' is already in this set.'); return; }
+  const name = (prompt('Card name:', (customIn(set.id)[localId] || '')) || '').trim();
+  if (!name) return;
+  addCustom(set.id, localId, name);
+  mergeCustom(set);
+  if (window._set && window._set.id === set.id) { ui.q = ''; renderSet(); }
+  return set.cards.find(c => c.localId === localId);
+}
 function onCardClick(e) {
   const node = e.target.closest('.card, .line');
   if (!node) return;
@@ -1536,6 +1595,11 @@ function openCardSheet(card) {
     }
     acts.appendChild(makeButton('💲 Price check', () => { close(); openPriceCheck(lang, set.id, set.name, card, primaryVariant(card)); }));
     if (card.image) acts.appendChild(makeButton('View card', () => { close(); $('lbImg').src = card.image + '/high.webp'; $('lb').classList.add('open'); }));
+    if (card.custom) {
+      acts.appendChild(makeButton('✎ Rename', () => { const name = (prompt('Card name:', card.name) || '').trim(); if (name) { addCustom(set.id, card.localId, name); card.name = name; refreshCardNode(card); } close(); }));
+      acts.appendChild(makeButton('🗑 Remove this added card', () => { if (confirm('Remove ' + card.name + ' (' + card.localId + ') from this set for the whole family?')) { removeCustom(set.id, card.localId); setCard(state.current, key, card.localId, false, '*'); mergeCustom(set); renderSet(); } close(); }));
+      acts.appendChild(el('div', 'hint', 'Added by the family — TCGdex does not list this card yet'));
+    }
     const others = ownersOf(set.id, card.localId).filter(p => p.id !== state.current);
     if (others.length) acts.appendChild(el('div', 'hint', 'Also owned by ' + esc(others.map(p => p.name).join(', '))));
     if (!haveDetails()) acts.appendChild(el('div', 'hint', 'Printings and prices appear once the set has finished loading'));
@@ -1828,10 +1892,10 @@ function fineFor(card) {
   return p;
 }
 // which series each set belongs to (the picture URL needs it): one small GraphQL call, cached with the card index
-async function loadSerieMap() {
-  if (window._serieOf) return window._serieOf;
+async function loadSerieMap(force) {
+  if (window._serieOf && !force) return window._serieOf;
   const cached = cacheGet('seriemap');
-  if (cached && Date.now() - cached.at < 7 * 86400e3) return (window._serieOf = cached.map);
+  if (!force && cached && Date.now() - cached.at < 7 * 86400e3) return (window._serieOf = cached.map);
   const r = await fetch('https://api.tcgdex.net/v2/graphql', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: '{ series { id sets { id } } }' }) });
   const j = await r.json(), map = {};
   j.data.series.forEach(s => s.sets.forEach(x => { map[x.id] = s.id; }));
@@ -1855,6 +1919,62 @@ async function searchPicture(src, box, opts) {
   coarse.forEach((c, i) => { c.fine = fps[i] ? Math.max(...fines.map(f => scoreFP(f, fps[i]))) : -1; });
   coarse.sort((a, b) => b.fine - a.fine);
   return coarse;
+}
+
+// Cards TCGdex has gained since the fingerprint file was built (new sets, new promos): once a week the full card list is
+// compared with the index, and any new pictures are fingerprinted on this device and kept, so the scanner never waits
+// for a rebuilt file.
+function coarseFromImage(im) {
+  const { w, h, cw, ch, L } = IDX, m = 0.035;
+  const f = frameOf(im, im.width * m, im.height * m, im.width * (1 - 2 * m), im.height * (1 - 2 * m), 0);
+  const t = thumbPx(f, 0, 0, f.BW, f.BH, w, h), tc = thumbPx(f, 0, 0, f.BW, f.BH, cw, ch);
+  const out = new Int8Array(L);
+  coarseVec(t.g, tc.c, w, h, cw, ch, out, 0);
+  return out;
+}
+async function extendIndex(onProgress) {
+  if (!IDX || IDX.extended) return;
+  IDX.extended = true;
+  let list = cacheGet('fpnew');                    // { at, file, missing: [[set, localId], ...] }
+  if (!list || list.file !== FP_FILE || Date.now() - list.at > 7 * 86400e3) {
+    const r = await fetch('https://api.tcgdex.net/v2/graphql', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: '{ cards { id image } }' }) });
+    const j = await r.json();
+    const have = new Set(IDX.cards.map(c => c.set + '-' + c.localId));
+    let serieOf = await loadSerieMap();
+    const missing = [];
+    j.data.cards.forEach(c => {
+      if (!c.image || have.has(c.id)) return;
+      const i = c.id.lastIndexOf('-'), set = c.id.slice(0, i), localId = c.id.slice(i + 1);
+      missing.push([set, localId]);
+    });
+    if (missing.some(([set]) => !serieOf[set])) serieOf = await loadSerieMap(true);          // a brand-new set: refresh the set→series map
+    list = { at: Date.now(), file: FP_FILE, missing: missing.filter(([set]) => serieOf[set] && serieOf[set] !== 'tcgp') };
+    cacheSet('fpnew', list);
+  }
+  if (!list.missing.length) return;
+  const L = IDX.L, vecs = new Map();
+  const ext = cacheGet('fpext');                   // { file, ids, vec (base64 int8) } — fingerprints made on this device earlier
+  if (ext && ext.file === FP_FILE) {
+    const raw = atob(ext.vec);
+    ext.ids.forEach((id, i) => { const v = new Int8Array(L); for (let k = 0; k < L; k++) v[k] = (raw.charCodeAt(i * L + k) << 24) >> 24; vecs.set(id, v); });
+  }
+  const todo = list.missing.filter(m => !vecs.has(m.join('-')));
+  const load = u => new Promise((ok, bad) => { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => ok(im); im.onerror = bad; im.src = u; });
+  let done = 0, next = 0;
+  const worker = async () => {
+    while (next < todo.length) {
+      const [set, localId] = todo[next++], url = cardImageUrl({ set, localId });
+      try { const im = await load(url + '/low.webp').catch(() => load(url + '/low.webp?fp')); vecs.set(set + '-' + localId, coarseFromImage(im)); } catch (e) {}
+      done++; if (onProgress) onProgress(done, todo.length);
+    }
+  };
+  await Promise.all([0, 1, 2, 3, 4, 5].map(worker));
+  const ids = [...vecs.keys()].filter(id => list.missing.some(m => m.join('-') === id));
+  if (!ids.length) return;
+  const vec = new Int8Array((IDX.n + ids.length) * L); vec.set(IDX.vec);
+  ids.forEach((id, i) => { vec.set(vecs.get(id), (IDX.n + i) * L); const j = id.lastIndexOf('-'); IDX.cards.push({ set: id.slice(0, j), localId: id.slice(j + 1) }); });
+  IDX.vec = vec; IDX.n += ids.length;
+  if (todo.length) { let b = ''; ids.forEach(id => { const v = vecs.get(id); for (let k = 0; k < L; k++) b += String.fromCharCode(v[k] & 255); }); cacheSet('fpext', { file: FP_FILE, ids, vec: btoa(b) }); }
 }
 
 /* ---------- camera scan: match the picture, or read "001/084 PBL" off the card, and jump to it ---------- */
@@ -1901,6 +2021,8 @@ const scanner = {
       if (!window._sets) window._sets = await getJSON('sets').catch(() => null);
       this.ready = true;
       status(this.stream ? 'Fill the outline with the card and hold still.' : 'Type the number below.');
+      // newer cards than the file knows: added in the background, scanning works meanwhile
+      extendIndex((d, n) => { if (!this.found) status('Adding ' + n + ' new cards to the index… ' + d + '/' + n); }).then(() => { if (!this.found && /new cards/.test($('scanStatus').textContent)) status('Fill the outline with the card and hold still.'); }).catch(() => {});
     } catch (e) {
       this.ready = false;
       status(this.stream ? 'Card index not available (no internet?). Reading the number instead — or type it below.' : 'Type the number below.');
@@ -2111,7 +2233,15 @@ const scanner = {
     const card = hit.localId ? set.cards.find(c => c.localId === hit.localId)
       : hit.prefix ? set.cards.find(c => c.localId.toUpperCase().replace(/^([A-Z]+)0*/, '$1') === hit.prefix + hit.num)
       : set.cards.find(c => /^\d+$/.test(c.localId) && +c.localId === hit.num) || set.cards.find(c => c.localId.toUpperCase() === String(hit.num));
-    if (!card) { status('No card ' + hit.num + ' in ' + set.name + '. Try again.'); this.found = null; return; }
+    if (!card) {
+      // not in the catalogue (yet): offer to add it, then mark it like any other card
+      const id = hit.localId || ((hit.prefix || '') + String(hit.num).padStart(set.cards.some(c => /^0\d/.test(c.localId)) ? 3 : 1, '0'));
+      status('No card ' + id + ' in ' + set.name + ' — TCGdex does not list it yet.');
+      const r = $('scanResult'); r.hidden = false; r.innerHTML = '<div class="choices"></div><button class="dismiss" aria-label="Dismiss">✕</button>';
+      r.querySelector('.choices').appendChild(makeButton('＋ Add card ' + id + ' to ' + set.name, () => { const c = addCustomPrompt(set, id); if (c) this.show(set.id, { localId: c.localId }); }));
+      r.querySelector('.dismiss').onclick = () => { this.found = null; this.last = null; this.coarseHist = []; r.hidden = true; status('Fill the outline with the next card.'); };
+      return;
+    }
     const key = setKey(set.id);
     const r = $('scanResult'); r.hidden = false;
     r.innerHTML = (card.image ? '<img alt="" src="' + card.image + '/low.webp">' : '') + '<div class="t"><b></b><small></small></div><div class="btns"></div><button class="dismiss" title="Wrong card — keep scanning" aria-label="Dismiss">✕</button>';
