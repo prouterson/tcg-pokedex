@@ -415,7 +415,7 @@ let detailJob = 0;                    // bumps when the set changes so an old lo
 
 const API = () => 'https://api.tcgdex.net/v2/' + lang + '/';
 // English keeps the plain set id so progress from the first version still matches
-const setKey = id => lang === 'en' ? id : lang + '/' + id;
+const setKey = id => (state.customSets && state.customSets[id]) || lang === 'en' ? id : lang + '/' + id;
 
 function loadState() {
   try { lang = localStorage.getItem(LANG_KEY) || 'en'; } catch (e) {}
@@ -516,7 +516,9 @@ function removeCustom(setId, localId) {
 // beside the catalogue's own sets, under a "Added by the family" series.
 // A set also carries the region of the release it belongs to: Chinese and Japanese releases are often different sets
 // (other card lists, other numbering) rather than the English set in another language.
-const REGIONS = ['Simplified Chinese', 'Traditional Chinese', 'Japanese', 'Korean', 'English'];
+const regionName = l => ((LANGS.find(x => x[0] === l) || ['', l])[1]).replace(/ \(.*/, '');
+const REGIONS = LANGS.map(l => regionName(l[0]));
+const REGION_LANG = Object.fromEntries(LANGS.map(l => [regionName(l[0]), l[0]]));
 const famSeries = region => ({ id: 'fam-' + (region ? region.toLowerCase().replace(/[^a-z]+/g, '-') : 'other'), name: region ? region + ' releases' : 'Added by the family' });
 function customSetData(id) {
   const cs = state.customSets && state.customSets[id];
@@ -526,7 +528,7 @@ function customSetData(id) {
   set.cardCount.total = Math.max(set.cards.length, set.cardCount.official);   // a 103-card set with 1 card added so far still counts out of 103
   return set;
 }
-const customSetList = () => Object.keys(state.customSets || {}).map(id => { const d = customSetData(id); return { id, name: d.name, cardCount: d.cardCount, custom: true, region: d.region, serie: d.serie }; });
+const customSetList = () => Object.keys(state.customSets || {}).filter(id => { const r = state.customSets[id].region; return !r || (REGION_LANG[r] || 'en') === lang; }).map(id => { const d = customSetData(id); return { id, name: d.name, cardCount: d.cardCount, custom: true, region: d.region, serie: d.serie }; });
 function createCustomSet(name, abbr, cardsText, region, official) {
   const slug = (abbr || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'set';
   let id = 'x-' + slug, n = 2;
@@ -539,6 +541,42 @@ function createCustomSet(name, abbr, cardsText, region, official) {
   });
   window._sets = window._series = null;
   return id;
+}
+// Chinese cards that were ticked inside the English 30th Celebration (by their printed number) belong in the Chinese set.
+// Moves every person's Chinese ticks there, keeping the numbers; the names are unknown, so cards are called "Card 058".
+function moveChineseTicks() {
+  const from = '30th', lang = 'zh-cn', fromKey = setKey(from);
+  let toId = Object.keys(state.customSets).find(i => state.customSets[i].abbr === '30th-C');
+  const ids = new Set();
+  state.people.forEach(p => Object.values((state.owned[p.id] || {})[fromKey] || {}).forEach(() => {}));
+  state.people.forEach(p => Object.entries((state.owned[p.id] || {})[fromKey] || {}).forEach(([id, mark]) => { if (Object.values(marks(mark)).some(v => langsOf(v).includes(lang))) ids.add(id); }));
+  if (!ids.size) return null;
+  if (!toId) toId = createCustomSet('30th Celebration (Simplified Chinese)', '30th-C', '', 'Simplified Chinese', 103);
+  const toKey = setKey(toId);
+  ids.forEach(id => { if (!((state.custom[toKey] || {})[id])) addCustom(toId, id, 'Card ' + id); });
+  state.people.forEach(p => {
+    const src = (state.owned[p.id] || {})[fromKey]; if (!src) return;
+    Object.entries({ ...src }).forEach(([id, mark]) => {
+      const m = { ...marks(mark) }, mv = {};
+      Object.keys(m).forEach(v => {
+        const ls = langsOf(m[v]);
+        if (!ls.includes(lang)) return;
+        mv[v] = lang;
+        const left = ls.filter(l => l !== lang);
+        if (left.length) m[v] = left.join(','); else delete m[v];
+      });
+      if (!Object.keys(mv).length) return;
+      if (Object.keys(m).length) src[id] = m; else delete src[id];
+      sync.writeCard(p.id, fromKey, id, Object.keys(m).length ? m : false);
+      const dst = ((state.owned[p.id] = state.owned[p.id] || {})[toKey] = state.owned[p.id][toKey] || {});
+      dst[id] = { ...marks(dst[id]), ...mv };
+      sync.writeCard(p.id, toKey, id, dst[id]);
+    });
+    if (!Object.keys(src).length) delete state.owned[p.id][fromKey];
+  });
+  saveState();
+  window._sets = window._series = null;
+  return { toId, count: ids.size };
 }
 function removeCustomSet(id) {
   const key = setKey(id);
@@ -833,10 +871,10 @@ function themeSelect() {
   return sel;
 }
 
-function langSelect() {
-  const sel = el('select');
-  sel.title = 'Card language — Japanese and Asian sets have their own numbering';
-  sel.innerHTML = LANGS.map(l => '<option value="' + l[0] + '"' + (l[0] === lang ? ' selected' : '') + '>' + l[1] + '</option>').join('');
+function langSelect(prefix) {
+  const sel = el('select', prefix ? 'cardlang' + (lang === 'en' ? '' : ' on') : '');
+  sel.title = 'Region of the releases you are browsing — Japanese, Chinese and Korean releases are separate sets with their own cards and numbering';
+  sel.innerHTML = LANGS.map(l => '<option value="' + l[0] + '"' + (l[0] === lang ? ' selected' : '') + '>' + (prefix || '') + (prefix ? regionName(l[0]) : l[1]) + '</option>').join('');
   sel.onchange = () => {
     lang = sel.value;
     try { localStorage.setItem(LANG_KEY, lang); } catch (e) {}
@@ -885,7 +923,7 @@ function viewPeople() {
   bk.appendChild(makeButton('Import', importProgress, 'Replace everything with an exported file'));
   box.appendChild(bk);
   box.appendChild(el('h2', '', 'Catalogue language'));
-  box.appendChild(el('div', 'note', 'Normally leave this on English. Japanese, Chinese and Korean releases are different sets with their own numbering, so switch this only if you collect those releases. To record that you own the Chinese or Japanese print of an English-catalogue card, use "Cards in" on the set page instead.'));
+  box.appendChild(el('div', 'note', 'Japanese, Chinese and Korean releases are separate sets with their own cards and numbering, not the English set in another language. Pick the region on the home page (🌏 Sets) to browse them; sets TCGdex does not list yet can be added under that region.'));
   box.appendChild(langSelect());
   main.appendChild(box);
 }
@@ -1268,7 +1306,7 @@ let lookoutJob = 0;
 async function viewHome() {
   const main = $('main');
   main.innerHTML = '<div class="empty">Loading…</div>';
-  setHeader({ title: '<span>◆</span> TCG Pokédex', controls: [personSelect(), cardLangSelect(), themeSelect(), scanButton(), makeSearch('Search cards, sets or codes', () => renderHome())] });
+  setHeader({ title: '<span>◆</span> TCG Pokédex', controls: [personSelect(), langSelect('🌏 Sets: '), cardLangSelect(), themeSelect(), scanButton(), makeSearch('Search cards, sets or codes', () => renderHome())] });
   try {
     window._series = await getJSON('series');
     window._sets = await getJSON('sets');
@@ -1344,7 +1382,8 @@ function renderHome() {
 // ready-made lists for sets TCGdex is known not to have; one tap creates them
 const PRESET_SETS = [
   { name: '30th Celebration (Simplified Chinese)', abbr: '30th-C', region: 'Simplified Chinese', official: 103,
-    note: '103-card main set, numbers run past 103 for the rares. Not the English set — different cards. Add cards as you get them.', cards: '' },
+    note: 'The 103-card main set, 001–103 (the 30 Pikachu are 017–046). Secret rares past 103 are added as you get them — sources disagree on that list.',
+    cards: '001 Exeggcute\n002 Alolan Exeggutor\n003 Volbeat\n004 Illumise\n005 Vivillon\n006 Moltres\n007 Ho-Oh\n008 Reshiram\n009 Fuecoco ex\n010 Slowpoke\n011 Lapras\n012 Articuno\n013 Kyogre\n014 Palkia\n015 Greninja ex\n016 Wishiwashi\n017 Pikachu\n018 Pikachu\n019 Pikachu\n020 Pikachu\n021 Pikachu\n022 Pikachu\n023 Pikachu\n024 Pikachu\n025 Pikachu\n026 Pikachu\n027 Pikachu\n028 Pikachu\n029 Pikachu\n030 Pikachu\n031 Pikachu\n032 Pikachu\n033 Pikachu\n034 Pikachu\n035 Pikachu\n036 Pikachu\n037 Pikachu\n038 Pikachu\n039 Pikachu\n040 Pikachu\n041 Pikachu\n042 Pikachu\n043 Pikachu\n044 Pikachu\n045 Pikachu\n046 Pikachu\n047 Pikachu ex\n048 Pikachu ex\n049 Zapdos\n050 Zekrom\n051 Toxtricity\n052 Morpeko\n053 Miraidon\n054 Mewtwo\n055 Mewtwo ex\n056 Mew\n057 Mew ex\n058 Espeon\n059 Sylveon ex\n060 Unown\n061 Drifloon\n062 Chandelure\n063 Xerneas\n064 Cosmog\n065 Cosmoem\n066 Lunala\n067 Gimmighoul\n068 Groudon\n069 Lucario\n070 Seismitoad\n071 Lycanroc\n072 Koraidon\n073 Nidoran ♀\n074 Nidorina\n075 Alolan Meowth\n076 Gengar ex\n077 Umbreon\n078 Scraggy\n079 Yveltal\n080 Galarian Meowth\n081 Jirachi ex\n082 Dialga\n083 Ferrothorn\n084 Solgaleo\n085 Zacian\n086 Zamazenta\n087 Gholdengo\n088 Salamence ex\n089 Jangmo-o\n090 Hakamo-o\n091 Kommo-o\n092 Meowth\n093 Ditto\n094 Eevee\n095 Snorlax\n096 Igglybuff\n097 Lugia\n098 Hisuian Zorua\n099 Hisuian Zoroark\n100 Maushold\n101 Poke Pad\n102 Switch\n103 Ultra Ball' },
   { name: '30th-P First Partners', abbr: '30th-P', region: 'Simplified Chinese', official: 0,
     note: 'First Partner Illustration Collection, Series 1 (9 cards)',
     cards: '001 Bulbasaur\n002 Charmander\n003 Squirtle\n010 Turtwig\n011 Chimchar\n012 Piplup\n013 Rowlet\n014 Litten\n015 Popplio' }
@@ -1356,16 +1395,28 @@ function openAddSet() {
   sh.querySelector('small').textContent = 'It is added for the whole family and works like any set.';
   acts.innerHTML = '';
   const close = () => sh.classList.remove('open');
-  const done = id => { close(); ui.q = ''; location.hash = '#/set/' + id; };
-  PRESET_SETS.filter(ps => !Object.values(state.customSets).some(c => c.abbr === ps.abbr)).forEach(ps => {
-    const b = el('button', '', '<em>＋ ' + esc(ps.name) + '</em><span>' + esc(ps.note) + '</span>');
+  const done = id => { close(); ui.q = ''; const r = (state.customSets[id] || {}).region; const l = r && REGION_LANG[r]; if (l && l !== lang) { lang = l; try { localStorage.setItem(LANG_KEY, lang); } catch (e) {} window._sets = window._series = null; } location.hash = '#/set/' + id; };
+  PRESET_SETS.forEach(ps => {
+    const have = Object.keys(state.customSets).find(i => state.customSets[i].abbr === ps.abbr);
+    const lines = ps.cards.split(String.fromCharCode(10)).filter(Boolean).map(l => { const i = l.indexOf(' '); return [l.slice(0, i), l.slice(i + 1)]; });
+    if (!have) {
+      const b = el('button', '', '<em>＋ ' + esc(ps.name) + '</em><span>' + esc(ps.note) + '</span>');
+      b.querySelector('em').style.fontStyle = 'normal';
+      b.onclick = () => done(createCustomSet(ps.name, ps.abbr, ps.cards, ps.region, ps.official));
+      acts.appendChild(b);
+      return;
+    }
+    // already added: offer to fill in the missing cards and replace placeholder names ("Card 058") with the real ones
+    const mine = customIn(have), todo = lines.filter(([id, n]) => !mine[id] || /^Card \d+$/.test(mine[id]) && mine[id] !== n);
+    if (!todo.length) return;
+    const b = el('button', '', '<em>＋ Fill in ' + todo.length + ' card' + (todo.length === 1 ? '' : 's') + ' of ' + esc(ps.name) + '</em><span>names and any missing numbers</span>');
     b.querySelector('em').style.fontStyle = 'normal';
-    b.onclick = () => done(createCustomSet(ps.name, ps.abbr, ps.cards, ps.region, ps.official));
+    b.onclick = () => { todo.forEach(([id, n]) => addCustom(have, id, n)); window._sets = window._series = null; done(have); };
     acts.appendChild(b);
   });
   const name = el('input'); name.placeholder = 'Set name, e.g. 30th-P First Partners';
   const code = el('input'); code.placeholder = 'Code printed on the cards, e.g. 30th-P'; code.autocapitalize = 'characters';
-  const region = el('select'); region.innerHTML = '<option value="">Region of this release…</option>' + REGIONS.map(r => '<option>' + r + '</option>').join('');
+  const region = el('select'); region.innerHTML = '<option value="">Region of this release…</option>' + REGIONS.map(r => '<option' + (r === regionName(lang) && lang !== 'en' ? ' selected' : '') + '>' + r + '</option>').join('');
   const total = el('input'); total.placeholder = 'Printed set total, e.g. 103 (optional)'; total.inputMode = 'numeric';
   const cards = el('textarea'); cards.rows = 5; cards.placeholder = 'Cards, one per line: number then name\n001 Bulbasaur\n002 Charmander\n(optional — add more any time)';
   const go = el('button', 'primary', 'Create set');
@@ -1438,6 +1489,17 @@ function askSetLanguage(set) {
   b.querySelector('em').style.fontStyle = 'normal';
   b.onclick = () => { viewLang = null; close(); renderSet(); };
   acts.appendChild(b);
+  if (set.id === '30th' && all['zh-cn']) {
+    const mv = el('button', '', '<em>→ Move the Chinese cards into the Chinese 30th set</em><span>' + all['zh-cn'] + '</span>');
+    mv.querySelector('em').style.fontStyle = 'normal';
+    mv.onclick = () => {
+      if (!confirm('Move ' + all['zh-cn'] + ' Chinese card' + (all['zh-cn'] === 1 ? '' : 's') + ' (everyone in the family) out of the English 30th Celebration into a separate Simplified Chinese set?\n\nThe card numbers carry across. Their names are unknown, so they will be called "Card 058" until you rename them. English cards stay where they are.')) return;
+      const r = moveChineseTicks();
+      close();
+      if (r) { ui.q = ''; if (lang !== 'zh-cn') { lang = 'zh-cn'; try { localStorage.setItem(LANG_KEY, lang); } catch (e) {} window._sets = window._series = null; } location.hash = '#/set/' + r.toId; }
+    };
+    acts.appendChild(mv);
+  }
   acts.appendChild(el('div', 'hint', 'Change it any time with 🌐 Cards in at the top of the set. If that language has its own card list (e.g. the Chinese 30th), add it as its own set: home page → Set not listed?'));
   sh.querySelector('.x').onclick = close;
   sh.onclick = e => { if (e.target === sh) close(); };
@@ -1709,8 +1771,9 @@ function addCustomPrompt(set, presetId) {
   const localId = (presetId || prompt('Card number as printed (e.g. 100, or TG12):', '') || '').trim().replace(/\/.*$/, '');
   if (!localId) return;
   if (set.cards.some(c => c.localId === localId && !c.custom)) { alert('Card ' + localId + ' is already in this set.'); return; }
-  const name = (prompt('Card name:', (customIn(set.id)[localId] || '')) || '').trim();
-  if (!name) return;
+  const asked = prompt('Card name (leave empty if you cannot read it):', (customIn(set.id)[localId] || ''));
+  if (asked === null) return;
+  const name = asked.trim() || ('Card ' + localId);
   addCustom(set.id, localId, name);
   mergeCustom(set);
   const card = set.cards.find(c => c.localId === localId);
@@ -1803,7 +1866,7 @@ function openCardSheet(card) {
 // header count: cards, or printings when Master set is on
 function setTotals() {
   const set = window._set;
-  if (!master || !haveDetails()) return { have: ownedCount(set.id), total: set.cards.length, label: '' };
+  if (!master || !haveDetails()) return { have: ownedCount(set.id), total: set.custom ? Math.max(set.cards.length, set.cardCount.total || 0) : set.cards.length, label: '' };
   let have = 0, total = 0;
   set.cards.forEach(c => { total += variantsOf(c).length; have += ownedVariants(c).length; });
   return { have, total, label: ' printings' };
