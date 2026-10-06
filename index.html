@@ -518,7 +518,6 @@ function removeCustom(setId, localId) {
 // (other card lists, other numbering) rather than the English set in another language.
 const regionName = l => ((LANGS.find(x => x[0] === l) || ['', l])[1]).replace(/ \(.*/, '');
 const REGIONS = LANGS.map(l => regionName(l[0]));
-const REGION_LANG = Object.fromEntries(LANGS.map(l => [regionName(l[0]), l[0]]));
 const famSeries = region => ({ id: 'fam-' + (region ? region.toLowerCase().replace(/[^a-z]+/g, '-') : 'other'), name: region ? region + ' releases' : 'Added by the family' });
 function customSetData(id) {
   const cs = state.customSets && state.customSets[id];
@@ -528,7 +527,7 @@ function customSetData(id) {
   set.cardCount.total = Math.max(set.cards.length, set.cardCount.official);   // a 103-card set with 1 card added so far still counts out of 103
   return set;
 }
-const customSetList = () => Object.keys(state.customSets || {}).filter(id => { const r = state.customSets[id].region; return !r || (REGION_LANG[r] || 'en') === lang; }).map(id => { const d = customSetData(id); return { id, name: d.name, cardCount: d.cardCount, custom: true, region: d.region, serie: d.serie }; });
+const customSetList = () => Object.keys(state.customSets || {}).map(id => { const d = customSetData(id); return { id, name: d.name, cardCount: d.cardCount, custom: true, region: d.region, serie: d.serie }; });
 function createCustomSet(name, abbr, cardsText, region, official) {
   const slug = (abbr || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'set';
   let id = 'x-' + slug, n = 2;
@@ -871,10 +870,10 @@ function themeSelect() {
   return sel;
 }
 
-function langSelect(prefix) {
-  const sel = el('select', prefix ? 'cardlang' + (lang === 'en' ? '' : ' on') : '');
-  sel.title = 'Region of the releases you are browsing — Japanese, Chinese and Korean releases are separate sets with their own cards and numbering';
-  sel.innerHTML = LANGS.map(l => '<option value="' + l[0] + '"' + (l[0] === lang ? ' selected' : '') + '>' + (prefix || '') + (prefix ? regionName(l[0]) : l[1]) + '</option>').join('');
+function langSelect() {
+  const sel = el('select');
+  sel.title = 'Card language — Japanese and Asian sets have their own numbering';
+  sel.innerHTML = LANGS.map(l => '<option value="' + l[0] + '"' + (l[0] === lang ? ' selected' : '') + '>' + l[1] + '</option>').join('');
   sel.onchange = () => {
     lang = sel.value;
     try { localStorage.setItem(LANG_KEY, lang); } catch (e) {}
@@ -923,7 +922,7 @@ function viewPeople() {
   bk.appendChild(makeButton('Import', importProgress, 'Replace everything with an exported file'));
   box.appendChild(bk);
   box.appendChild(el('h2', '', 'Catalogue language'));
-  box.appendChild(el('div', 'note', 'Japanese, Chinese and Korean releases are separate sets with their own cards and numbering, not the English set in another language. Pick the region on the home page (🌏 Sets) to browse them; sets TCGdex does not list yet can be added under that region.'));
+  box.appendChild(el('div', 'note', 'Normally leave this on English. Japanese, Chinese and Korean releases are separate sets with their own numbering, so switch this only if you collect those releases. A release TCGdex does not list (like the Chinese 30th Celebration) can be added from the bottom of the home page: Set not listed? Add it.'));
   box.appendChild(langSelect());
   main.appendChild(box);
 }
@@ -1306,7 +1305,7 @@ let lookoutJob = 0;
 async function viewHome() {
   const main = $('main');
   main.innerHTML = '<div class="empty">Loading…</div>';
-  setHeader({ title: '<span>◆</span> TCG Pokédex', controls: [personSelect(), langSelect('🌏 Sets: '), cardLangSelect(), themeSelect(), scanButton(), makeSearch('Search cards, sets or codes', () => renderHome())] });
+  setHeader({ title: '<span>◆</span> TCG Pokédex', controls: [personSelect(), cardLangSelect(), themeSelect(), scanButton(), makeSearch('Search cards, sets or codes', () => renderHome())] });
   try {
     window._series = await getJSON('series');
     window._sets = await getJSON('sets');
@@ -1395,7 +1394,7 @@ function openAddSet() {
   sh.querySelector('small').textContent = 'It is added for the whole family and works like any set.';
   acts.innerHTML = '';
   const close = () => sh.classList.remove('open');
-  const done = id => { close(); ui.q = ''; const r = (state.customSets[id] || {}).region; const l = r && REGION_LANG[r]; if (l && l !== lang) { lang = l; try { localStorage.setItem(LANG_KEY, lang); } catch (e) {} window._sets = window._series = null; } location.hash = '#/set/' + id; };
+  const done = id => { close(); ui.q = ''; location.hash = '#/set/' + id; };
   PRESET_SETS.forEach(ps => {
     const have = Object.keys(state.customSets).find(i => state.customSets[i].abbr === ps.abbr);
     const lines = ps.cards.split(String.fromCharCode(10)).filter(Boolean).map(l => { const i = l.indexOf(' '); return [l.slice(0, i), l.slice(i + 1)]; });
@@ -1416,7 +1415,7 @@ function openAddSet() {
   });
   const name = el('input'); name.placeholder = 'Set name, e.g. 30th-P First Partners';
   const code = el('input'); code.placeholder = 'Code printed on the cards, e.g. 30th-P'; code.autocapitalize = 'characters';
-  const region = el('select'); region.innerHTML = '<option value="">Region of this release…</option>' + REGIONS.map(r => '<option' + (r === regionName(lang) && lang !== 'en' ? ' selected' : '') + '>' + r + '</option>').join('');
+  const region = el('select'); region.innerHTML = '<option value="">Region of this release…</option>' + REGIONS.map(r => '<option>' + r + '</option>').join('');
   const total = el('input'); total.placeholder = 'Printed set total, e.g. 103 (optional)'; total.inputMode = 'numeric';
   const cards = el('textarea'); cards.rows = 5; cards.placeholder = 'Cards, one per line: number then name\n001 Bulbasaur\n002 Charmander\n(optional — add more any time)';
   const go = el('button', 'primary', 'Create set');
@@ -1496,7 +1495,7 @@ function askSetLanguage(set) {
       if (!confirm('Move ' + all['zh-cn'] + ' Chinese card' + (all['zh-cn'] === 1 ? '' : 's') + ' (everyone in the family) out of the English 30th Celebration into a separate Simplified Chinese set?\n\nThe card numbers carry across. Their names are unknown, so they will be called "Card 058" until you rename them. English cards stay where they are.')) return;
       const r = moveChineseTicks();
       close();
-      if (r) { ui.q = ''; if (lang !== 'zh-cn') { lang = 'zh-cn'; try { localStorage.setItem(LANG_KEY, lang); } catch (e) {} window._sets = window._series = null; } location.hash = '#/set/' + r.toId; }
+      if (r) { ui.q = ''; location.hash = '#/set/' + r.toId; }
     };
     acts.appendChild(mv);
   }
