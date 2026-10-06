@@ -335,7 +335,7 @@
   <div class="controls" id="controls"></div>
 </header>
 <main id="main"></main>
-<footer id="foot"><div id="syncStatus"></div>Tap a card to mark it owned by the user selected at the top. Use Export to back up. Card data and prices from TCGdex.</footer>
+<footer id="foot"><div id="syncStatus"></div>Tap a card to mark it owned by the user selected at the top. Use Export to back up. Card data and prices from TCGdex. <span id="ver"></span></footer>
 <div id="lb"><img id="lbImg" alt=""></div>
 <div id="scan">
   <div class="cam"><video playsinline autoplay muted></video><div class="guide"><span>Fill the outline with the card and hold still.<br>Glare is fine — it matches the picture, not the number.</span><i class="zone"></i></div></div>
@@ -400,6 +400,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
+const APP_VERSION = 'v40';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -2853,6 +2854,7 @@ function route() {
 }
 window.addEventListener('hashchange', () => { ui.q = ''; ui.langSet = null; viewLang = null; $('sheet').classList.remove('open'); route(); });
 loadState();
+try { $('ver').textContent = '· App ' + APP_VERSION; } catch (e) {}
 // a shared link carries ?family=<code>; remember it and tidy the address bar
 let family = '';
 try {
