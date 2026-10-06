@@ -158,6 +158,7 @@
 
   /* compact list for checking in a shop */
   .list { display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+  .card .enart { position: absolute; left: 6px; bottom: 44px; font-size: 9px; font-weight: 700; letter-spacing: .04em; padding: 1px 5px; border-radius: 6px; background: rgba(20,20,24,.72); color: #fff; pointer-events: none; }
   .addcard { border: 2px dashed var(--line); background: transparent; color: var(--muted); border-radius: var(--radius); padding: 14px 10px; font-size: 13px; min-height: 60px; }
   .grid .addcard { aspect-ratio: 63 / 100; }
   .addcard:hover { color: var(--text); border-color: var(--accent); }
@@ -522,17 +523,21 @@ const famSeries = region => ({ id: 'fam-' + (region ? region.toLowerCase().repla
 function customSetData(id) {
   const cs = state.customSets && state.customSets[id];
   if (!cs) return null;
-  const set = { id, name: cs.name, cardCount: { total: 0, official: cs.official || 0 }, cards: [], serie: famSeries(cs.region), abbreviation: { official: cs.abbr || '' }, custom: true, region: cs.region || '' };
+  const set = { id, name: cs.name, cardCount: { total: 0, official: cs.official || 0 }, cards: [], serie: famSeries(cs.region), abbreviation: { official: cs.abbr || '' }, custom: true, region: cs.region || '', parent: parentOf(id) };
   mergeCustom(set);
   set.cardCount.total = Math.max(set.cards.length, set.cardCount.official);   // a 103-card set with 1 card added so far still counts out of 103
   return set;
 }
-const customSetList = () => Object.keys(state.customSets || {}).map(id => { const d = customSetData(id); return { id, name: d.name, cardCount: d.cardCount, custom: true, region: d.region, serie: d.serie }; });
-function createCustomSet(name, abbr, cardsText, region, official) {
+// The catalogue set an added set is an edition of (a regional release): it is not listed on its own, it is chosen
+// inside its parent. Sets made before editions existed are matched by their code.
+const parentOf = id => { const cs = (state.customSets || {})[id]; return cs ? (cs.parent || (cs.abbr === '30th-C' || cs.abbr === '30th-P' ? '30th' : '')) : ''; };
+const childrenOf = id => Object.keys(state.customSets || {}).filter(i => parentOf(i) === id);
+const customSetList = () => Object.keys(state.customSets || {}).filter(id => !parentOf(id)).map(id => { const d = customSetData(id); return { id, name: d.name, cardCount: d.cardCount, custom: true, region: d.region, serie: d.serie }; });
+function createCustomSet(name, abbr, cardsText, region, official, parent) {
   const slug = (abbr || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'set';
   let id = 'x-' + slug, n = 2;
   while (state.customSets[id]) id = 'x-' + slug + '-' + n++;
-  state.customSets[id] = { name, abbr: abbr || '', region: region || '', official: +official || 0 };
+  state.customSets[id] = { name, abbr: abbr || '', region: region || '', official: +official || 0, parent: parent || '' };
   saveState(); sync.writeCustomSet(id, state.customSets[id]);
   (cardsText || '').split('\n').forEach(line => {
     const m = line.trim().match(/^([A-Za-z0-9-]+)\s*[,:\t -]?\s*(.+)$/);
@@ -589,6 +594,9 @@ function removeCustomSet(id) {
   saveState();
   window._sets = window._series = null;
 }
+// Stand-in pictures: TCGdex has no pictures for the Chinese 30th Celebration, but the English set has the same Pokémon
+// (101 of 103 by name; the 30 Pikachu in the same order). A card keeps its own number; only the picture is borrowed.
+const ART = { '30th-C': { base: 'https://assets.tcgdex.net/en/me/30th/', map: { '001':'001','002':'002','003':'003','004':'004','005':'008','006':'011','007':'012','008':'014','009':'015','010':'016','011':'017','012':'018','013':'019','014':'020','015':'021','016':'022','017':'023','018':'024','019':'025','020':'026','021':'027','022':'028','023':'029','024':'030','025':'031','026':'032','027':'033','028':'034','029':'035','030':'036','031':'037','032':'038','033':'039','034':'040','035':'041','036':'042','037':'043','038':'044','039':'045','040':'046','041':'047','042':'048','043':'049','044':'050','045':'051','046':'052','047':'053','048':'054','049':'055','050':'056','051':'059','052':'061','053':'062','054':'063','055':'064','056':'065','057':'066','058':'069','059':'071','060':'072','061':'073','062':'075','063':'076','064':'078','065':'079','066':'080','067':'081','068':'082','069':'083','070':'084','071':'085','072':'086','073':'087','074':'088','075':'089','076':'090','077':'091','078':'094','079':'100','080':'101','081':'102','082':'103','083':'104','084':'105','085':'106','086':'107','087':'108','088':'109','089':'110','090':'111','091':'112','092':'113','093':'115','094':'116','095':'119','096':'120','097':'121','098':'122','099':'123','100':'125','101':'126','102':'127','103':'128' } } };
 // slot the family's added cards into a set's card list (skipping any the catalogue has since picked up), in number order
 function mergeCustom(set) {
   if (!set || !set.cards) return set;
@@ -596,7 +604,8 @@ function mergeCustom(set) {
   const num = x => /^\d+$/.test(x) ? +x : null;
   Object.entries((state.custom || {})[setKey(set.id)] || {}).forEach(([localId, name]) => {
     if (set.cards.some(c => c.localId === localId)) return;
-    const card = { id: set.id + '-' + localId, localId, name, image: null, custom: true };
+    const a = ART[(state.customSets[set.id] || {}).abbr], enId = a && a.map[localId];
+    const card = { id: set.id + '-' + localId, localId, name, image: enId ? a.base + enId : null, standin: !!enId, custom: true };
     const n = num(localId);
     let at = set.cards.length;
     if (n != null) { for (let i = 0; i < set.cards.length; i++) { const m = num(set.cards[i].localId); if (m != null && m > n) { at = i; break; } } }
@@ -674,7 +683,7 @@ const sync = {
       Object.entries(data.custom || {}).forEach(([k, cards]) => { custom[unKey(k)] = {}; Object.entries(cards || {}).forEach(([id, name]) => { custom[unKey(k)][unKey(id)] = String(name); }); });
       state.custom = custom;
       const csets = {};
-      Object.entries(data.customsets || {}).forEach(([id, v]) => { csets[unKey(id)] = { name: String((v && v.name) || id), abbr: String((v && v.abbr) || ''), region: String((v && v.region) || ''), official: +(v && v.official) || 0 }; });
+      Object.entries(data.customsets || {}).forEach(([id, v]) => { csets[unKey(id)] = { name: String((v && v.name) || id), abbr: String((v && v.abbr) || ''), region: String((v && v.region) || ''), official: +(v && v.official) || 0, parent: String((v && v.parent) || '') }; });
       state.customSets = csets;
       window._sets = window._series = null;
       normalise(); saveState();
@@ -1044,7 +1053,7 @@ function setRow(set) {
   const abbr = abbrOf(set.id), date = dateOf(set.id);
   const row = el('button', 'row');
   row.innerHTML = setArt(set) +
-    '<div class="t"><b></b><small>' + (abbr ? abbr + ' · ' : '') + (set.cardCount.official && total > set.cardCount.official ? set.cardCount.official + ' + ' + (total - set.cardCount.official) + ' secret' : total + ' cards') + (date ? ' · ' + date : '') + (set.region ? ' · ' + set.region : '') + '</small>' +
+    '<div class="t"><b></b><small>' + (abbr ? abbr + ' · ' : '') + (set.cardCount.official && total > set.cardCount.official ? set.cardCount.official + ' + ' + (total - set.cardCount.official) + ' secret' : total + ' cards') + (date ? ' · ' + date : '') + (set.region ? ' · ' + set.region : '') + childrenOf(set.id).map(k => ' · + ' + (state.customSets[k].region || state.customSets[k].name) + ' ' + ownedCountAll(k) + '/' + Math.max(customSetData(k).cards.length, state.customSets[k].official || 0)).join('') + '</small>' +
     '<div class="mini"><i style="width:' + pct(have, total) + '%"></i></div></div>' +
     '<div class="pct' + (have >= total && total ? ' done' : '') + '">' + have + '/' + total + '</div>';
   row.dataset.set = set.id;
@@ -1352,7 +1361,7 @@ function renderHome() {
 
   if (allOwnedCards().length) { main.appendChild(el('h2', '', 'Collection value')); main.appendChild(valuePanel()); loadFamilyValues(); }
 
-  const mine = sets.filter(s => ownedCount(s.id) > 0);
+  const mine = sets.filter(s => ownedCount(s.id) > 0 || childrenOf(s.id).some(k => ownedCountAll(k) > 0));
   if (mine.length) {
     main.appendChild(el('h2', '', esc(me().name) + "'s sets"));
     const rows = el('div', 'rows'); mine.forEach(s => rows.appendChild(setRow(s))); main.appendChild(rows);
@@ -1380,10 +1389,10 @@ function renderHome() {
 
 // ready-made lists for sets TCGdex is known not to have; one tap creates them
 const PRESET_SETS = [
-  { name: '30th Celebration (Simplified Chinese)', abbr: '30th-C', region: 'Simplified Chinese', official: 103,
+  { name: '30th Celebration (Simplified Chinese)', abbr: '30th-C', region: 'Simplified Chinese', official: 103, parent: '30th',
     note: 'The 103-card main set, 001–103 (the 30 Pikachu are 017–046). Secret rares past 103 are added as you get them — sources disagree on that list.',
     cards: '001 Exeggcute\n002 Alolan Exeggutor\n003 Volbeat\n004 Illumise\n005 Vivillon\n006 Moltres\n007 Ho-Oh\n008 Reshiram\n009 Fuecoco ex\n010 Slowpoke\n011 Lapras\n012 Articuno\n013 Kyogre\n014 Palkia\n015 Greninja ex\n016 Wishiwashi\n017 Pikachu\n018 Pikachu\n019 Pikachu\n020 Pikachu\n021 Pikachu\n022 Pikachu\n023 Pikachu\n024 Pikachu\n025 Pikachu\n026 Pikachu\n027 Pikachu\n028 Pikachu\n029 Pikachu\n030 Pikachu\n031 Pikachu\n032 Pikachu\n033 Pikachu\n034 Pikachu\n035 Pikachu\n036 Pikachu\n037 Pikachu\n038 Pikachu\n039 Pikachu\n040 Pikachu\n041 Pikachu\n042 Pikachu\n043 Pikachu\n044 Pikachu\n045 Pikachu\n046 Pikachu\n047 Pikachu ex\n048 Pikachu ex\n049 Zapdos\n050 Zekrom\n051 Toxtricity\n052 Morpeko\n053 Miraidon\n054 Mewtwo\n055 Mewtwo ex\n056 Mew\n057 Mew ex\n058 Espeon\n059 Sylveon ex\n060 Unown\n061 Drifloon\n062 Chandelure\n063 Xerneas\n064 Cosmog\n065 Cosmoem\n066 Lunala\n067 Gimmighoul\n068 Groudon\n069 Lucario\n070 Seismitoad\n071 Lycanroc\n072 Koraidon\n073 Nidoran ♀\n074 Nidorina\n075 Alolan Meowth\n076 Gengar ex\n077 Umbreon\n078 Scraggy\n079 Yveltal\n080 Galarian Meowth\n081 Jirachi ex\n082 Dialga\n083 Ferrothorn\n084 Solgaleo\n085 Zacian\n086 Zamazenta\n087 Gholdengo\n088 Salamence ex\n089 Jangmo-o\n090 Hakamo-o\n091 Kommo-o\n092 Meowth\n093 Ditto\n094 Eevee\n095 Snorlax\n096 Igglybuff\n097 Lugia\n098 Hisuian Zorua\n099 Hisuian Zoroark\n100 Maushold\n101 Poke Pad\n102 Switch\n103 Ultra Ball' },
-  { name: '30th-P First Partners', abbr: '30th-P', region: 'Simplified Chinese', official: 0,
+  { name: '30th-P First Partners', abbr: '30th-P', region: 'Simplified Chinese', official: 0, parent: '30th',
     note: 'First Partner Illustration Collection, Series 1 (9 cards)',
     cards: '001 Bulbasaur\n002 Charmander\n003 Squirtle\n010 Turtwig\n011 Chimchar\n012 Piplup\n013 Rowlet\n014 Litten\n015 Popplio' }
 ];
@@ -1401,7 +1410,7 @@ function openAddSet() {
     if (!have) {
       const b = el('button', '', '<em>＋ ' + esc(ps.name) + '</em><span>' + esc(ps.note) + '</span>');
       b.querySelector('em').style.fontStyle = 'normal';
-      b.onclick = () => done(createCustomSet(ps.name, ps.abbr, ps.cards, ps.region, ps.official));
+      b.onclick = () => done(createCustomSet(ps.name, ps.abbr, ps.cards, ps.region, ps.official, ps.parent));
       acts.appendChild(b);
       return;
     }
@@ -1417,10 +1426,11 @@ function openAddSet() {
   const code = el('input'); code.placeholder = 'Code printed on the cards, e.g. 30th-P'; code.autocapitalize = 'characters';
   const region = el('select'); region.innerHTML = '<option value="">Region of this release…</option>' + REGIONS.map(r => '<option>' + r + '</option>').join('');
   const total = el('input'); total.placeholder = 'Printed set total, e.g. 103 (optional)'; total.inputMode = 'numeric';
+  const parent = el('select'); parent.innerHTML = '<option value="">Edition of an English set? (optional)…</option>' + (window._sets || []).filter(x => !x.custom).slice().reverse().map(x => '<option value="' + esc(x.id) + '">' + esc(x.name) + '</option>').join('');
   const cards = el('textarea'); cards.rows = 5; cards.placeholder = 'Cards, one per line: number then name\n001 Bulbasaur\n002 Charmander\n(optional — add more any time)';
   const go = el('button', 'primary', 'Create set');
-  go.onclick = () => { if (!name.value.trim()) { name.focus(); return; } done(createCustomSet(name.value.trim(), code.value.trim(), cards.value, region.value, total.value)); };
-  acts.append(el('div', 'hint', 'Or make your own'), name, code, region, total, cards, go);
+  go.onclick = () => { if (!name.value.trim()) { name.focus(); return; } done(createCustomSet(name.value.trim(), code.value.trim(), cards.value, region.value, total.value, parent.value)); };
+  acts.append(el('div', 'hint', 'Or make your own'), name, code, region, parent, total, cards, go);
   sh.querySelector('.x').onclick = close;
   sh.onclick = e => { if (e.target === sh) close(); };
   sh.classList.add('open');
@@ -1458,11 +1468,48 @@ async function viewSet(id) {
   details = (cached && cached.cards) || {};
   // cards held in more than one language: one language's collection at a time, asked once per visit
   const held = Object.keys(langCounts(id));
-  if (held.length < 2) { viewLang = null; ui.langSet = id; }
+  if (childrenOf(id).length) { if (ui.langSet !== id) askEdition(set); }
+  else if (held.length < 2) { viewLang = null; ui.langSet = id; }
   else if (ui.langSet !== id) { viewLang = held.includes(cardLang) ? cardLang : null; askSetLanguage(set); }
   else if (viewLang && !held.includes(viewLang) && viewLang !== cardLang) viewLang = null;
   renderSet();
   loadDetails(set, cached);
+}
+// A set with regional editions (the Chinese 30th Celebration under the English one): choose which one to open.
+function askEdition(set) {
+  const sh = $('sheet'), acts = sh.querySelector('.acts');
+  sh.classList.add('noimg');
+  sh.querySelector('b').textContent = set.name;
+  sh.querySelector('small').textContent = 'This set has other editions with their own cards and numbering — which one?';
+  acts.innerHTML = '';
+  const close = () => { ui.langSet = set.id; sh.classList.remove('open'); };
+  const row = (label, right, onclick, on) => {
+    const b = el('button', on ? 'on' : '', '<em>' + esc(label) + '</em><span>' + esc(right) + '</span>');
+    b.querySelector('em').style.fontStyle = 'normal'; b.onclick = onclick; acts.appendChild(b);
+  };
+  row('English', ownedCountAll(set.id) + ' / ' + set.cards.length, () => {
+    viewLang = Object.keys(langCounts(set.id)).length > 1 ? 'en' : null;   // leftover ticks in another language stay out of the English view
+    close(); renderSet();
+  }, true);
+  childrenOf(set.id).forEach(k => {
+    const d = customSetData(k);
+    row(d.region || d.name, ownedCountAll(k) + ' / ' + d.cardCount.total + (d.region && d.name ? '' : ''), () => { sh.classList.remove('open'); ui.q = ''; location.hash = '#/set/' + k; });
+  });
+  const strays = langCounts(set.id)['zh-cn'];
+  if (set.id === '30th' && strays) {
+    const mv = el('button', '', '<em>→ Move the ' + strays + ' Chinese card' + (strays === 1 ? '' : 's') + ' ticked here into the Chinese edition</em><span></span>');
+    mv.querySelector('em').style.fontStyle = 'normal';
+    mv.onclick = () => {
+      if (!confirm('Move ' + strays + ' Chinese card' + (strays === 1 ? '' : 's') + ' (everyone in the family) out of the English 30th Celebration into its Simplified Chinese edition?\n\nThe card numbers carry across; names fill in from the Chinese list. English cards stay where they are.')) return;
+      const r = moveChineseTicks(); sh.classList.remove('open');
+      if (r) { ui.q = ''; location.hash = '#/set/' + r.toId; }
+    };
+    acts.appendChild(mv);
+  }
+  acts.appendChild(el('div', 'hint', 'Change edition any time with the Edition button at the top of the set'));
+  sh.querySelector('.x').onclick = close;
+  sh.onclick = e => { if (e.target === sh) close(); };
+  sh.classList.add('open');
 }
 function setCardLang(l) {
   cardLang = l; try { localStorage.setItem(CARD_LANG_KEY, l); } catch (e) {}
@@ -1654,7 +1701,7 @@ function makeCard(c) {
   n.innerHTML =
     '<span class="tick">' + (have && !complete && master ? got.length + '/' + avail.length : '✓') + (tag ? '<b>' + tag + '</b>' : '') + '</span>' +
     (c.image ? '<button class="zoom" title="View card" aria-label="View card">⤢</button>' : '') + star +
-    '<img loading="lazy" alt="" src="' + (c.image ? c.image + '/low.webp' : '') + '">' +
+    '<img loading="lazy" alt="" src="' + (c.image ? c.image + '/low.webp' : '') + '">' + (c.standin ? '<span class="enart" title="Picture borrowed from the English card with the same Pokémon">EN art</span>' : '') +
     '<div class="ph"></div>' +
     '<div class="num">' + esc(cardNum(c)) + '</div><div class="name"></div>' + chips +
     '<div class="meta"><span class="rar"></span>' + who + wantBadge + '<span class="price">' + price + '</span></div>';
@@ -1728,9 +1775,11 @@ function renderSetHeader() {
     if (master) ms.classList.add('on');
     controls.push(ms);
   }
+  const parentId = set.custom ? set.parent : set.id;
+  if (parentId && childrenOf(parentId).length) controls.push(makeButton('Edition…', () => { if (set.custom) { location.hash = '#/set/' + parentId; } else { ui.langSet = null; askEdition(set); } }, 'Switch between the English set and its regional editions'));
   controls.push(makeButton('Print placeholders', printPlaceholders, 'Print the cards you still need at real size, to fill binder pockets'));
   setHeader({
-    title: esc(set.name) + (set.region ? ' <small class="vl rg">' + esc(set.region) + '</small>' : '') + (viewLang ? ' <small class="vl">' + esc(langName(viewLang)) + '</small>' : ''), back: set.serie ? '#/series/' + set.serie.id : '#/',
+    title: esc(set.name) + (set.region ? ' <small class="vl rg">' + esc(set.region) + '</small>' : '') + (viewLang ? ' <small class="vl">' + esc(langName(viewLang)) + '</small>' : ''), back: set.custom && set.parent ? '#/set/' + set.parent : set.serie ? '#/series/' + set.serie.id : '#/',
     count: t.have + ' / ' + t.total + t.label, progress: pct(t.have, t.total), controls
   });
   renderStats();
@@ -1846,7 +1895,7 @@ function openCardSheet(card) {
     if (card.custom) {
       acts.appendChild(makeButton('✎ Rename', () => { const name = (prompt('Card name:', card.name) || '').trim(); if (name) { addCustom(set.id, card.localId, name); card.name = name; refreshCardNode(card); } close(); }));
       acts.appendChild(makeButton('🗑 Remove this added card', () => { if (confirm('Remove ' + card.name + ' (' + card.localId + ') from this set for the whole family?')) { removeCustom(set.id, card.localId); setCard(state.current, key, card.localId, false, '*'); mergeCustom(set); renderSet(); } close(); }));
-      acts.appendChild(el('div', 'hint', 'Added by the family — TCGdex does not list this card yet'));
+      acts.appendChild(el('div', 'hint', card.standin ? 'Added by the family. The picture is the English card with the same Pokémon — the Chinese card may look different.' : 'Added by the family — TCGdex does not list this card yet'));
     }
     const others = ownersOf(set.id, card.localId).filter(p => p.id !== state.current);
     if (others.length) acts.appendChild(el('div', 'hint', 'Also owned by ' + esc(others.map(p => p.name).join(', '))));
