@@ -109,6 +109,8 @@
   .row .t { flex: 1; min-width: 0; }
   .row .t b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row .t small { color: var(--muted); }
+  .row .t b .yr { font-size: 12px; font-weight: 600; color: var(--muted); margin-left: 4px; }
+  #title small.vl.yr { background: rgba(255,255,255,.25); }
   .row .pct { font-weight: 600; white-space: nowrap; }
   .row .pct.done { color: var(--owned); }
   .row .mini { height: 4px; background: var(--card-miss); border-radius: 2px; margin-top: 6px; overflow: hidden; }
@@ -400,7 +402,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v40';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v43';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -1088,6 +1090,7 @@ function dateOf(setId) {
   const full = cacheGet('sets/' + setId);
   return (full && full.releaseDate) || (window._dates && window._dates[setId]) || '';
 }
+const yearOf = setId => { const m = dateOf(setId).match(/^(\d{4})/); return m ? m[1] : ''; };
 // release dates for every set in one GraphQL call, cached per device
 async function loadDates() {
   window._dates = cacheGet('dates');
@@ -1122,14 +1125,15 @@ window.setArtFallback = img => {
 
 function setRow(set) {
   const total = set.cardCount.total, have = ownedCount(set.id);
-  const abbr = abbrOf(set.id), date = dateOf(set.id);
+  const abbr = abbrOf(set.id), year = yearOf(set.id);
   const row = el('button', 'row');
   row.innerHTML = setArt(set) +
-    '<div class="t"><b></b><small>' + (abbr ? abbr + ' · ' : '') + (set.cardCount.official && total - (set.classics || 0) > set.cardCount.official ? set.cardCount.official + ' + ' + (total - set.cardCount.official - (set.classics || 0)) + ' secret' + (set.classics ? ' + ' + set.classics + ' classic' : '') : total + ' cards') + (date ? ' · ' + date : '') + (set.region ? ' · ' + set.region : '') + childrenOf(set.id).map(k => ' · + ' + (state.customSets[k].region || state.customSets[k].name) + ' ' + ownedCountAll(k) + '/' + Math.max(customSetData(k).cards.length, state.customSets[k].official || 0)).join('') + '</small>' +
+    '<div class="t"><b></b><small>' + (abbr ? abbr + ' · ' : '') + (set.cardCount.official && total - (set.classics || 0) > set.cardCount.official ? set.cardCount.official + ' + ' + (total - set.cardCount.official - (set.classics || 0)) + ' secret' + (set.classics ? ' + ' + set.classics + ' classic' : '') : total + ' cards') + (set.region ? ' · ' + set.region : '') + childrenOf(set.id).map(k => ' · + ' + (state.customSets[k].region || state.customSets[k].name) + ' ' + ownedCountAll(k) + '/' + Math.max(customSetData(k).cards.length, state.customSets[k].official || 0)).join('') + '</small>' +
     '<div class="mini"><i style="width:' + pct(have, total) + '%"></i></div></div>' +
     '<div class="pct' + (have >= total && total ? ' done' : '') + '">' + have + '/' + total + '</div>';
   row.dataset.set = set.id;
   row.querySelector('b').textContent = set.name;
+  if (year) row.querySelector('b').insertAdjacentHTML('beforeend', ' <span class="yr">' + year + '</span>');
   row.onclick = () => { ui.q = ''; location.hash = '#/set/' + set.id; };
   return row;
 }
@@ -1406,12 +1410,18 @@ function renderHome() {
 
   if (q) {
     const hits = sets.filter(s => setMatches(s, q));
+    // added editions (30th-C, 30th-P...) sit under their English set, so find them here by code, name or region, in any language
+    Object.keys(state.customSets || {}).filter(k => parentOf(k) && !hits.some(h => h.id === k)).forEach(k => {
+      const cs = state.customSets[k], hay = [cs.name, cs.abbr, cs.region].join(' ').toLowerCase();
+      if (hay.includes(q) || (cs.abbr || '').toLowerCase().startsWith(q)) { const d = customSetData(k); hits.push({ id: k, name: d.name, cardCount: d.cardCount, custom: true, region: d.region, serie: d.serie }); }
+    });
     if (hits.length) {
       main.appendChild(el('h2', '', hits.length + ' set' + (hits.length === 1 ? '' : 's')));
       const rows = el('div', 'rows'); hits.forEach(s => rows.appendChild(setRow(s))); main.appendChild(rows);
     }
     if (q.length >= 2 && lang === 'en') renderCardResults(main, q);
     else if (!hits.length) main.appendChild(el('div', 'empty', 'No set matches.'));
+    if (!hits.length) { const add = el('button', 'addcard', '＋ Set not listed? Add it'); add.onclick = openAddSet; main.appendChild(add); }
     return;
   }
 
@@ -1521,6 +1531,7 @@ async function viewSeries(id) {
   let sr;
   try { sr = await getJSON('series/' + id); }
   catch (e) { main.innerHTML = '<div class="note">Could not load this series (no internet?).</div>'; return; }
+  if (lang === 'en' && !window._dates) await loadDates();
   setHeader({ title: esc(sr.name), back: '#/', controls: [personSelect()] });
   main.innerHTML = '';
   const rows = el('div', 'rows');
@@ -1570,7 +1581,14 @@ function askEdition(set) {
   }, true);
   childrenOf(set.id).forEach(k => {
     const d = customSetData(k);
-    row(d.region || d.name, ownedCountAll(k) + ' / ' + d.cardCount.total + (d.region && d.name ? '' : ''), () => { sh.classList.remove('open'); ui.q = ''; location.hash = '#/set/' + k; });
+    row(d.name, ownedCountAll(k) + ' / ' + d.cardCount.total, () => { sh.classList.remove('open'); ui.q = ''; location.hash = '#/set/' + k; });
+  });
+  // ready-made editions of this set that have not been added yet are offered here too
+  PRESET_SETS.filter(ps => ps.parent === set.id && !Object.keys(state.customSets).some(i => state.customSets[i].abbr === ps.abbr)).forEach(ps => {
+    row('＋ ' + ps.name, ps.cards.split(String.fromCharCode(10)).filter(Boolean).length + ' cards · add', () => {
+      const id = createCustomSet(ps.name, ps.abbr, ps.cards, ps.region, ps.official, ps.parent, ps.plainFrom);
+      sh.classList.remove('open'); ui.q = ''; location.hash = '#/set/' + id;
+    });
   });
   const strays = langCounts(set.id)['zh-cn'];
   if (set.id === '30th' && strays) {
@@ -1860,7 +1878,7 @@ function renderSetHeader() {
   if (parentId && childrenOf(parentId).length) controls.push(makeButton('Edition…', () => { if (set.custom) { location.hash = '#/set/' + parentId; } else { ui.langSet = null; askEdition(set); } }, 'Switch between the English set and its regional editions'));
   controls.push(makeButton('Print placeholders', printPlaceholders, 'Print the cards you still need at real size, to fill binder pockets'));
   setHeader({
-    title: esc(set.name) + (set.region ? ' <small class="vl rg">' + esc(set.region) + '</small>' : '') + (viewLang ? ' <small class="vl">' + esc(langName(viewLang)) + '</small>' : ''), back: set.custom && set.parent ? '#/set/' + set.parent : set.serie ? '#/series/' + set.serie.id : '#/',
+    title: esc(set.name) + (yearOf(set.id) ? ' <small class="vl yr">' + yearOf(set.id) + '</small>' : '') + (set.region ? ' <small class="vl rg">' + esc(set.region) + '</small>' : '') + (viewLang ? ' <small class="vl">' + esc(langName(viewLang)) + '</small>' : ''), back: set.custom && set.parent ? '#/set/' + set.parent : set.serie ? '#/series/' + set.serie.id : '#/',
     count: t.have + ' / ' + t.total + t.label, progress: pct(t.have, t.total), controls
   });
   renderStats();
