@@ -85,6 +85,8 @@
   header button.on { background: var(--seg-on); border-color: var(--seg-on); color: var(--seg-fg); }
   select.person { font-weight: 600; border-color: var(--person, var(--ctrl-line)); }
   select.cardlang.on { border-color: var(--accent); font-weight: 600; }
+  #title small.vl.rg { background: #6b4fbb; }
+  #title small.vl { font-size: 12px; font-weight: 600; padding: 2px 7px; border-radius: 10px; background: var(--accent); color: #fff; vertical-align: middle; margin-left: 4px; }
   .seg { display: flex; }
   .seg button { border-radius: 0; margin-left: -1px; }
   .seg button:first-child { border-radius: var(--radius) 0 0 var(--radius); margin-left: 0; }
@@ -240,6 +242,7 @@
   #sheet.open { display: flex; }
   #sheet .box { background: var(--panel); color: var(--text); border-radius: 18px 18px 0 0; padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); width: 100%; max-width: 520px; box-shadow: 0 -4px 24px rgba(0,0,0,.3); }
   #sheet .head { display: flex; gap: 12px; align-items: center; margin-bottom: 12px; }
+  #sheet.noimg .head img { display: none; }
   #sheet .head img { width: 56px; aspect-ratio: 63/88; object-fit: contain; border-radius: 4px; background: var(--card-miss); }
   #sheet .head .t { flex: 1; min-width: 0; }
   #sheet .head b { display: block; font-size: 17px; }
@@ -253,6 +256,9 @@
   #sheet .acts button.want { color: #a07800; border-color: #e0a800; }
   #sheet .acts button.want.on { background: #e0a800; border-color: #e0a800; color: #fff; }
   #sheet .acts .hint { font-size: 12px; color: var(--muted); text-align: center; margin-top: 4px; }
+  #sheet .acts select { width: 100%; padding: 10px; border-radius: 10px; font: inherit; }
+  #sheet .acts input, #sheet .acts textarea { width: 100%; box-sizing: border-box; padding: 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); color: var(--text); font: inherit; }
+  #sheet .acts button.primary { background: var(--accent); border-color: var(--accent); color: #fff; justify-content: center; }
   #sheet .acts .langrow { display: flex; gap: 8px; align-items: center; justify-content: flex-end; font-size: 13px; color: var(--muted); margin-top: 4px; }
   #sheet .acts .langrow select { color: var(--text); background: var(--bg); border-color: var(--line); padding: 6px 8px; font-size: 13px; }
   #sheet .acts .langrow select.on { border-color: var(--accent); font-weight: 600; }
@@ -429,6 +435,7 @@ function normalise() {
   if (!Array.isArray(state.people)) state.people = [];
   if (!state.owned || typeof state.owned !== 'object') state.owned = {};
   if (!state.wish || typeof state.wish !== 'object') state.wish = {};     // wish[pid][setKey][localId] = 1: "be on the lookout"
+  if (!state.customSets || typeof state.customSets !== 'object') state.customSets = {};   // customSets[id] = { name, abbr }: whole sets TCGdex does not list
   if (!state.custom || typeof state.custom !== 'object') state.custom = {};   // custom[setKey][localId] = name: cards TCGdex does not list (yet), added by the family
   if (!state.people.length) { state.people = [{ id: 'p1', name: 'User 1', c: 0 }]; state.current = 'p1'; }
   if (!state.people.some(p => p.id === state.current)) state.current = state.people[0].id;
@@ -443,14 +450,29 @@ const CARD_LANG_KEY = 'tcgPokedex.cardLang';
 let cardLang = (() => { try { return localStorage.getItem(CARD_LANG_KEY) || 'en'; } catch (e) { return 'en'; } })();
 const langOf = v => (v === 1 || v === true || v === '1') ? 'en' : String(v);
 const langShort = l => l === 'en' ? '' : l.toUpperCase();
+// one printing can be owned in several languages: its mark is then "en,zh-cn"
+const langsOf = v => langOf(v).split(',').filter(Boolean);
+// Language view: in a set where cards are held in more than one language, the page shows one language's collection at a
+// time (null = all together). Set when a set is opened, cleared on leaving it.
+let viewLang = null;
+function inView(mark) {
+  const m = marks(mark);
+  if (!viewLang) return m;
+  const out = {};
+  Object.entries(m).forEach(([k, v]) => { if (langsOf(v).includes(viewLang)) out[k] = viewLang; });
+  return out;
+}
 // variant: a printing code ('n', 'r', ...) to toggle; '*' with on=false clears every printing of the card
 function setCard(pid, key, localId, on, variant) {
   const person = state.owned[pid] || (state.owned[pid] = {});
   const mine = person[key] || (person[key] = {});
-  let m = marks(mine[localId]);
-  if (on) m = { ...m, [variant || 'n']: cardLang };
-  else if (variant && variant !== '*') { m = { ...m }; delete m[variant]; }
-  else m = {};
+  let m = { ...marks(mine[localId]) };
+  const v = variant || 'n';
+  // remove one language from one printing (or the whole printing when no language view is on)
+  const drop = k => { const left = viewLang ? langsOf(m[k]).filter(l => l !== viewLang) : []; if (left.length) m[k] = left.join(','); else delete m[k]; };
+  if (on) m[v] = [...new Set([...(m[v] ? langsOf(m[v]) : []), cardLang])].join(',');
+  else if (variant && variant !== '*') drop(variant);
+  else Object.keys(m).forEach(drop);
   if (Object.keys(m).length) mine[localId] = m; else delete mine[localId];
   if (!Object.keys(mine).length) delete person[key];
   saveState();
@@ -490,6 +512,46 @@ function removeCustom(setId, localId) {
   delete cards[localId]; if (!Object.keys(cards).length) delete state.custom[key];
   saveState(); sync.writeCustom(key, localId, false);
 }
+// Sets the family added themselves (promo series TCGdex does not list). They are held in state.customSets and appear
+// beside the catalogue's own sets, under a "Added by the family" series.
+// A set also carries the region of the release it belongs to: Chinese and Japanese releases are often different sets
+// (other card lists, other numbering) rather than the English set in another language.
+const REGIONS = ['Simplified Chinese', 'Traditional Chinese', 'Japanese', 'Korean', 'English'];
+const famSeries = region => ({ id: 'fam-' + (region ? region.toLowerCase().replace(/[^a-z]+/g, '-') : 'other'), name: region ? region + ' releases' : 'Added by the family' });
+function customSetData(id) {
+  const cs = state.customSets && state.customSets[id];
+  if (!cs) return null;
+  const set = { id, name: cs.name, cardCount: { total: 0, official: cs.official || 0 }, cards: [], serie: famSeries(cs.region), abbreviation: { official: cs.abbr || '' }, custom: true, region: cs.region || '' };
+  mergeCustom(set);
+  set.cardCount.total = Math.max(set.cards.length, set.cardCount.official);   // a 103-card set with 1 card added so far still counts out of 103
+  return set;
+}
+const customSetList = () => Object.keys(state.customSets || {}).map(id => { const d = customSetData(id); return { id, name: d.name, cardCount: d.cardCount, custom: true, region: d.region, serie: d.serie }; });
+function createCustomSet(name, abbr, cardsText, region, official) {
+  const slug = (abbr || name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'set';
+  let id = 'x-' + slug, n = 2;
+  while (state.customSets[id]) id = 'x-' + slug + '-' + n++;
+  state.customSets[id] = { name, abbr: abbr || '', region: region || '', official: +official || 0 };
+  saveState(); sync.writeCustomSet(id, state.customSets[id]);
+  (cardsText || '').split('\n').forEach(line => {
+    const m = line.trim().match(/^([A-Za-z0-9-]+)\s*[,:\t -]?\s*(.+)$/);
+    if (m) addCustom(id, m[1].replace(/\/.*$/, ''), m[2].trim());
+  });
+  window._sets = window._series = null;
+  return id;
+}
+function removeCustomSet(id) {
+  const key = setKey(id);
+  state.people.forEach(p => {
+    if (state.owned[p.id]) delete state.owned[p.id][key];
+    if (state.wish[p.id]) delete state.wish[p.id][key];
+    sync.removeAt('owned', p.id, key); sync.removeAt('wish', p.id, key);
+  });
+  delete state.custom[key]; sync.removeAt('custom', key);
+  delete state.customSets[id]; sync.removeAt('customsets', id);
+  saveState();
+  window._sets = window._series = null;
+}
 // slot the family's added cards into a set's card list (skipping any the catalogue has since picked up), in number order
 function mergeCustom(set) {
   if (!set || !set.cards) return set;
@@ -513,6 +575,7 @@ function cardLangSelect(onChange) {
     cardLang = sel.value; try { localStorage.setItem(CARD_LANG_KEY, cardLang); } catch (e) {}
     sel.classList.toggle('on', cardLang !== 'en');
     document.querySelectorAll('select.cardlang').forEach(s => { if (s !== sel) { s.value = cardLang; s.classList.toggle('on', cardLang !== 'en'); } });
+    if (viewLang && window._set && (location.hash || '').startsWith('#/set/')) { viewLang = cardLang; renderSet(); }   // a split set follows the selector
     if (onChange) onChange();
   };
   return sel;
@@ -573,6 +636,10 @@ const sync = {
       const custom = {};
       Object.entries(data.custom || {}).forEach(([k, cards]) => { custom[unKey(k)] = {}; Object.entries(cards || {}).forEach(([id, name]) => { custom[unKey(k)][unKey(id)] = String(name); }); });
       state.custom = custom;
+      const csets = {};
+      Object.entries(data.customsets || {}).forEach(([id, v]) => { csets[unKey(id)] = { name: String((v && v.name) || id), abbr: String((v && v.abbr) || ''), region: String((v && v.region) || ''), official: +(v && v.official) || 0 }; });
+      state.customSets = csets;
+      window._sets = window._series = null;
       normalise(); saveState();
     }
     renderSyncStatus();
@@ -589,6 +656,12 @@ const sync = {
     const r = this.path('wish', pid, key, localId);
     (on ? this.fb.db.set(r, 1) : this.fb.db.remove(r)).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
   },
+  writeCustomSet(id, v) {
+    if (!this.on) return;
+    const r = this.path('customsets', id);
+    (v ? this.fb.db.set(r, v) : this.fb.db.remove(r)).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
+  },
+  removeAt(...parts) { if (this.on) this.fb.db.remove(this.path(...parts)).catch(() => {}); },
   writeCustom(key, localId, name) {
     if (!this.on) return;
     const r = this.path('custom', key, localId);
@@ -598,7 +671,7 @@ const sync = {
   removePerson(pid) { if (this.on) ['people', 'owned', 'wish'].forEach(k => this.fb.db.remove(this.path(k, pid)).catch(() => {})); },
   uploadAll() {
     if (!this.on) return;
-    const people = {}, owned = {}, wish = {}, custom = {};
+    const people = {}, owned = {}, wish = {}, custom = {}, customsets = {};
     state.people.forEach(p => { people[dbKey(p.id)] = { name: p.name, c: p.c || 0 }; });
     Object.entries(state.owned).forEach(([pid, sets]) => {
       owned[dbKey(pid)] = {};
@@ -609,7 +682,8 @@ const sync = {
       Object.entries(sets).forEach(([k, cards]) => { wish[dbKey(pid)][dbKey(k)] = {}; Object.keys(cards).forEach(id => { wish[dbKey(pid)][dbKey(k)][dbKey(id)] = 1; }); });
     });
     Object.entries(state.custom || {}).forEach(([k, cards]) => { custom[dbKey(k)] = {}; Object.entries(cards).forEach(([id, name]) => { custom[dbKey(k)][dbKey(id)] = name; }); });
-    this.fb.db.set(this.root, { people, owned, wish, custom }).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
+    Object.entries(state.customSets || {}).forEach(([id, v]) => { customsets[dbKey(id)] = v; });
+    this.fb.db.set(this.root, { people, owned, wish, custom, customsets }).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
   }
 };
 function newFamilyCode() {
@@ -671,22 +745,48 @@ function joinFamily(code) {
 function cacheGet(k) { try { return JSON.parse(localStorage.getItem(CACHE_PFX + lang + ':' + k)); } catch (e) { return null; } }
 function cacheSet(k, v) { try { localStorage.setItem(CACHE_PFX + lang + ':' + k, JSON.stringify(v)); } catch (e) {} }
 
+// the set and series lists, with the family's own sets added at the end (= newest)
+function withFamily(path, data) {
+  if (path === 'sets' && Array.isArray(data)) return data.concat(customSetList());
+  if (path === 'series' && Array.isArray(data)) { const seen = {}; customSetList().forEach(x => { seen[x.serie.id] = x.serie; }); return data.concat(Object.values(seen)); }
+  return data;
+}
 // Fetch with a cache so sets already opened still load without signal.
 async function getJSON(path) {
+  let m;
+  if ((m = path.match(/^sets\/(.+)$/)) && state.customSets[m[1]]) return customSetData(m[1]);
+  if ((m = path.match(/^series\/(fam-.+)$/))) { const l = customSetList().filter(x => x.serie.id === m[1]); if (l.length) return { ...l[0].serie, sets: l }; }
   const cached = cacheGet(path);
-  if (cached) return path.startsWith('sets/') ? mergeCustom(cached) : cached;
+  if (cached) return withFamily(path, path.startsWith('sets/') ? mergeCustom(cached) : cached);
   const r = await fetch(API() + path);
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const data = await r.json();
   cacheSet(path, data);
-  return path.startsWith('sets/') ? mergeCustom(data) : data;
+  return withFamily(path, path.startsWith('sets/') ? mergeCustom(data) : data);
 }
 
 /* ---------- people ---------- */
 const me = () => state.people.find(p => p.id === state.current);
 const colour = p => COLOURS[(p.c || 0) % COLOURS.length];
 const initial = p => (p.name || '?').trim().charAt(0).toUpperCase();
-function ownedBy(personId, setId) { return (state.owned[personId] || {})[setKey(setId)] || {}; }
+function ownedBy(personId, setId) {
+  const raw = (state.owned[personId] || {})[setKey(setId)] || {};
+  if (!viewLang) return raw;
+  const out = {};
+  Object.entries(raw).forEach(([id, mark]) => { const m = inView(mark); if (Object.keys(m).length) out[id] = m; });
+  return out;
+}
+// how many cards each language holds in a set: { en: 5, 'zh-cn': 1 } for one person, or the whole family
+function langCounts(setId, personId) {
+  const counts = {};
+  state.people.filter(p => !personId || p.id === personId).forEach(p => {
+    Object.values((state.owned[p.id] || {})[setKey(setId)] || {}).forEach(mark => {
+      new Set(Object.values(marks(mark)).flatMap(langsOf)).forEach(l => { counts[l] = (counts[l] || 0) + 1; });
+    });
+  });
+  return counts;
+}
+const langName = l => ((LANGS.find(x => x[0] === l) || ['', l.toUpperCase()])[1]).replace(/ \(.*/, '');
 function ownedIn(setId) { return ownedBy(state.current, setId); }
 function ownedCount(setId) { return Object.keys(ownedIn(setId)).length; }
 function ownersOf(setId, localId) { return state.people.filter(p => ownedBy(p.id, setId)[localId]); }
@@ -862,6 +962,7 @@ function makeSeg(items, current, onPick) {
 function makeButton(label, onClick, title) { const b = el('button', '', label); b.onclick = onClick; if (title) b.title = title; return b; }
 
 function abbrOf(setId) {
+  if (state.customSets && state.customSets[setId]) return state.customSets[setId].abbr || '';
   const full = cacheGet('sets/' + setId);
   return (full && full.abbreviation && full.abbreviation.official) || (lang === 'en' && ABBR[setId]) || '';
 }
@@ -906,7 +1007,7 @@ function setRow(set) {
   const abbr = abbrOf(set.id), date = dateOf(set.id);
   const row = el('button', 'row');
   row.innerHTML = setArt(set) +
-    '<div class="t"><b></b><small>' + (abbr ? abbr + ' · ' : '') + (set.cardCount.official && total > set.cardCount.official ? set.cardCount.official + ' + ' + (total - set.cardCount.official) + ' secret' : total + ' cards') + (date ? ' · ' + date : '') + '</small>' +
+    '<div class="t"><b></b><small>' + (abbr ? abbr + ' · ' : '') + (set.cardCount.official && total > set.cardCount.official ? set.cardCount.official + ' + ' + (total - set.cardCount.official) + ' secret' : total + ' cards') + (date ? ' · ' + date : '') + (set.region ? ' · ' + set.region : '') + '</small>' +
     '<div class="mini"><i style="width:' + pct(have, total) + '%"></i></div></div>' +
     '<div class="pct' + (have >= total && total ? ' done' : '') + '">' + have + '/' + total + '</div>';
   row.dataset.set = set.id;
@@ -1086,6 +1187,8 @@ function renderCardResults(main, q) {
 /* ---------- Lookout: every card anyone in the family is hunting, for card shows and shops ---------- */
 let lookoutWho = 'all';
 async function getJSONL(l, path) {
+  const cm = path.match(/^sets\/(.+)$/);
+  if (cm && state.customSets[cm[1]]) return customSetData(cm[1]);
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem(CACHE_PFX + l + ':' + path)); } catch (e) {}
   if (cached) return l === lang && path.startsWith('sets/') ? mergeCustom(cached) : cached;
@@ -1231,7 +1334,46 @@ function renderHome() {
     rows.appendChild(row);
   });
   main.appendChild(rows);
+  const addSet = el('button', 'addcard', '＋ Set not listed? Add it');
+  addSet.title = 'Add a promo series TCGdex does not have, such as 30th-P First Partners';
+  addSet.onclick = openAddSet;
+  main.appendChild(addSet);
   if (!mine.length && !(window._series || []).length) main.appendChild(el('div', 'empty', 'Nothing to show.'));
+}
+
+// ready-made lists for sets TCGdex is known not to have; one tap creates them
+const PRESET_SETS = [
+  { name: '30th Celebration (Simplified Chinese)', abbr: '30th-C', region: 'Simplified Chinese', official: 103,
+    note: '103-card main set, numbers run past 103 for the rares. Not the English set — different cards. Add cards as you get them.', cards: '' },
+  { name: '30th-P First Partners', abbr: '30th-P', region: 'Simplified Chinese', official: 0,
+    note: 'First Partner Illustration Collection, Series 1 (9 cards)',
+    cards: '001 Bulbasaur\n002 Charmander\n003 Squirtle\n010 Turtwig\n011 Chimchar\n012 Piplup\n013 Rowlet\n014 Litten\n015 Popplio' }
+];
+function openAddSet() {
+  const sh = $('sheet'), acts = sh.querySelector('.acts');
+  sh.classList.add('noimg');
+  sh.querySelector('b').textContent = 'Add a set TCGdex does not list';
+  sh.querySelector('small').textContent = 'It is added for the whole family and works like any set.';
+  acts.innerHTML = '';
+  const close = () => sh.classList.remove('open');
+  const done = id => { close(); ui.q = ''; location.hash = '#/set/' + id; };
+  PRESET_SETS.filter(ps => !Object.values(state.customSets).some(c => c.abbr === ps.abbr)).forEach(ps => {
+    const b = el('button', '', '<em>＋ ' + esc(ps.name) + '</em><span>' + esc(ps.note) + '</span>');
+    b.querySelector('em').style.fontStyle = 'normal';
+    b.onclick = () => done(createCustomSet(ps.name, ps.abbr, ps.cards, ps.region, ps.official));
+    acts.appendChild(b);
+  });
+  const name = el('input'); name.placeholder = 'Set name, e.g. 30th-P First Partners';
+  const code = el('input'); code.placeholder = 'Code printed on the cards, e.g. 30th-P'; code.autocapitalize = 'characters';
+  const region = el('select'); region.innerHTML = '<option value="">Region of this release…</option>' + REGIONS.map(r => '<option>' + r + '</option>').join('');
+  const total = el('input'); total.placeholder = 'Printed set total, e.g. 103 (optional)'; total.inputMode = 'numeric';
+  const cards = el('textarea'); cards.rows = 5; cards.placeholder = 'Cards, one per line: number then name\n001 Bulbasaur\n002 Charmander\n(optional — add more any time)';
+  const go = el('button', 'primary', 'Create set');
+  go.onclick = () => { if (!name.value.trim()) { name.focus(); return; } done(createCustomSet(name.value.trim(), code.value.trim(), cards.value, region.value, total.value)); };
+  acts.append(el('div', 'hint', 'Or make your own'), name, code, region, total, cards, go);
+  sh.querySelector('.x').onclick = close;
+  sh.onclick = e => { if (e.target === sh) close(); };
+  sh.classList.add('open');
 }
 
 /* ---------- Series: its sets ---------- */
@@ -1264,9 +1406,44 @@ async function viewSet(id) {
   if (ui.filter === 'family' && state.people.length < 2) ui.filter = 'all';
   const cached = cacheGet('details3/' + id);
   details = (cached && cached.cards) || {};
+  // cards held in more than one language: one language's collection at a time, asked once per visit
+  const held = Object.keys(langCounts(id));
+  if (held.length < 2) { viewLang = null; ui.langSet = id; }
+  else if (ui.langSet !== id) { viewLang = held.includes(cardLang) ? cardLang : null; askSetLanguage(set); }
+  else if (viewLang && !held.includes(viewLang) && viewLang !== cardLang) viewLang = null;
   renderSet();
   loadDetails(set, cached);
 }
+function setCardLang(l) {
+  cardLang = l; try { localStorage.setItem(CARD_LANG_KEY, l); } catch (e) {}
+  document.querySelectorAll('select.cardlang').forEach(s => { s.value = l; s.classList.toggle('on', l !== 'en'); });
+}
+function askSetLanguage(set) {
+  const sh = $('sheet'), acts = sh.querySelector('.acts');
+  const mine = langCounts(set.id, state.current), all = langCounts(set.id);
+  sh.classList.add('noimg');
+  sh.querySelector('b').textContent = set.name;
+  sh.querySelector('small').textContent = 'You hold this set in more than one language — which one are you looking at?';
+  acts.innerHTML = '';
+  const close = () => { ui.langSet = set.id; sh.classList.remove('open'); };
+  const total = set.cards.length;
+  Object.keys(all).sort((a, b) => (a === 'en' ? -1 : b === 'en' ? 1 : (all[b] - all[a]))).forEach(l => {
+    const others = all[l] - (mine[l] || 0);
+    const b = el('button', l === cardLang ? 'on' : '', '<em>' + esc(langName(l)) + '</em><span>' + (mine[l] || 0) + ' / ' + total + (state.people.length > 1 && others > 0 ? ' · family +' + others : '') + '</span>');
+    b.querySelector('em').style.fontStyle = 'normal';
+    b.onclick = () => { viewLang = l; setCardLang(l); close(); renderSet(); };
+    acts.appendChild(b);
+  });
+  const b = el('button', '', '<em>All languages together</em><span>' + ownedCountAll(set.id) + ' / ' + total + '</span>');
+  b.querySelector('em').style.fontStyle = 'normal';
+  b.onclick = () => { viewLang = null; close(); renderSet(); };
+  acts.appendChild(b);
+  acts.appendChild(el('div', 'hint', 'Change it any time with 🌐 Cards in at the top of the set. If that language has its own card list (e.g. the Chinese 30th), add it as its own set: home page → Set not listed?'));
+  sh.querySelector('.x').onclick = close;
+  sh.onclick = e => { if (e.target === sh) close(); };
+  sh.classList.add('open');
+}
+function ownedCountAll(setId) { return Object.keys((state.owned[state.current] || {})[setKey(setId)] || {}).length; }
 
 /* ---------- printings (variants): n = normal, r = reverse holo, h = holo, f = 1st edition, w = W promo ---------- */
 const VARIANTS = [['n', 'STD', 'Standard'], ['r', 'RH', 'Reverse Holo'], ['h', 'H', 'Holo'], ['f', '1st', '1st Edition'], ['w', 'W', 'W Promo']];
@@ -1307,7 +1484,7 @@ let master = (() => { try { return localStorage.getItem(MASTER_KEY) === '1'; } c
 async function loadDetails(set, cached) {
   const job = ++detailJob;
   const fresh = cached && (Date.now() - (cached.at || 0) < PRICE_MAX_AGE);
-  const todo = set.cards.filter(c => !details[c.localId] || !fresh);
+  const todo = set.cards.filter(c => !c.custom && (!details[c.localId] || !fresh));
   if (!todo.length) return;
   let done = set.cards.length - todo.length, failed = 0;
   const queue = todo.slice();
@@ -1378,6 +1555,7 @@ function visibleCards() {
 }
 
 function cardNum(c) {
+  if (window._set.custom) { const off = window._set.cardCount.official; return c.localId + (off ? '/' + String(off).padStart(3, '0') : window._set.abbreviation.official ? '/' + window._set.abbreviation.official : ''); }
   const off = window._set.cardCount.official;
   return c.localId + (off && /^\d+$/.test(c.localId) ? '/' + String(off).padStart(c.localId.length, '0') : '');
 }
@@ -1385,7 +1563,7 @@ function cardNum(c) {
 function makeCard(c) {
   const m = marks(ownedIn(window._set.id)[c.localId]);
   const have = Object.keys(m).length > 0;
-  const langs = [...new Set(Object.values(m))];
+  const langs = [...new Set(Object.values(m).flatMap(langsOf))];
   const tag = !have ? '' : langs.length > 1 ? 'MIX' : langShort(langs[0]);   // e.g. ZH-CN when the card you own is not the English print
   const d = details[c.localId] || {};
   const avail = variantsOf(c), got = ownedVariants(c);
@@ -1491,7 +1669,7 @@ function renderSetHeader() {
   }
   controls.push(makeButton('Print placeholders', printPlaceholders, 'Print the cards you still need at real size, to fill binder pockets'));
   setHeader({
-    title: esc(set.name), back: set.serie ? '#/series/' + set.serie.id : '#/',
+    title: esc(set.name) + (set.region ? ' <small class="vl rg">' + esc(set.region) + '</small>' : '') + (viewLang ? ' <small class="vl">' + esc(langName(viewLang)) + '</small>' : ''), back: set.serie ? '#/series/' + set.serie.id : '#/',
     count: t.have + ' / ' + t.total + t.label, progress: pct(t.have, t.total), controls
   });
   renderStats();
@@ -1513,6 +1691,11 @@ function renderCards() {
   add.title = 'Add a card TCGdex does not have yet, by its number and name';
   add.onclick = () => addCustomPrompt(window._set);
   box.appendChild(add);
+  if (window._set.custom) {
+    const del = el('button', 'addcard', '🗑 Delete this added set');
+    del.onclick = () => { if (confirm('Delete ' + window._set.name + ' and every card, tick and lookout entry in it, for the whole family?')) { const id = window._set.id; removeCustomSet(id); location.hash = '#/'; } };
+    box.appendChild(del);
+  }
   main.appendChild(box);
   if (!cards.length) {
     const msg = !window._set.cards.length ? 'TCGdex has no card list for this set in ' + (LANGS.find(l => l[0] === lang) || [lang, lang])[1] + ' yet. Try the same set in English or Japanese.'
@@ -1530,8 +1713,10 @@ function addCustomPrompt(set, presetId) {
   if (!name) return;
   addCustom(set.id, localId, name);
   mergeCustom(set);
+  const card = set.cards.find(c => c.localId === localId);
+  if (!presetId && !ownedBy(state.current, set.id)[localId] && confirm('Mark ' + name + ' as owned (' + langName(cardLang) + ', for ' + me().name + ')?')) setCard(state.current, setKey(set.id), localId, true, 'n');
   if (window._set && window._set.id === set.id) { ui.q = ''; renderSet(); }
-  return set.cards.find(c => c.localId === localId);
+  return card;
 }
 function onCardClick(e) {
   const node = e.target.closest('.card, .line');
@@ -1568,6 +1753,7 @@ function refreshCardNode(card) {
 /* ---------- tap a card: a sheet with big buttons for each printing, the lookout list and a close-up ---------- */
 function openCardSheet(card) {
   const set = window._set, key = setKey(set.id), sh = $('sheet');
+  sh.classList.remove('noimg');
   const d = details[card.localId] || {};
   sh.querySelector('img').src = card.image ? card.image + '/low.webp' : '';
   sh.querySelector('b').textContent = card.name;
@@ -1593,7 +1779,7 @@ function openCardSheet(card) {
       w.onclick = () => { setWish(state.current, key, card.localId, !want); refreshCardNode(card); close(); };
       acts.appendChild(w);
     }
-    acts.appendChild(makeButton('💲 Price check', () => { close(); openPriceCheck(lang, set.id, set.name, card, primaryVariant(card)); }));
+    if (!card.custom) acts.appendChild(makeButton('💲 Price check', () => { close(); openPriceCheck(lang, set.id, set.name, card, primaryVariant(card)); }));
     if (card.image) acts.appendChild(makeButton('View card', () => { close(); $('lbImg').src = card.image + '/high.webp'; $('lb').classList.add('open'); }));
     if (card.custom) {
       acts.appendChild(makeButton('✎ Rename', () => { const name = (prompt('Card name:', card.name) || '').trim(); if (name) { addCustom(set.id, card.localId, name); card.name = name; refreshCardNode(card); } close(); }));
@@ -2452,6 +2638,7 @@ function route() {
   detailJob++;                       // stop any price loader from the previous view
   const h = location.hash || '#/';
   let m;
+  if (!h.startsWith('#/set/')) { viewLang = null; ui.langSet = null; }      // the language view belongs to one visit to one set
   if (h === '#/people') return viewPeople();
   if (h === '#/sync') return viewSync();
   if (h === '#/lookout') return viewLookout();
@@ -2459,7 +2646,7 @@ function route() {
   if ((m = h.match(/^#\/series\/([^/]+)/))) return viewSeries(m[1]);
   return viewHome();
 }
-window.addEventListener('hashchange', () => { ui.q = ''; route(); });
+window.addEventListener('hashchange', () => { ui.q = ''; ui.langSet = null; viewLang = null; $('sheet').classList.remove('open'); route(); });
 loadState();
 // a shared link carries ?family=<code>; remember it and tidy the address bar
 let family = '';
