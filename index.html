@@ -429,7 +429,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v50';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v51';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -528,6 +528,7 @@ function allWishes() {
   const out = [];
   state.people.forEach(p => Object.entries(state.wish[p.id] || {}).forEach(([key, cards]) => {
     const m = key.match(/^([a-z]{2}(?:-[a-z]{2})?)\/(.+)$/);
+    if (!m && isDigitalSet(key)) return;   // digital-only (Pocket) sets stay out of the lookout
     Object.keys(cards).forEach(localId => out.push({ pid: p.id, lang: m ? m[1] : 'en', setId: m ? m[2] : key, localId }));
   }));
   return out;
@@ -1191,6 +1192,7 @@ function allOwnedCards() {
   state.people.forEach(p => Object.entries(state.owned[p.id] || {}).forEach(([key, cards]) => {
     const m = key.match(/^([a-z]{2}(?:-[a-z]{2})?)\/(.+)$/);
     const l = m ? m[1] : 'en', setId = m ? m[2] : key;
+    if (l === 'en' && isDigitalSet(setId)) return;   // digital-only (Pocket) sets stay out of the collection value
     Object.entries(cards).forEach(([localId, mark]) => out.push({ pid: p.id, lang: l, setId, localId, mark }));
   }));
   return out;
