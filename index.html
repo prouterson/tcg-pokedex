@@ -429,7 +429,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v47';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v50';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -873,6 +873,14 @@ const apiCardId = (setId, localId) => setId === CLASSIC_PARENT && /^C[0-9]+$/.te
 const SCRYDEX = 'https://images.scrydex.com/pokemon/';
 const CLASSIC_ART = { '001':'me55c-4','002':'me55c-5','003':'me55c-11','004':'me55c-11g','005':'me55c-18','006':'me55c-19','007':'me55c-25','008':'me55c-33','009':'me55c-41','010':'me55c-43','011':'me55c-47','012':'me55c-50','013':'me55c-57','014':'me55c-58','015':'me55c-69','016':'me55c-85','017':'me55c-89','018':'me55c-94','019':'me55c-99','020':'me55c-100','021':'me55c-101','022':'me55c-106p','023':'me55c-106m','024':'me55c-106','025':'me55c-108','026':'me55c-114','027':'me55c-123','028':'me55c-138','029':'me55c-149','030':'me55c-203' };
 const EXTRA_30TH = [['R', 'Mew R', 'me55-R'], ['G', 'Mew G', 'me55-G'], ['B', 'Mew B', 'me55-B']];
+// TCGdex has no pictures for these English sets; Scrydex (the picture host behind the Pokemon TCG API) does, under the card ids
+// below: set prefix + '-' + card number (leading zeros dropped), with the exceptions listed per set. Checked card by card by number and name.
+const FILL_ART = { 'swsh4.5sv':['swsh45sv',{}], 'sm7.5':['sm75',{}], 'sm3.5':['sm35',{}], 'swsh12.5gg':['swsh12pt5gg',{}], 'smp':['smp',{}], 'ecard2':['ecard2',{'50b':'ecard2-50','50a':'ecard2-50','74a':'ecard2-74','74b':'ecard2-74','95a':'ecard2-95','95b':'ecard2-95','103a':'ecard2-103','103b':'ecard2-103','H01':'ecard2-H1','H02':'ecard2-H2','H03':'ecard2-H3','H04':'ecard2-H4','H05':'ecard2-H5','H06':'ecard2-H6','H07':'ecard2-H7','H08':'ecard2-H8','H09':'ecard2-H9'}], 'ecard3':['ecard3',{'H01':'ecard3-H1','H02':'ecard3-H2','H03':'ecard3-H3','H04':'ecard3-H4','H05':'ecard3-H5','H06':'ecard3-H6','H07':'ecard3-H7','H08':'ecard3-H8','H09':'ecard3-H9'}], 'svp':['svp',{}], 'swsh9tg':['swsh9tg',{}], 'swsh10tg':['swsh10tg',{}], 'swsh11tg':['swsh11tg',{}], 'swsh12tg':['swsh12tg',{}], 'exu':['ex10',{'%3F':'ex10-?'}], '2021swsh':['mcd21',{}], '2022swsh':['mcd22',{}], '2019sm':['mcd19',{}], '2018sm':['mcd18',{}], '2017sm':['mcd17',{}], '2016xy':['mcd16',{}], '2015xy':['mcd15',{}], '2014xy':['mcd14',{}], '2012bw':['mcd12',{}], '2011bw':['mcd11',{}], 'cel25cc':['cel25c',{'CC001':'cel25c-2_A','CC002':'cel25c-4_A','CC003':'cel25c-15_A1','CC004':'cel25c-73_A','CC005':'cel25c-8_A','CC006':'cel25c-15_A2','CC007':'cel25c-15_A3','CC008':'cel25c-24_A','CC009':'cel25c-20_A','CC010':'cel25c-66_A','CC011':'cel25c-9_A','CC012':'cel25c-86_A','CC013':'cel25c-88_A','CC014':'cel25c-93_A','CC015':'cel25c-17_A','CC016':'cel25c-15_A4','CC017':'cel25c-109_A','CC018':'cel25c-145_A','CC019':'cel25c-107_A','CC020':'cel25c-113_A','CC021':'cel25c-114_A','CC022':'cel25c-54_A','CC023':'cel25c-97_A','CC024':'cel25c-76_A','CC025':'cel25c-60_A'}], 'cel25':['cel25',{}], 'sve':['sve',{}], 'swshp':['swshp',{}], 'tk-ex-latia':['tk1a',{}], 'tk-ex-latio':['tk1b',{}], 'tk-ex-p':['tk2a',{}], 'tk-ex-m':['tk2b',{}], 'bog':['bp',{}], 'hgssp':['hsp',{}], 'bwp':['bwp',{'BW04':'bwp-BW004','BW05':'bwp-BW005'}], 'xyp':['xyp',{}], 'pop6':['pop6',{}], 'pl2':['pl2',{}], 'sm6':['sm6',{}], 'sm2':['sm2',{}], 'xy8':['xy8',{}], 'mee':['mee',{}], 'miscp':['miscp',{}], '2023sv':['mcd23',{}], '2024sv':['mcd24',{}], 'mep':['mep',{}] };
+function addMissingArt(set) {
+  const e = lang === 'en' && FILL_ART[set.id];
+  if (e && set.cards) set.cards.forEach(c => { if (!c.image) c.image = SCRYDEX + encodeURIComponent(e[1][c.localId] || e[0] + '-' + c.localId.replace(/^0+(?=\d)/, '')); });
+  return set;
+}
 async function addClassics(set) {
   if (lang !== 'en' || set.id !== CLASSIC_PARENT || set.classics) return set;
   try {
@@ -886,7 +894,11 @@ async function addClassics(set) {
   } catch (e) {}
   return set;
 }
+// Pokemon TCG Pocket is digital only: its sets (A1, B2a, P-A ...) are left out of the lists and search.
+const isDigitalSet = id => /^([AB]\d+[a-z]?|P-[A-Z])$/.test(id);
 function withFamily(path, data) {
+  if (lang === 'en' && path === 'sets' && Array.isArray(data)) data = data.filter(x => !isDigitalSet(x.id));
+  if (lang === 'en' && path === 'series' && Array.isArray(data)) data = data.filter(x => x.id !== 'tcgp');
   if (lang === 'en' && path === 'sets' && Array.isArray(data) && data.some(x => x.id === CLASSIC_ID)) {
     const cl = data.find(x => x.id === CLASSIC_ID);
     data = data.filter(x => x.id !== CLASSIC_ID).map(x => x.id === CLASSIC_PARENT ? { ...x, classics: cl.cardCount.total, cardCount: { ...x.cardCount, total: x.cardCount.total + cl.cardCount.total + EXTRA_30TH.length } } : x);
@@ -905,12 +917,12 @@ async function getJSON(path) {
   if ((m = path.match(/^sets\/(.+)$/)) && state.customSets[m[1]]) return customSetData(m[1]);
   if ((m = path.match(/^series\/(fam-.+)$/))) { const l = customSetList().filter(x => x.serie.id === m[1]); if (l.length) return { ...l[0].serie, sets: l }; }
   const cached = cacheGet(path);
-  if (cached) return withFamily(path, path.startsWith('sets/') ? mergeCustom(await addClassics(cached)) : cached);
+  if (cached) return withFamily(path, path.startsWith('sets/') ? mergeCustom(await addClassics(addMissingArt(cached))) : cached);
   const r = await fetch(API() + path);
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const data = await r.json();
   cacheSet(path, data);
-  return withFamily(path, path.startsWith('sets/') ? mergeCustom(await addClassics(data)) : data);
+  return withFamily(path, path.startsWith('sets/') ? mergeCustom(await addClassics(addMissingArt(data))) : data);
 }
 
 /* ---------- people ---------- */
@@ -1294,10 +1306,10 @@ function cardImg(setId, localId) { return serieOf && serieOf[setId] ? 'https://a
 function searchCards(q) {
   const nick = Object.keys(NICKS).find(k => q.includes(k));
   let rows;
-  if (nick) { const n = NICKS[nick]; rows = cardIndex.filter(r => r[0] === n.set && r[2] === n.name); }
+  if (nick) { const n = NICKS[nick]; rows = cardIndex.filter(r => r[0] === n.set && r[2] === n.name && !isDigitalSet(r[0])); }
   else {
     const words = q.split(/\s+/).filter(Boolean);
-    rows = cardIndex.filter(r => { const n = r[2].toLowerCase(); return words.every(w => n.includes(w)); });
+    rows = cardIndex.filter(r => { if (isDigitalSet(r[0])) return false; const n = r[2].toLowerCase(); return words.every(w => n.includes(w)); });
   }
   const order = (window._sets || []).map(s => s.id);
   rows.sort((a, b) => order.indexOf(b[0]) - order.indexOf(a[0]) || a[1].localeCompare(b[1], undefined, { numeric: true }));

@@ -1,6 +1,6 @@
 // TCG Pokédex service worker: keeps the app and any card pictures you've seen available offline.
 // Bump VERSION whenever index.html changes so phones pick up the new one.
-const VERSION = 'v47';
+const VERSION = 'v50';
 const SHELL = 'tcg-shell-' + VERSION;
 const IMAGES = 'tcg-images';
 const SHELL_FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-180.png'];
