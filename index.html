@@ -20,11 +20,12 @@
     --head-bg: var(--panel); --head-fg: var(--text); --head-line: var(--line); --dot: var(--accent);
     --ctrl-bg: var(--bg); --ctrl-fg: var(--text); --ctrl-line: var(--line);
     --seg-on: var(--accent); --seg-fg: #fff; --radius: 8px; --card-radius: 10px;
+    --ball-top: #e3350d; --ball-line: #1d2330;
   }
   @media (prefers-color-scheme: dark) {
     :root:not([data-theme]) {
       --bg: #12151c; --panel: #1b202b; --text: #e8ebf2; --muted: #98a1b5; --line: #2b3242;
-      --accent: #ff5a3c; --owned: #3fc27a; --need: #ff5a3c; --card-miss: #181c26;
+      --accent: #ff5a3c; --owned: #3fc27a; --need: #ff5a3c; --card-miss: #181c26; --ball-line: #e8ebf2;
     }
   }
   /* Poké Style: red header with a Pokéball, white cards, chunky buttons */
@@ -35,34 +36,58 @@
     --ctrl-bg: #ffffff; --ctrl-fg: #1d2330; --ctrl-line: #ffffff;
     --seg-on: #1d2330; --seg-fg: #ffffff; --radius: 12px; --card-radius: 14px;
   }
-  :root[data-theme="poke"] h1 span { display: inline-block; width: 22px; height: 22px; vertical-align: -4px; margin-right: 4px; border-radius: 50%; color: transparent; overflow: hidden;
-    background: radial-gradient(circle, #fff 0 4px, #1d2330 4px 6px, transparent 6px), linear-gradient(#fff 0 45%, #1d2330 45% 55%, #e3350d 55%); box-shadow: 0 0 0 2px #1d2330; }
   :root[data-theme="poke"] .count, :root[data-theme="poke"] .stats, :root[data-theme="poke"] .stats b { color: #fff; }
   :root[data-theme="poke"] .bar { background: rgba(0,0,0,.25); }
   :root[data-theme="poke"] .card.owned { box-shadow: 0 2px 6px rgba(0,0,0,.12); }
-  /* Dark Binder: charcoal so the art pops, gold accents */
+  /* Gengar: deep purple, violet accents, red-eye alerts */
   :root[data-theme="dark"] {
-    --bg: #15171c; --panel: #1e2128; --text: #ecebe4; --muted: #9a9a92; --line: #2e323b;
-    --accent: #d4a017; --owned: #3fc27a; --need: #e05a3c; --card-miss: #1a1c22;
-    --head-bg: #1b1d23; --head-fg: #ecebe4; --head-line: #3a3326; --dot: #d4a017;
-    --ctrl-bg: #262932; --ctrl-fg: #ecebe4; --ctrl-line: #3a3e48;
-    --seg-on: #d4a017; --seg-fg: #1b1d23; --radius: 8px; --card-radius: 10px;
+    --bg: #150f1e; --panel: #20172e; --text: #ece6f5; --muted: #a398b8; --line: #34284a;
+    --accent: #9b6bff; --owned: #3fc27a; --need: #ff3b4e; --card-miss: #1a1326;
+    --head-bg: #2a1b43; --head-fg: #ece6f5; --head-line: #46306b; --dot: #ff3b4e;
+    --ctrl-bg: #34264f; --ctrl-fg: #ece6f5; --ctrl-line: #4a3770;
+    --seg-on: #9b6bff; --seg-fg: #150f1e; --radius: 8px; --card-radius: 10px;
+    --ball-top: #9b6bff; --ball-line: #ece6f5;
   }
   :root[data-theme="dark"] header { border-bottom-width: 2px; }
   :root[data-theme="dark"] h1 { letter-spacing: .03em; }
-  :root[data-theme="dark"] .card.owned { border-color: #d4a017; box-shadow: 0 0 0 1px rgba(212,160,23,.25), 0 4px 14px rgba(0,0,0,.5); }
-  :root[data-theme="dark"] .card .tick { background: #d4a017; color: #1b1d23; }
-  /* Bright Binder: yellow header, blue accents, rounded everything */
+  :root[data-theme="dark"] .card.owned { border-color: #9b6bff; box-shadow: 0 0 0 1px rgba(155,107,255,.3), 0 4px 14px rgba(0,0,0,.5); }
+  :root[data-theme="dark"] .card .tick { background: #9b6bff; color: #150f1e; }
+  /* Pikachu: yellow header, brown-black ink, red-cheek highlights, rounded everything */
   :root[data-theme="bright"] {
     --bg: #fffdf3; --panel: #ffffff; --text: #1f2a44; --muted: #6b7385; --line: #f3e6a8;
     --accent: #2b6fd6; --owned: #2e9e5b; --need: #e3350d; --card-miss: #fff5c7;
     --head-bg: #ffd21f; --head-fg: #1f2a44; --head-line: #e6b800; --dot: #2b6fd6;
     --ctrl-bg: #ffffff; --ctrl-fg: #1f2a44; --ctrl-line: #ffffff;
     --seg-on: #2b6fd6; --seg-fg: #ffffff; --radius: 16px; --card-radius: 18px;
+    --ball-top: #e3350d; --ball-line: #3b2a10;
   }
   :root[data-theme="bright"] body { font-weight: 500; }
   :root[data-theme="bright"] .bar { background: rgba(0,0,0,.12); }
   :root[data-theme="bright"] .card.owned { box-shadow: 0 3px 8px rgba(43,111,214,.15); }
+  /* Bulbasaur: leaf-green header, deep-green accents */
+  :root[data-theme="bulbasaur"] {
+    --bg: #f0f7f2; --panel: #ffffff; --text: #17301f; --muted: #5d7566; --line: #d3e6d9;
+    --accent: #2f8f5b; --owned: #2e9e5b; --need: #d9480f; --card-miss: #e3efe7;
+    --head-bg: #3da373; --head-fg: #ffffff; --head-line: #2a7f56; --dot: #ffffff;
+    --ctrl-bg: #ffffff; --ctrl-fg: #17301f; --ctrl-line: #ffffff;
+    --seg-on: #17482f; --seg-fg: #ffffff; --radius: 14px; --card-radius: 16px;
+    --ball-top: #1f6b43; --ball-line: #0f2d1c;
+  }
+  :root[data-theme="bulbasaur"] .count, :root[data-theme="bulbasaur"] .stats, :root[data-theme="bulbasaur"] .stats b { color: #fff; }
+  :root[data-theme="bulbasaur"] .bar { background: rgba(0,0,0,.22); }
+  :root[data-theme="bulbasaur"] .card.owned { box-shadow: 0 2px 8px rgba(47,143,91,.2); }
+  /* Mew: soft pink header, magenta accents */
+  :root[data-theme="mew"] {
+    --bg: #fff5fa; --panel: #ffffff; --text: #3d1d32; --muted: #8a6578; --line: #f6d5e5;
+    --accent: #d6458f; --owned: #2e9e5b; --need: #e3350d; --card-miss: #fde6f0;
+    --head-bg: #f7a1c8; --head-fg: #3d1d32; --head-line: #e57db0; --dot: #d6458f;
+    --ctrl-bg: #ffffff; --ctrl-fg: #3d1d32; --ctrl-line: #ffffff;
+    --seg-on: #c2377d; --seg-fg: #ffffff; --radius: 16px; --card-radius: 18px;
+    --ball-top: #d6458f; --ball-line: #3d1d32;
+  }
+  :root[data-theme="mew"] .stats, :root[data-theme="mew"] .stats b { color: #3d1d32; }
+  :root[data-theme="mew"] .bar { background: rgba(255,255,255,.55); }
+  :root[data-theme="mew"] .card.owned { box-shadow: 0 3px 8px rgba(214,69,143,.18); }
 
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
@@ -71,7 +96,9 @@
   .top { display: flex; align-items: center; gap: 10px; }
   .back { width: 36px; height: 36px; padding: 0; font-size: 20px; flex: none; }
   h1 { font-size: 18px; margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  h1 span { color: var(--dot); }
+  /* the logo is a Poké Ball in every theme: colour on top, white below, band and button in --ball-line */
+  h1 span { display: inline-block; width: 18px; height: 18px; vertical-align: -3px; margin-right: 6px; border-radius: 50%; color: transparent; overflow: hidden;
+    background: radial-gradient(circle, #fff 0 2.2px, var(--ball-line) 2.2px 3.8px, transparent 3.8px), linear-gradient(var(--ball-top) 0 43%, var(--ball-line) 43% 57%, #fff 57%); box-shadow: 0 0 0 1.5px var(--ball-line); }
   .count { font-weight: 600; white-space: nowrap; }
   .bar { height: 8px; background: var(--card-miss); border-radius: 4px; overflow: hidden; margin-top: 8px; }
   .bar > i { display: block; height: 100%; background: var(--owned); width: 0; transition: width .25s; }
@@ -402,7 +429,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v43';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v46';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -638,7 +665,8 @@ function removeCustomSet(id) {
 }
 // Stand-in pictures: TCGdex has no pictures for the Chinese 30th Celebration, but the English set has the same Pokémon
 // (101 of 103 by name; the 30 Pikachu in the same order). A card keeps its own number; only the picture is borrowed.
-const ART = { '30th-C': { base: 'https://assets.tcgdex.net/en/me/30th/', map: { '136':'S:me55c-58','137':'S:me55c-4','138':'S:me55c-18','139':'S:me55c-69','140':'S:me55c-25','141':'S:me55c-106','142':'S:me55c-149','143':'S:me55c-5','144':'S:me55c-19','145':'S:me55c-108','146':'S:me55c-11','147':'S:me55c-106p','148':'S:me55c-43','149':'S:me55c-47','150':'S:me55c-94','151':'S:me55c-99','152':'S:me55c-100','153':'S:me55c-101','154':'S:me55c-85','155':'S:me55c-11g','156':'S:me55c-106m','157':'S:me55c-41','158':'S:me55c-89','159':'S:me55c-57','160':'S:me55c-33','161':'S:me55c-138','162':'S:me55c-50','163':'S:me55c-114','164':'S:me55c-123','165':'S:me55c-203','001':'001','002':'002','003':'003','004':'004','005':'008','006':'011','007':'012','008':'014','009':'015','010':'016','011':'017','012':'018','013':'019','014':'020','015':'021','016':'022','017':'023','018':'024','019':'025','020':'026','021':'027','022':'028','023':'029','024':'030','025':'031','026':'032','027':'033','028':'034','029':'035','030':'036','031':'037','032':'038','033':'039','034':'040','035':'041','036':'042','037':'043','038':'044','039':'045','040':'046','041':'047','042':'048','043':'049','044':'050','045':'051','046':'052','047':'053','048':'054','049':'055','050':'056','051':'059','052':'061','053':'062','054':'063','055':'064','056':'065','057':'066','058':'069','059':'071','060':'072','061':'073','062':'075','063':'076','064':'078','065':'079','066':'080','067':'081','068':'082','069':'083','070':'084','071':'085','072':'086','073':'087','074':'088','075':'089','076':'090','077':'091','078':'094','079':'100','080':'101','081':'102','082':'103','083':'104','084':'105','085':'106','086':'107','087':'108','088':'109','089':'110','090':'111','091':'112','092':'113','093':'115','094':'116','095':'119','096':'120','097':'121','098':'122','099':'123','100':'125','101':'126','102':'127','103':'128','104':'129','105':'130','106':'131','107':'132','108':'133','109':'134','110':'135','111':'136','112':'137','113':'138','115':'139','116':'140','117':'141','118':'142','120':'144','122':'145','123':'146','124':'147','125':'148','126':'149','127':'150','130':'153','132':'155','133':'156','134':'151','135':'152' } } };
+// First Partners (30th-P): the same nine illustrations were printed in Japan as M-P 101-103, 110-112, 119-121 (the Japanese text differs).
+const ART = { '30th-P': { base: '', tag: 'JP art', from: 'Japanese card', map: { '001':'S:mp_ja-101','002':'S:mp_ja-102','003':'S:mp_ja-103','010':'S:mp_ja-110','011':'S:mp_ja-111','012':'S:mp_ja-112','019':'S:mp_ja-119','020':'S:mp_ja-120','021':'S:mp_ja-121' } }, '30th-C': { base: 'https://assets.tcgdex.net/en/me/30th/', map: { '136':'S:me55c-58','137':'S:me55c-4','138':'S:me55c-18','139':'S:me55c-69','140':'S:me55c-25','141':'S:me55c-106','142':'S:me55c-149','143':'S:me55c-5','144':'S:me55c-19','145':'S:me55c-108','146':'S:me55c-11','147':'S:me55c-106p','148':'S:me55c-43','149':'S:me55c-47','150':'S:me55c-94','151':'S:me55c-99','152':'S:me55c-100','153':'S:me55c-101','154':'S:me55c-85','155':'S:me55c-11g','156':'S:me55c-106m','157':'S:me55c-41','158':'S:me55c-89','159':'S:me55c-57','160':'S:me55c-33','161':'S:me55c-138','162':'S:me55c-50','163':'S:me55c-114','164':'S:me55c-123','165':'S:me55c-203','001':'001','002':'002','003':'003','004':'004','005':'008','006':'011','007':'012','008':'014','009':'015','010':'016','011':'017','012':'018','013':'019','014':'020','015':'021','016':'022','017':'023','018':'024','019':'025','020':'026','021':'027','022':'028','023':'029','024':'030','025':'031','026':'032','027':'033','028':'034','029':'035','030':'036','031':'037','032':'038','033':'039','034':'040','035':'041','036':'042','037':'043','038':'044','039':'045','040':'046','041':'047','042':'048','043':'049','044':'050','045':'051','046':'052','047':'053','048':'054','049':'055','050':'056','051':'059','052':'061','053':'062','054':'063','055':'064','056':'065','057':'066','058':'069','059':'071','060':'072','061':'073','062':'075','063':'076','064':'078','065':'079','066':'080','067':'081','068':'082','069':'083','070':'084','071':'085','072':'086','073':'087','074':'088','075':'089','076':'090','077':'091','078':'094','079':'100','080':'101','081':'102','082':'103','083':'104','084':'105','085':'106','086':'107','087':'108','088':'109','089':'110','090':'111','091':'112','092':'113','093':'115','094':'116','095':'119','096':'120','097':'121','098':'122','099':'123','100':'125','101':'126','102':'127','103':'128','104':'129','105':'130','106':'131','107':'132','108':'133','109':'134','110':'135','111':'136','112':'137','113':'138','115':'139','116':'140','117':'141','118':'142','120':'144','122':'145','123':'146','124':'147','125':'148','126':'149','127':'150','130':'153','132':'155','133':'156','134':'151','135':'152' } } };
 // slot the family's added cards into a set's card list (skipping any the catalogue has since picked up), in number order
 function mergeCustom(set) {
   if (!set || !set.cards) return set;
@@ -647,7 +675,7 @@ function mergeCustom(set) {
   Object.entries((state.custom || {})[setKey(set.id)] || {}).forEach(([localId, name]) => {
     if (set.cards.some(c => c.localId === localId)) return;
     const a = ART[(state.customSets[set.id] || {}).abbr], enId = a && a.map[localId];
-    const card = { id: set.id + '-' + localId, localId, name, image: enId ? (enId.startsWith('S:') ? SCRYDEX + enId.slice(2) : a.base + enId) : null, standin: !!enId, custom: true };
+    const card = { id: set.id + '-' + localId, localId, name, image: enId ? (enId.startsWith('S:') ? SCRYDEX + enId.slice(2) : a.base + enId) : null, standin: enId ? (a.tag || 'EN art') : '', custom: true };
     const n = num(localId);
     let at = set.cards.length;
     if (n != null) { for (let i = 0; i < set.cards.length; i++) { const m = num(set.cards[i].localId); if (m != null && m > n) { at = i; break; } } }
@@ -937,9 +965,9 @@ function personSelect() {
 }
 
 /* ---------- themes ---------- */
-const THEMES = [['', 'Classic'], ['poke', 'Poké Style'], ['dark', 'Dark Binder'], ['bright', 'Bright Binder']];
+const THEMES = [['', 'Classic'], ['poke', 'Poké Style'], ['bright', 'Pikachu'], ['dark', 'Gengar'], ['bulbasaur', 'Bulbasaur'], ['mew', 'Mew']];
 const THEME_KEY = 'tcgPokedex.theme';
-const THEME_BAR = { '': '#ffffff', poke: '#e3350d', dark: '#1b1d23', bright: '#ffd21f' };   // phone status bar colour
+const THEME_BAR = { '': '#ffffff', poke: '#e3350d', dark: '#2a1b43', bright: '#ffd21f', bulbasaur: '#3da373', mew: '#f7a1c8' };   // phone status bar colour
 function applyTheme(t) {
   if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme');
   document.querySelector('meta[name=theme-color]').content = THEME_BAR[t] || '#ffffff';
@@ -1800,7 +1828,7 @@ function makeCard(c) {
   n.innerHTML =
     '<span class="tick">' + (have && !complete && master ? got.length + '/' + avail.length : '✓') + (tag ? '<b>' + tag + '</b>' : '') + '</span>' +
     (c.image ? '<button class="zoom" title="View card" aria-label="View card">⤢</button>' : '') + star +
-    '<img loading="lazy" alt="" src="' + (c.image ? lowSrc(c.image) : '') + '">' + (c.standin ? '<span class="enart" title="Picture borrowed from the English card with the same Pokémon">EN art</span>' : '') +
+    '<img loading="lazy" alt="" src="' + (c.image ? lowSrc(c.image) : '') + '">' + (c.standin ? '<span class="enart" title="Picture borrowed from the ' + (c.standin === 'JP art' ? 'Japanese card with the same artwork' : 'English card with the same Pokémon') + '">' + c.standin + '</span>' : '') +
     '<div class="ph"></div>' +
     '<div class="num">' + esc(cardNum(c)) + '</div><div class="name"></div>' + chips +
     '<div class="meta"><span class="rar"></span>' + who + wantBadge + '<span class="price">' + price + '</span></div>';
@@ -2008,7 +2036,7 @@ function openCardSheet(card) {
     if (card.custom) {
       acts.appendChild(makeButton('✎ Rename', () => { const name = (prompt('Card name:', card.name) || '').trim(); if (name) { addCustom(set.id, card.localId, name); card.name = name; refreshCardNode(card); } close(); }));
       acts.appendChild(makeButton('🗑 Remove this added card', () => { if (confirm('Remove ' + card.name + ' (' + card.localId + ') from this set for the whole family?')) { removeCustom(set.id, card.localId); setCard(state.current, key, card.localId, false, '*'); mergeCustom(set); renderSet(); } close(); }));
-      acts.appendChild(el('div', 'hint', card.standin ? 'Added by the family. The picture is the English card with the same Pokémon — the Chinese card may look different.' : 'Added by the family — TCGdex does not list this card yet'));
+      acts.appendChild(el('div', 'hint', card.standin === 'JP art' ? 'Added by the family. The picture is the Japanese card with the same artwork — only the text differs.' : card.standin ? 'Added by the family. The picture is the English card with the same Pokémon — the Chinese card may look different.' : 'Added by the family — TCGdex does not list this card yet'));
     }
     const others = ownersOf(set.id, card.localId).filter(p => p.id !== state.current);
     if (others.length) acts.appendChild(el('div', 'hint', 'Also owned by ' + esc(others.map(p => p.name).join(', '))));
