@@ -429,7 +429,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v46';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v47';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -1402,17 +1402,36 @@ async function viewLookout() {
         if (e.target.closest('.zoom')) { $('lbImg').src = highSrc(c.image); $('lb').classList.add('open'); return; }
         if (e.target.closest('.pcbtn')) { if (c.id) openPriceCheck(g.lang, g.setId, name, c); return; }
         if (e.target.closest('button.want')) { setWish(state.current, g.lang === 'en' ? g.setId : g.lang + '/' + g.setId, localId, false); viewLookout(); return; }
-        if (g.lang === lang) location.hash = '#/set/' + g.setId;
+        lookoutCardMenu(g, name, num, c);
       };
       box.appendChild(n); total++;
     });
     main.appendChild(box);
   }
-  main.appendChild(el('div', 'note small', total + ' card' + (total === 1 ? '' : 's') + ' wanted · tap a card to open its set · ★ removes it from your own list'));
+  main.appendChild(el('div', 'note small', total + ' card' + (total === 1 ? '' : 's') + ' wanted · tap a card to view it or open its set · ★ removes it from your own list'));
   // fetch any prices we do not have yet, then redraw
   loadPrices(wishes.map(w => ({ lang: w.lang, setId: w.setId, localId: w.localId })), () => { if (token === lookoutJob && location.hash === '#/lookout') viewLookout(); });
 }
 let lookoutJob = 0;
+// Tapping a wanted card asks what to do with it: look at it, or open its set (switching language first if it is a Japanese/Chinese card)
+function lookoutCardMenu(g, setName, num, c) {
+  const sh = $('sheet'), acts = sh.querySelector('.acts');
+  sh.classList.toggle('noimg', !c.image);
+  if (c.image) sh.querySelector('img').src = lowSrc(c.image);
+  sh.querySelector('b').textContent = c.name;
+  sh.querySelector('small').textContent = setName + ' · ' + num;
+  acts.innerHTML = '';
+  const close = () => sh.classList.remove('open');
+  if (c.image) acts.appendChild(makeButton('🔍 View card', () => { close(); $('lbImg').src = highSrc(c.image); $('lb').classList.add('open'); }));
+  acts.appendChild(makeButton('📂 Go to set', () => {
+    close(); ui.q = '';
+    if (g.lang !== lang) { lang = g.lang; try { localStorage.setItem(LANG_KEY, lang); } catch (e) {} window._sets = window._series = null; }
+    location.hash = '#/set/' + g.setId;
+  }));
+  sh.querySelector('.x').onclick = close;
+  sh.onclick = e => { if (e.target === sh) close(); };
+  sh.classList.add('open');
+}
 
 /* ---------- Home: your sets, search all sets, series list ---------- */
 async function viewHome() {
