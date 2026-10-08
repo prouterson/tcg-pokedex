@@ -118,6 +118,17 @@
   .seg button { border-radius: 0; margin-left: -1px; }
   .seg button:first-child { border-radius: var(--radius) 0 0 var(--radius); margin-left: 0; }
   .seg button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+  .rap { display: block; font-size: 11px; font-weight: 600; } .rap.in { color: var(--owned); } .rap.out { color: var(--muted); font-weight: 400; }
+  .line .rap { display: inline; margin-left: 6px; }
+  .card .rap { text-align: center; margin-top: 2px; }
+  .raptor { margin: 12px 0; padding-top: 10px; border-top: 1px solid var(--line); }
+  .raptor h4 { margin: 0 0 6px; font-size: 14px; } .raptor h4 small { color: var(--muted); font-weight: 400; }
+  .raptor .rrow { display: flex; gap: 8px; align-items: baseline; padding: 5px 0; color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--line); font-size: 13px; }
+  .raptor .rrow .rt { flex: 1; min-width: 0; }
+  .raptor .rrow em { font-style: normal; font-size: 11px; } .raptor .rrow em.in { color: var(--owned); } .raptor .rrow em.out { color: var(--muted); }
+  .raptor .rref { display: inline-block; margin-top: 6px; font-size: 12px; color: var(--muted); }
+  .seg.langbar { flex-wrap: wrap; gap: 6px; }
+  .seg.langbar button { border-radius: var(--radius); margin-left: 0; }
   .seg button.on { background: var(--seg-on); border-color: var(--seg-on); color: var(--seg-fg); }
   main { padding: 16px; max-width: 1400px; margin: 0 auto; }
   h2 { font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin: 18px 0 8px; }
@@ -429,7 +440,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v55';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v58';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -1385,6 +1396,7 @@ async function viewLookout() {
   const token = ++lookoutJob;
   main.innerHTML = '';
   let total = 0;
+  const raptorJobs = [];
   for (const g of list) {
     let set;
     try { set = await getJSONL(g.lang, 'sets/' + g.setId); } catch (e) { set = null; }
@@ -1415,6 +1427,9 @@ async function viewLookout() {
           '<div class="num">' + esc(num) + '</div><div class="name"></div><div class="meta">' + badges + '<span class="price">' + ptxt + '</span></div>' + drop;
         n.querySelector('.ph').textContent = c.name; n.querySelector('.name').textContent = c.name;
       }
+      const rap = el('span', 'rap');
+      n.querySelector('.name').insertAdjacentElement('afterend', rap);   // its own line under the name, clear of the price-check button
+      if (g.lang === 'en' && set && c.id && !c.custom) raptorJobs.push([rap, g.setId, name, c]); else rap.remove();
       n.onclick = e => {
         if (e.target.closest('.zoom')) { $('lbImg').src = highSrc(c.image); $('lb').classList.add('open'); return; }
         if (e.target.closest('.pcbtn')) { if (c.id) openPriceCheck(g.lang, g.setId, name, c); return; }
@@ -1426,6 +1441,8 @@ async function viewLookout() {
     main.appendChild(box);
   }
   main.appendChild(el('div', 'note small', total + ' card' + (total === 1 ? '' : 's') + ' wanted · tap a card to view it or open its set · ★ removes it from your own list'));
+  // the local store's price for each card (reads its list once, then it is kept for a day)
+  if (raptorJobs.length) loadRaptor().then(rows => { if (token === lookoutJob) raptorJobs.forEach(j => fillRaptor(j[0], j[1], j[2], j[3], rows)); }).catch(() => raptorJobs.forEach(j => j[0].remove()));
   // fetch any prices we do not have yet, then redraw
   loadPrices(wishes.map(w => ({ lang: w.lang, setId: w.setId, localId: w.localId })), () => { if (token === lookoutJob && location.hash === '#/lookout') viewLookout(); });
 }
@@ -1618,94 +1635,73 @@ async function viewSet(id) {
   if (ui.filter === 'family' && state.people.length < 2) ui.filter = 'all';
   const cached = cacheGet('details3/' + id);
   details = (cached && cached.cards) || {};
-  // cards held in more than one language: one language's collection at a time, asked once per visit
-  const held = Object.keys(langCounts(id));
-  if (childrenOf(id).length) { if (ui.langSet !== id) askEdition(set); }
-  else if (held.length < 2) { viewLang = null; ui.langSet = id; }
-  else if (ui.langSet !== id) { viewLang = held.includes(cardLang) ? cardLang : null; askSetLanguage(set); }
-  else if (viewLang && !held.includes(viewLang) && viewLang !== cardLang) viewLang = null;
+  // the language switch starts on what this set holds (no question asked); a regional edition is its own set and has no language view
+  if (set.custom && set.parent) viewLang = null;
+  else {
+    const held = Object.keys(langCounts(id));
+    setCardLang('en');   // a set always opens on English; the other languages ticked here are buttons at the top
+    viewLang = held.every(x => x === 'en') ? null : 'en';
+  }
   renderSet();
   loadDetails(set, cached);
-}
-// A set with regional editions (the Chinese 30th Celebration under the English one): choose which one to open.
-function askEdition(set) {
-  const sh = $('sheet'), acts = sh.querySelector('.acts');
-  sh.classList.add('noimg');
-  sh.querySelector('b').textContent = set.name;
-  sh.querySelector('small').textContent = 'This set has other editions with their own cards and numbering — which one?';
-  acts.innerHTML = '';
-  const close = () => { ui.langSet = set.id; sh.classList.remove('open'); };
-  const row = (label, right, onclick, on) => {
-    const b = el('button', on ? 'on' : '', '<em>' + esc(label) + '</em><span>' + esc(right) + '</span>');
-    b.querySelector('em').style.fontStyle = 'normal'; b.onclick = onclick; acts.appendChild(b);
-  };
-  row('English', ownedCountAll(set.id) + ' / ' + set.cards.length, () => {
-    viewLang = Object.keys(langCounts(set.id)).length > 1 ? 'en' : null;   // leftover ticks in another language stay out of the English view
-    close(); renderSet();
-  }, true);
-  childrenOf(set.id).forEach(k => {
-    const d = customSetData(k);
-    row(d.name, ownedCountAll(k) + ' / ' + d.cardCount.total, () => { sh.classList.remove('open'); ui.q = ''; location.hash = '#/set/' + k; });
-  });
-  // ready-made editions of this set that have not been added yet are offered here too
-  PRESET_SETS.filter(ps => ps.parent === set.id && !Object.keys(state.customSets).some(i => state.customSets[i].abbr === ps.abbr)).forEach(ps => {
-    row('＋ ' + ps.name, ps.cards.split(String.fromCharCode(10)).filter(Boolean).length + ' cards · add', () => {
-      const id = createCustomSet(ps.name, ps.abbr, ps.cards, ps.region, ps.official, ps.parent, ps.plainFrom);
-      sh.classList.remove('open'); ui.q = ''; location.hash = '#/set/' + id;
-    });
-  });
-  const strays = langCounts(set.id)['zh-cn'];
-  if (set.id === '30th' && strays) {
-    const mv = el('button', '', '<em>→ Move the ' + strays + ' Chinese card' + (strays === 1 ? '' : 's') + ' ticked here into the Chinese edition</em><span></span>');
-    mv.querySelector('em').style.fontStyle = 'normal';
-    mv.onclick = () => {
-      if (!confirm('Move ' + strays + ' Chinese card' + (strays === 1 ? '' : 's') + ' (everyone in the family) out of the English 30th Celebration into its Simplified Chinese edition?\n\nThe card numbers carry across; names fill in from the Chinese list. English cards stay where they are.')) return;
-      const r = moveChineseTicks(); sh.classList.remove('open');
-      if (r) { ui.q = ''; location.hash = '#/set/' + r.toId; }
-    };
-    acts.appendChild(mv);
-  }
-  acts.appendChild(el('div', 'hint', 'Change edition any time with the Edition button at the top of the set'));
-  sh.querySelector('.x').onclick = close;
-  sh.onclick = e => { if (e.target === sh) close(); };
-  sh.classList.add('open');
 }
 function setCardLang(l) {
   cardLang = l; try { localStorage.setItem(CARD_LANG_KEY, l); } catch (e) {}
   document.querySelectorAll('select.cardlang').forEach(s => { s.value = l; s.classList.toggle('on', l !== 'en'); });
 }
-function askSetLanguage(set) {
-  const sh = $('sheet'), acts = sh.querySelector('.acts');
-  const mine = langCounts(set.id, state.current), all = langCounts(set.id);
-  sh.classList.add('noimg');
-  sh.querySelector('b').textContent = set.name;
-  sh.querySelector('small').textContent = 'You hold this set in more than one language — which one are you looking at?';
-  acts.innerHTML = '';
-  const close = () => { ui.langSet = set.id; sh.classList.remove('open'); };
-  const total = set.cards.length;
-  Object.keys(all).sort((a, b) => (a === 'en' ? -1 : b === 'en' ? 1 : (all[b] - all[a]))).forEach(l => {
-    const others = all[l] - (mine[l] || 0);
-    const b = el('button', l === cardLang ? 'on' : '', '<em>' + esc(langName(l)) + '</em><span>' + (mine[l] || 0) + ' / ' + total + (state.people.length > 1 && others > 0 ? ' · family +' + others : '') + '</span>');
-    b.querySelector('em').style.fontStyle = 'normal';
-    b.onclick = () => { viewLang = l; setCardLang(l); close(); renderSet(); };
-    acts.appendChild(b);
+// ---- the language switch at the top of a set ----
+// One button per language or edition of the set (English, languages already ticked here, regional editions such as the
+// Chinese 30th Celebration), plus a + for another one. The active button is also the language new ticks are recorded in.
+const langLabel = l => langName(l).replace(/ \(.*/, '');
+function pickLang(set, l) {
+  setCardLang(l);
+  if (set.custom && set.parent) { ui.q = ''; location.hash = '#/set/' + set.parent; return; }   // back from an edition to the main set
+  const only = Object.keys(langCounts(set.id));
+  viewLang = (l === 'en' && only.every(x => x === 'en')) ? null : l;
+  renderSet();
+}
+function languageBar(set) {
+  const onEdition = !!(set.custom && set.parent), rootId = onEdition ? set.parent : set.id;
+  const bar = el('div', 'seg langbar');
+  const add = (label, on, onclick, title) => { const b = el('button', on ? 'on' : '', esc(label)); if (title) b.title = title; b.onclick = onclick; bar.appendChild(b); };
+  const held = Object.keys(langCounts(rootId));
+  const langs = [...new Set(['en', ...held, ...(!onEdition && viewLang ? [viewLang] : [])])];   // English, then only languages already ticked here (or just chosen with +)
+  langs.forEach(l => add(langLabel(l), !onEdition && cardLang === l, () => pickLang(set, l), 'Cards printed in ' + langLabel(l)));
+  childrenOf(rootId).forEach(k => {
+    const cs = state.customSets[k];
+    add(((cs.region || '').replace(/^Simplified /, '') + ' ' + (cs.abbr || cs.name)).trim(), onEdition && k === set.id, () => { if (k !== set.id) { ui.q = ''; location.hash = '#/set/' + k; } }, cs.name);
   });
-  const b = el('button', '', '<em>All languages together</em><span>' + ownedCountAll(set.id) + ' / ' + total + '</span>');
-  b.querySelector('em').style.fontStyle = 'normal';
-  b.onclick = () => { viewLang = null; close(); renderSet(); };
-  acts.appendChild(b);
-  if (set.id === '30th' && all['zh-cn']) {
-    const mv = el('button', '', '<em>→ Move the Chinese cards into the Chinese 30th set</em><span>' + all['zh-cn'] + '</span>');
-    mv.querySelector('em').style.fontStyle = 'normal';
-    mv.onclick = () => {
-      if (!confirm('Move ' + all['zh-cn'] + ' Chinese card' + (all['zh-cn'] === 1 ? '' : 's') + ' (everyone in the family) out of the English 30th Celebration into a separate Simplified Chinese set?\n\nThe card numbers carry across. Their names are unknown, so they will be called "Card 058" until you rename them. English cards stay where they are.')) return;
+  add('＋', false, () => openLanguageMenu(set, rootId), 'Another language or edition');
+  return bar;
+}
+function openLanguageMenu(set, rootId) {
+  const sh = $('sheet'), acts = sh.querySelector('.acts');
+  sh.classList.add('noimg');
+  sh.querySelector('b').textContent = 'Add a language or edition';
+  sh.querySelector('small').textContent = 'Tick the cards you own in that language. It then gets its own button at the top of the set.';
+  acts.innerHTML = '';
+  const close = () => sh.classList.remove('open');
+  const row = (label, right, onclick) => {
+    const b = el('button', '', '<em>' + esc(label) + '</em><span>' + esc(right) + '</span>');
+    b.querySelector('em').style.fontStyle = 'normal'; b.onclick = () => { close(); onclick(); }; acts.appendChild(b);
+  };
+  // regional editions with their own card list that are ready-made but not added yet
+  PRESET_SETS.filter(ps => ps.parent === rootId && !Object.keys(state.customSets).some(i => state.customSets[i].abbr === ps.abbr)).forEach(ps => {
+    row('＋ ' + ps.name, ps.cards.split(String.fromCharCode(10)).filter(Boolean).length + ' cards', () => {
+      const id = createCustomSet(ps.name, ps.abbr, ps.cards, ps.region, ps.official, ps.parent, ps.plainFrom);
+      ui.q = ''; location.hash = '#/set/' + id;
+    });
+  });
+  const shown = new Set(['en', ...Object.keys(langCounts(rootId)), ...(viewLang ? [viewLang] : [])]);
+  LANGS.filter(l => !shown.has(l[0])).forEach(l => row(langLabel(l[0]), 'same cards, printed in ' + langLabel(l[0]), () => pickLang(set, l[0])));
+  const strays = langCounts(rootId)['zh-cn'];
+  if (rootId === '30th' && strays) {
+    row('→ Move the ' + strays + ' Chinese card' + (strays === 1 ? '' : 's') + ' ticked here into the Chinese edition', '', () => {
+      if (!confirm('Move ' + strays + ' Chinese card' + (strays === 1 ? '' : 's') + ' (everyone in the family) out of the English 30th Celebration into its Simplified Chinese edition? The card numbers carry across. English cards stay where they are.')) return;
       const r = moveChineseTicks();
-      close();
       if (r) { ui.q = ''; location.hash = '#/set/' + r.toId; }
-    };
-    acts.appendChild(mv);
+    });
   }
-  acts.appendChild(el('div', 'hint', 'Change it any time with 🌐 Cards in at the top of the set. If that language has its own card list (e.g. the Chinese 30th), add it as its own set: home page → Set not listed?'));
   sh.querySelector('.x').onclick = close;
   sh.onclick = e => { if (e.target === sh) close(); };
   sh.classList.add('open');
@@ -1922,7 +1918,7 @@ function renderSetHeader() {
   if (state.people.length > 1) filters.push(['family', 'Family', 'Cards nobody in the family has']);
   const controls = [
     personSelect(),
-    cardLangSelect(),
+    languageBar(set),
     scanButton(),
     makeSearch('Search name or number', () => renderCards()),
     makeSeg(filters, ui.filter, k => { ui.filter = k; renderSet(); }),
@@ -1939,8 +1935,6 @@ function renderSetHeader() {
     if (master) ms.classList.add('on');
     controls.push(ms);
   }
-  const parentId = set.custom ? set.parent : set.id;
-  if (parentId && childrenOf(parentId).length) controls.push(makeButton('Edition…', () => { if (set.custom) { location.hash = '#/set/' + parentId; } else { ui.langSet = null; askEdition(set); } }, 'Switch between the English set and its regional editions'));
   controls.push(makeButton('Print placeholders', printPlaceholders, 'Print the cards you still need at real size, to fill binder pockets'));
   setHeader({
     title: esc(set.name) + (yearOf(set.id) ? ' <small class="vl yr">' + yearOf(set.id) + '</small>' : '') + (set.region ? ' <small class="vl rg">' + esc(set.region) + '</small>' : '') + (viewLang ? ' <small class="vl">' + esc(langName(viewLang)) + '</small>' : ''), back: set.custom && set.parent ? '#/set/' + set.parent : set.serie ? '#/series/' + set.serie.id : '#/',
@@ -2822,6 +2816,82 @@ function scanButton() { return makeButton('📷 Scan', () => scanner.open(), 'Re
 
 /* ---------- price check: every figure we can get for one card, in AUD, plus a guide price and an asking-price test ---------- */
 const pcCache = {};
+/* ---------- Raptor Games (local store) prices ---------- */
+// The store's Shopify product list is public and readable from a web page. It is read once (about 5 MB), boiled down to
+// name, card number, set size and price, kept on the phone for a day, and matched to a card by number, set size and name.
+// Personal use only: nothing is stored anywhere but the phone, and the store is credited and linked.
+const RAPTOR = 'https://raptorgames.com', RAPTOR_KEY = CACHE_PFX + 'raptor', RAPTOR_AGE = 24 * 3600 * 1000;
+let raptorIdx = null, raptorLoading = null;
+const raptorNum = x => String(x).toUpperCase().replace(/^([A-Z]*)0+(?=\d)/, '$1');
+const raptorName = n => String(n).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g, '');
+async function loadRaptor(onProgress) {
+  if (raptorIdx) return raptorIdx;
+  try { const c = JSON.parse(localStorage.getItem(RAPTOR_KEY)); if (c && Date.now() - c.at < RAPTOR_AGE) return (raptorIdx = c.rows); } catch (e) {}
+  if (!raptorLoading) raptorLoading = (async () => {
+    const rows = [];
+    for (let page = 1; page < 40; page++) {
+      const r = await fetch(RAPTOR + '/collections/pokemon-tcg-singles/products.json?limit=250&page=' + page);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const list = (await r.json()).products || [];
+      if (!list.length) break;
+      list.forEach(pr => {
+        const m = pr.title.match(/^(.*?)\s*\b([A-Z]{0,4}\d{1,3})\/([A-Z]{0,4}\d{1,3})\b\s*(.*)$/i);
+        if (!m) return;
+        const v = (pr.variants || []).find(x => x.available) || (pr.variants || [])[0];
+        if (v) rows.push([m[1].trim(), raptorNum(m[2]), raptorNum(m[3]), m[4].trim(), +v.price, pr.handle, !!v.available]);
+      });
+      if (onProgress) onProgress(page);
+      if (list.length < 250) break;
+      await new Promise(res => setTimeout(res, 400));   // gentle on their server
+    }
+    raptorIdx = rows;
+    try { localStorage.setItem(RAPTOR_KEY, JSON.stringify({ at: Date.now(), rows })); } catch (e) {}
+    return rows;
+  })();
+  try { return await raptorLoading; } finally { raptorLoading = null; }
+}
+// every listing with this card's number, set size and name; those naming this set first
+function raptorMatches(card, setId, setName, rows) {
+  const sd = cacheGet('sets/' + setId), total = sd && sd.cardCount && sd.cardCount.official;
+  if (!total) return null;
+  const n = raptorNum(card.localId), t = String(total).replace(/^0+/, ''), nm = raptorName(card.name), sn = raptorName(setName);
+  const hits = rows.filter(r => r[1] === n && r[2].replace(/^[A-Z]+0*/, '') === t && raptorName(r[0]).startsWith(nm));
+  const own = hits.filter(r => raptorName(r[3]).includes(sn));
+  return (own.length ? own : hits).sort((a, b) => a[4] - b[4]);
+}
+// one short line for the Lookout: the cheapest listing in stock (hover or long-press for them all)
+function fillRaptor(node, setId, setName, card, rows) {
+  const hits = raptorMatches(card, setId, setName, rows);
+  if (!hits || !hits.length) { node.remove(); return; }
+  const inStock = hits.filter(r => r[6]);
+  node.className = 'rap ' + (inStock.length ? 'in' : 'out');
+  node.textContent = inStock.length ? 'Raptor ' + (inStock.length > 1 ? 'from ' : '') + money(inStock[0][4], 'AUD') : 'Raptor: sold out';
+  node.title = hits.map(r => r[3] + ' ' + money(r[4], 'AUD') + (r[6] ? '' : ' (sold out)')).join(' · ');
+}
+function raptorBox(l, setId, setName, card) {
+  const box = el('div', 'raptor'), body = el('div', 'rbody');
+  box.innerHTML = '<h4>Raptor Games <small>local store</small></h4>';
+  box.appendChild(body);
+  if (l !== 'en' || card.custom || card.extra) { body.innerHTML = '<small>Only English catalogue cards are looked up.</small>'; return box; }
+  body.innerHTML = '<small>' + (raptorIdx ? 'Looking up…' : 'Reading the store\'s singles list once (about 5 MB)…') + '</small>';
+  loadRaptor(p => { body.innerHTML = '<small>Reading the store\'s singles list… ' + p + ' of about 14</small>'; }).then(rows => {
+    const hits = raptorMatches(card, setId, setName, rows);
+    body.innerHTML = '';
+    if (hits == null) body.innerHTML = '<small>This set has no printed total, so it cannot be matched to the store\'s numbering.</small>';
+    else if (!hits.length) body.innerHTML = '<small>Not listed at Raptor Games right now.</small>';
+    else hits.slice(0, 8).forEach(r => {
+      const a = el('a', 'rrow', '<span class="rt"></span><b>' + money(r[4], 'AUD') + '</b><em class="' + (r[6] ? 'in' : 'out') + '">' + (r[6] ? 'In stock' : 'Sold out') + '</em>');
+      a.querySelector('.rt').textContent = r[3];
+      a.href = RAPTOR + '/products/' + r[5]; a.target = '_blank'; a.rel = 'noopener';
+      body.appendChild(a);
+    });
+    const re = el('a', 'rref', 'Refresh store prices');
+    re.href = '#'; re.onclick = e => { e.preventDefault(); raptorIdx = null; try { localStorage.removeItem(RAPTOR_KEY); } catch (x) {} body.innerHTML = '<small>Refreshing…</small>'; box.replaceWith(raptorBox(l, setId, setName, card)); };
+    body.appendChild(re);
+  }).catch(() => { body.innerHTML = '<small>Could not reach Raptor Games (no internet?).</small>'; });
+  return box;
+}
+
 async function openPriceCheck(l, setId, setName, card, variant) {
   const pc = $('pc'), body = pc.querySelector('.body');
   pc.querySelector('img').src = card.image ? lowSrc(card.image) : '';
@@ -2878,6 +2948,7 @@ async function openPriceCheck(l, setId, setName, card, variant) {
         body.appendChild(ask); body.appendChild(verdict);
       }
     }
+    body.appendChild(raptorBox(l, setId, setName, card));
     // live listings, including sold prices, which no free feed provides
     const q = encodeURIComponent(card.name + ' ' + card.localId + ' ' + setName + (v === 'r' ? ' reverse holo' : ''));
     const links = el('div', 'links');
