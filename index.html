@@ -429,7 +429,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v54';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v55';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -1152,7 +1152,7 @@ function setMatches(s, q) {
 const WIDE_SYMBOLS = ['30th'];   // symbols/<id>.png files that are a full logo, not a small square symbol
 function setArt(set) {
   const key = parentOf(set.id) || set.id;   // a regional edition (30th-C, 30th-P) wears its English set's picture
-  const chain = ['symbols/' + encodeURIComponent(key) + '.png', set.logo ? set.logo + '.webp' : '', set.symbol ? set.symbol + '.webp' : ''].filter(Boolean);
+  const chain = [...(WIDE_SYMBOLS.includes(key) ? [encodeURIComponent(key) + '.png'] : []), 'symbols/' + encodeURIComponent(key) + '.png', set.logo ? set.logo + '.webp' : '', set.symbol ? set.symbol + '.webp' : ''].filter(Boolean);
   const badge = '<span class="sym badge">' + esc(abbrOf(set.id) || set.id.toUpperCase().slice(0, 4)) + '</span>';
   if (!chain.length) return badge;
   // each failure moves to the next source; the last failure swaps in the badge
@@ -1160,7 +1160,7 @@ function setArt(set) {
 }
 window.setArtFallback = img => {
   const rest = (img.dataset.next || '').split('|').filter(Boolean);
-  if (rest.length) { img.className = rest[0].endsWith('/logo.webp') ? '' : 'sym'; img.dataset.next = rest.slice(1).join('|'); img.src = rest[0]; return; }
+  if (rest.length) { img.className = rest[0].endsWith('/logo.webp') || WIDE_SYMBOLS.some(k => rest[0].endsWith(k + '.png')) ? '' : 'sym'; img.dataset.next = rest.slice(1).join('|'); img.src = rest[0]; return; }
   const b = document.createElement('span'); b.className = 'sym badge';
   const id = (img.closest('.row') || {}).dataset ? img.closest('.row').dataset.set : '';
   b.textContent = (id && abbrOf(id)) || (id || '?').toUpperCase().slice(0, 4);
