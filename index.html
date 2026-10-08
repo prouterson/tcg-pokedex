@@ -440,7 +440,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v58';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v59';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -1382,7 +1382,14 @@ async function viewLookout() {
   const whoSel = el('select');
   whoSel.innerHTML = '<option value="all">Everyone</option>' + state.people.map(p => '<option value="' + p.id + '"' + (p.id === lookoutWho ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('');
   whoSel.onchange = () => { lookoutWho = whoSel.value; viewLookout(); };
-  setHeader({ title: '★ Lookout', back: '#/', controls: [whoSel, makeSeg([['grid', '▦', 'Pictures'], ['list', '☰', 'Compact list']], ui.mode, k => { ui.mode = k; viewLookout(); })] });
+  const rapBtn = el('button', '', '⟳ Store');
+  rapBtn.title = 'Re-read the Raptor Games price list now' + raptorAgeText();
+  rapBtn.onclick = async () => {
+    rapBtn.disabled = true; rapBtn.textContent = 'Reading…';
+    try { await refreshRaptor(p => { rapBtn.textContent = 'Reading ' + p + '/14'; }); } catch (e) { rapBtn.textContent = 'No connection'; await new Promise(r => setTimeout(r, 1500)); }
+    if (location.hash === '#/lookout') viewLookout();
+  };
+  setHeader({ title: '★ Lookout', back: '#/', controls: [whoSel, rapBtn, makeSeg([['grid', '▦', 'Pictures'], ['list', '☰', 'Compact list']], ui.mode, k => { ui.mode = k; viewLookout(); })] });
   const wishes = allWishes().filter(w => lookoutWho === 'all' || w.pid === lookoutWho);
   if (!wishes.length) {
     main.innerHTML = '<div class="note">Nothing on the lookout list' + (lookoutWho === 'all' ? '' : ' for ' + esc((state.people.find(p => p.id === lookoutWho) || {}).name)) + '. On any set page, tap ☆ on a card you want to find — it shows up here for the whole family, with its price, and drops off automatically once it is marked owned.</div>';
@@ -2822,6 +2829,16 @@ const pcCache = {};
 // Personal use only: nothing is stored anywhere but the phone, and the store is credited and linked.
 const RAPTOR = 'https://raptorgames.com', RAPTOR_KEY = CACHE_PFX + 'raptor', RAPTOR_AGE = 24 * 3600 * 1000;
 let raptorIdx = null, raptorLoading = null;
+function raptorAgeText() {
+  try { const c = JSON.parse(localStorage.getItem(RAPTOR_KEY)); if (c && c.at) { const h = Math.floor((Date.now() - c.at) / 3600000); return ' (last read ' + (h < 1 ? 'less than an hour' : h + ' hour' + (h === 1 ? '' : 's')) + ' ago)'; } } catch (e) {}
+  return '';
+}
+// forget the saved copy and read the store's list again
+function refreshRaptor(onProgress) {
+  raptorIdx = null;
+  try { localStorage.removeItem(RAPTOR_KEY); } catch (e) {}
+  return loadRaptor(onProgress);
+}
 const raptorNum = x => String(x).toUpperCase().replace(/^([A-Z]*)0+(?=\d)/, '$1');
 const raptorName = n => String(n).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g, '');
 async function loadRaptor(onProgress) {
