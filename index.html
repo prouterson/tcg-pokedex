@@ -170,6 +170,7 @@
   .card.noimg .ph { display: flex; }
   .card.owned { background: var(--panel); border-color: var(--owned); }
   .card.owned img { filter: none; }
+  body.colourall .card img { filter: none; }   /* "Full colour": show every card as it prints, owned or not */
   .card .num { font-size: 11px; color: var(--muted); margin-top: 4px; }
   .card .name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .card .meta { font-size: 11px; color: var(--muted); display: flex; justify-content: space-between; align-items: center; gap: 4px; min-height: 16px; }
@@ -440,7 +441,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v59';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v60';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -1747,6 +1748,8 @@ function ownedVariants(c) {
   const stand = avail.includes('h') ? 'h' : avail[0];
   return [...avail].filter(k => m[k] || (k === stand && m.n && !avail.includes('n')));
 }
+const COLOUR_KEY = 'tcgPokedex.colour';
+let colourAll = (() => { try { return localStorage.getItem(COLOUR_KEY) === '1'; } catch (e) { return false; } })();
 const MASTER_KEY = 'tcgPokedex.master';
 let master = (() => { try { return localStorage.getItem(MASTER_KEY) === '1'; } catch (e) { return false; } })();
 
@@ -1942,6 +1945,11 @@ function renderSetHeader() {
     if (master) ms.classList.add('on');
     controls.push(ms);
   }
+  const cb = makeButton('🎨 Full colour', () => { colourAll = !colourAll; try { localStorage.setItem(COLOUR_KEY, colourAll ? '1' : '0'); } catch (e) {} renderSetHeader(); },
+    'Show the whole set in full colour, including the cards you do not have yet (owned cards keep their tick and border)');
+  if (colourAll) cb.classList.add('on');
+  controls.push(cb);
+  document.body.classList.toggle('colourall', colourAll);
   controls.push(makeButton('Print placeholders', printPlaceholders, 'Print the cards you still need at real size, to fill binder pockets'));
   setHeader({
     title: esc(set.name) + (yearOf(set.id) ? ' <small class="vl yr">' + yearOf(set.id) + '</small>' : '') + (set.region ? ' <small class="vl rg">' + esc(set.region) + '</small>' : '') + (viewLang ? ' <small class="vl">' + esc(langName(viewLang)) + '</small>' : ''), back: set.custom && set.parent ? '#/set/' + set.parent : set.serie ? '#/series/' + set.serie.id : '#/',
@@ -3013,6 +3021,7 @@ function importProgress() {
 /* ---------- routing: #/  #/series/<id>  #/set/<id>  #/people ---------- */
 function route() {
   detailJob++;                       // stop any price loader from the previous view
+  if (!(location.hash || '').startsWith('#/set/')) document.body.classList.remove('colourall');
   const h = location.hash || '#/';
   let m;
   if (!h.startsWith('#/set/')) { viewLang = null; ui.langSet = null; }      // the language view belongs to one visit to one set
