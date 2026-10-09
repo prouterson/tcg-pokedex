@@ -330,6 +330,21 @@
   #pc .links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
   #pc .links a { padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--radius); color: var(--text); text-decoration: none; font-size: 14px; background: var(--bg); }
   #pc .note.small { font-size: 12px; margin: 8px 0 0; }
+  #pc .ctrbtn { margin-top: 10px; }
+  #ctr { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: flex-end; justify-content: center; z-index: 28; }
+  #ctr.open { display: flex; }
+  #ctr .box { background: var(--panel); color: var(--text); border-radius: 18px 18px 0 0; padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); width: 100%; max-width: 560px; max-height: 94vh; overflow: auto; box-shadow: 0 -4px 24px rgba(0,0,0,.3); }
+  #ctr .head { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; }
+  #ctr .head .t { flex: 1; min-width: 0; } #ctr .head b { display: block; font-size: 17px; } #ctr .head small { color: var(--muted); }
+  #ctr .x { width: 36px; height: 36px; padding: 0; border-radius: 50%; font-size: 14px; }
+  #ctr .links { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  #ctr canvas { display: block; width: 100%; max-width: 360px; margin: 10px auto; touch-action: none; border-radius: 6px; background: #111; }
+  #ctr .ctrd { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: center; }
+  #ctr .ctrd > div { background: var(--card-miss); border-radius: 12px; padding: 10px 6px; }
+  #ctr .ctrd .adj { grid-column: 1 / -1; font-size: 13px; color: var(--muted); } #ctr .ctrd .adj b { display: inline; font-size: inherit; color: var(--text); }
+  #ctr .ctrd b { display: block; font-size: 24px; } #ctr .ctrd small { color: var(--muted); display: block; }
+  #ctr .verdict { font-weight: 700; margin: 10px 0 0; } #ctr .verdict.good { color: var(--owned); } #ctr .verdict.bad { color: var(--need); }
+  #ctr .note.small { font-size: 12px; margin: 8px 0 0; }
 
   /* print options dialog */
   #printOpts { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: center; justify-content: center; z-index: 25; padding: 16px; }
@@ -400,6 +415,10 @@
   <div class="head"><img alt=""><div class="t"><b></b><small></small></div><button class="x" aria-label="Close">✕</button></div>
   <div class="body"></div>
 </div></div>
+<div id="ctr"><div class="box">
+  <div class="head"><div class="t"><b>Centering check</b><small></small></div><button class="x" aria-label="Close">✕</button></div>
+  <div class="body"></div>
+</div></div>
 <div id="printOpts"><div class="box">
   <h3></h3>
   <p>Real-size placeholders, 9 per A4 page, in binder order. Cut along the dashed lines.</p>
@@ -441,7 +460,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v60';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v61';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -2917,6 +2936,222 @@ function raptorBox(l, setId, setName, card) {
   return box;
 }
 
+/* ---------- centering check ---------- */
+// Measures how evenly the printed border sits on each side of a card from one flat photo. It is an estimate only:
+// it cannot see corners, edges or surface. The photo is straightened to a card-shaped picture, the card's outer edge
+// and the inner edge of its border are found on each side, and every one of the eight lines can be dragged to correct it.
+const CTR_W = 756, CTR_H = 1056, CTR_M = 0.05;   // straightened card size; a 5% margin of background is kept all round
+const ctrDist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+const ctrMedian = a => { const s = Float32Array.from(a).sort(); return s[s.length >> 1]; };
+
+async function ctrBitmap(file) {
+  let bmp;
+  try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (e) { bmp = await createImageBitmap(file); }
+  const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  return c;
+}
+
+// where the card is: background colour from the edge of the photo, the biggest blob that differs from it, and the
+// tilt that gives that blob the smallest upright box
+function ctrFindCard(src) {
+  const sc = 300 / Math.max(src.width, src.height), w = Math.max(8, Math.round(src.width * sc)), h = Math.max(8, Math.round(src.height * sc));
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const cx = c.getContext('2d', { willReadFrequently: true }); cx.drawImage(src, 0, 0, w, h);
+  const d = cx.getImageData(0, 0, w, h).data;
+  const R = [], G = [], B = [];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (y < h * .04 || y > h * .96 || x < w * .04 || x > w * .96) { const i = (y * w + x) * 4; R.push(d[i]); G.push(d[i + 1]); B.push(d[i + 2]); }
+  const bg = [ctrMedian(R), ctrMedian(G), ctrMedian(B)];
+  const mask = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) mask[i] = Math.hypot(d[i * 4] - bg[0], d[i * 4 + 1] - bg[1], d[i * 4 + 2] - bg[2]) > 50 ? 1 : 0;
+  const seen = new Uint8Array(w * h), stack = new Int32Array(w * h);
+  let best = null;
+  for (let s = 0; s < w * h; s++) {
+    if (!mask[s] || seen[s]) continue;
+    let sp = 0; stack[sp++] = s; seen[s] = 1; const pts = [];
+    while (sp) {
+      const p = stack[--sp]; pts.push(p); const x = p % w, y = (p / w) | 0;
+      if (x > 0 && mask[p - 1] && !seen[p - 1]) { seen[p - 1] = 1; stack[sp++] = p - 1; }
+      if (x < w - 1 && mask[p + 1] && !seen[p + 1]) { seen[p + 1] = 1; stack[sp++] = p + 1; }
+      if (y > 0 && mask[p - w] && !seen[p - w]) { seen[p - w] = 1; stack[sp++] = p - w; }
+      if (y < h - 1 && mask[p + w] && !seen[p + w]) { seen[p + w] = 1; stack[sp++] = p + w; }
+    }
+    if (!best || pts.length > best.length) best = pts;
+  }
+  if (!best || best.length < w * h * .05) throw new Error('Could not find the card. Lay it on a plain surface that contrasts with its border (a dark cloth works well) and fit the whole card in the photo.');
+  const xs = Float32Array.from(best, p => p % w), ys = Float32Array.from(best, p => (p / w) | 0);
+  const ext = deg => {
+    const th = deg * Math.PI / 180, co = Math.cos(th), si = Math.sin(th);
+    let a0 = 1e9, a1 = -1e9, b0 = 1e9, b1 = -1e9;
+    for (let i = 0; i < xs.length; i++) { const a = xs[i] * co + ys[i] * si, b = -xs[i] * si + ys[i] * co; if (a < a0) a0 = a; if (a > a1) a1 = a; if (b < b0) b0 = b; if (b > b1) b1 = b; }
+    return { deg, th, a0, b0, ew: a1 - a0 + 1, eh: b1 - b0 + 1 };
+  };
+  let be = ext(0);
+  for (let g = -10; g <= 10; g += .5) { const e = ext(g); if (e.ew * e.eh < be.ew * be.eh) be = e; }
+  for (let g = be.deg - .5; g <= be.deg + .5; g += .1) { const e = ext(g); if (e.ew * e.eh < be.ew * be.eh) be = e; }
+  if (be.ew / be.eh > 1.1) be = ext(be.deg + 90);
+  const r = be.ew / be.eh;
+  if (r < .6 || r > .85) throw new Error('That does not look like one whole card in the photo. Fit the entire card in, on a plain surface.');
+  return Object.assign(be, { bg, k: src.width / w });
+}
+
+// straighten the card into a CTR_W x CTR_H picture with a little background kept round it
+function ctrWarp(src, f) {
+  const CW = Math.round(CTR_W * (1 + 2 * CTR_M)), CH = Math.round(CTR_H * (1 + 2 * CTR_M));
+  const co = Math.cos(f.th), si = Math.sin(f.th), k = f.k;
+  const A0 = f.a0 - CTR_M * f.ew, B0 = f.b0 - CTR_M * f.eh, ka = f.ew * (1 + 2 * CTR_M) / CW, kb = f.eh * (1 + 2 * CTR_M) / CH;
+  const c = document.createElement('canvas'); c.width = CW; c.height = CH;
+  const x = c.getContext('2d', { willReadFrequently: true });
+  x.imageSmoothingQuality = 'high';
+  // picture-to-photo map, inverted because the canvas wants photo-to-picture
+  const ma = k * co * ka, mb = k * si * ka, mc = -k * si * kb, md = k * co * kb, me = k * (co * A0 - si * B0), mf = k * (si * A0 + co * B0), det = ma * md - mb * mc;
+  x.setTransform(md / det, -mb / det, -mc / det, ma / det, (mc * mf - md * me) / det, (mb * me - ma * mf) / det);
+  x.drawImage(src, 0, 0);
+  x.setTransform(1, 0, 0, 1, 0, 0);
+  return c;
+}
+
+// the eight lines, in picture pixels: o = card's outer edge, i = inner edge of its border (L, R, T, B)
+function ctrEdges(c, bg) {
+  const CW = c.width, CH = c.height, d = c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, CW, CH).data;
+  const prof = (n, lo, hi, px) => {               // colour of every column (or row), median over the middle of the card
+    const out = [], len = Math.ceil((hi - lo) / 2), r = new Uint8Array(len), g = new Uint8Array(len), b = new Uint8Array(len);
+    for (let i = 0; i < n; i++) {
+      let k = 0; for (let j = lo; j < hi; j += 2) { const p = px(i, j); r[k] = d[p]; g[k] = d[p + 1]; b[k] = d[p + 2]; k++; }
+      out.push([ctrMedian(r.subarray(0, k)), ctrMedian(g.subarray(0, k)), ctrMedian(b.subarray(0, k))]);
+    }
+    return out;
+  };
+  const colP = prof(CW, Math.round(CH * .3), Math.round(CH * .7), (i, j) => (j * CW + i) * 4);
+  const rowP = prof(CH, Math.round(CW * .3), Math.round(CW * .7), (i, j) => (i * CW + j) * 4);
+  const mx = Math.round(CTR_M * CTR_W), my = Math.round(CTR_M * CTR_H);
+  // distance in from one end to the card's outer edge, or null
+  const outer = (P, n, m, rev) => {
+    const at = i => rev ? n - 1 - i : i, dB = P.map(p => ctrDist(p, bg)), span = n - 2 * m;
+    const lv = []; for (let i = m + Math.round(.02 * span); i < m + Math.round(.06 * span); i++) lv.push(dB[at(i)]);
+    lv.sort((a, b) => a - b);
+    const level = lv[Math.floor(lv.length * .8)];
+    if (!(level > 30)) return null;
+    const thr = Math.max(18, level * .5);
+    for (let c = 0; c < n / 2; c++) if (dB[at(c)] > thr && dB[at(c + 1)] > thr && dB[at(c + 2)] > thr) {
+      // a shadow can cross the threshold early; the card's own edge is the first sharp step after that
+      const g = i => ctrDist(P[at(i + 2)], P[at(Math.max(0, i - 2))]);
+      let mg = 0; for (let i = Math.max(0, c - 6); i < c + 45; i++) mg = Math.max(mg, g(i));
+      for (let i = Math.max(0, c - 6); i < c + 45; i++) if (g(i) > mg * .5) return i;
+      return c;
+    }
+    return null;
+  };
+  // distance in from that end to where the border's colour gives way to the card face, or null
+  const inner = (P, n, o, rev) => {
+    const at = i => rev ? n - 1 - i : i;
+    const lo = o + Math.round(.008 * n), hi = o + Math.round(.018 * n), ch = [0, 1, 2].map(k => { const a = []; for (let i = lo; i < hi; i++) a.push(P[at(i)][k]); return ctrMedian(a); });
+    let run = 0;
+    for (let i = hi; i < o + Math.round(.14 * n); i++) { if (ctrDist(P[at(i)], ch) > 32) { if (++run >= 4) return i - 3; } else run = 0; }
+    return null;
+  };
+  const pos = (v, n, rev) => rev ? n - v : v;
+  const oL = outer(colP, CW, mx, false), oR = outer(colP, CW, mx, true), oT = outer(rowP, CH, my, false), oB = outer(rowP, CH, my, true);
+  const iL = oL == null ? null : inner(colP, CW, oL, false), iR = oR == null ? null : inner(colP, CW, oR, true);
+  const iT = oT == null ? null : inner(rowP, CH, oT, false), iB = oB == null ? null : inner(rowP, CH, oB, true);
+  const ok = [oL, oR, oT, oB, iL, iR, iT, iB].every(v => v != null);
+  const o = { oL: oL == null ? mx : oL, oR: oR == null ? CW - mx : pos(oR, CW, true), oT: oT == null ? my : oT, oB: oB == null ? CH - my : pos(oB, CH, true) };
+  return Object.assign(o, {
+    iL: iL == null ? o.oL + .045 * CTR_W : iL, iR: iR == null ? o.oR - .045 * CTR_W : pos(iR, CW, true),
+    iT: iT == null ? o.oT + .045 * CTR_W : iT, iB: iB == null ? o.oB - .045 * CTR_W : pos(iB, CH, true), ok
+  });
+}
+
+// Modern cards print a thinner bottom border than top, so a perfect copy can read 58/42 top to bottom. The catalogue picture
+// of the same card gives that built-in difference (assumed to be a well-centred copy), and the check allows for it.
+async function ctrBaseline(card) {
+  try {
+    if (!card.image) return null;
+    const bmp = await createImageBitmap(await (await fetch(highSrc(card.image))).blob());
+    const CW = Math.round(CTR_W * (1 + 2 * CTR_M)), CH = Math.round(CTR_H * (1 + 2 * CTR_M)), c = document.createElement('canvas');
+    c.width = CW; c.height = CH;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.fillStyle = '#808080'; x.fillRect(0, 0, CW, CH);
+    x.drawImage(bmp, Math.round(CTR_M * CTR_W), Math.round(CTR_M * CTR_H), CTR_W, CTR_H);
+    const e = ctrEdges(c, [128, 128, 128]);
+    if (!e.ok) return null;
+    const cw = e.oR - e.oL, ch = e.oB - e.oT;
+    return { L: (e.iL - e.oL) / cw, R: (e.oR - e.iR) / cw, T: (e.iT - e.oT) / ch, B: (e.oB - e.iB) / ch };
+  } catch (e) { return null; }
+}
+
+function openCentering(card) {
+  let design = null, again = null;
+  ctrBaseline(card).then(b => { design = b; if (again) again(); });
+  const o = $('ctr'), body = o.querySelector('.body');
+  o.querySelector('small').textContent = card.name;
+  o.classList.add('open');
+  o.querySelector('.x').onclick = () => o.classList.remove('open');
+  o.onclick = e => { if (e.target === o) o.classList.remove('open'); };
+  body.innerHTML = '';
+  body.appendChild(el('div', 'note small', 'Lay the card flat on a plain surface that contrasts with its border (a dark cloth works well). Photograph it straight down, with the whole card in the frame and no glare across the borders. Front only; the back is judged separately.'));
+  const row = el('div', 'links'), res = el('div', 'ctres');
+  const mk = (label, cap) => {
+    const inp = el('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.hidden = true; if (cap) inp.setAttribute('capture', 'environment');
+    inp.onchange = () => { if (inp.files[0]) run(inp.files[0]); inp.value = ''; };
+    const b = makeButton(label, () => inp.click()); row.appendChild(inp); row.appendChild(b);
+  };
+  mk('📷 Take a photo', true); mk('🖼 Choose a photo', false);
+  body.appendChild(row); body.appendChild(res);
+  async function run(file) {
+    res.innerHTML = '<div class="empty">Measuring…</div>';
+    let base, lines;
+    try {
+      const src = await ctrBitmap(file), f = ctrFindCard(src);
+      base = ctrWarp(src, f); lines = ctrEdges(base, f.bg);
+    } catch (e) { res.innerHTML = ''; res.appendChild(el('div', 'note', esc(e.message || 'Could not read that photo.'))); return; }
+    res.innerHTML = '';
+    if (!lines.ok) res.appendChild(el('div', 'note small', 'The border could not be found everywhere automatically (full-art cards have none). Lines are placed roughly. Drag them onto the real edges.'));
+    const cv = el('canvas'); cv.width = base.width; cv.height = base.height;
+    const rd = el('div', 'ctrd'), verdict = el('div', 'verdict');
+    res.appendChild(cv); res.appendChild(rd); res.appendChild(verdict);
+    res.appendChild(el('div', 'note small', 'Red lines are the inner edge of the border, white dashed lines the card edge. Drag any line to fix it; the numbers update. Graders also judge corners, edges and surface, which this cannot see, so treat it as a guide only.'));
+    const V = ['oL', 'iL', 'iR', 'oR'], H = ['oT', 'iT', 'iB', 'oB'];
+    const redraw = () => {
+      const x = cv.getContext('2d'), lw = cv.width / 260;
+      x.drawImage(base, 0, 0);
+      V.concat(H).forEach(n => {
+        x.beginPath(); x.lineWidth = lw; x.strokeStyle = n[0] === 'o' ? 'rgba(255,255,255,.95)' : '#ff2d55'; x.setLineDash(n[0] === 'o' ? [lw * 4, lw * 3] : []);
+        if (V.includes(n)) { x.moveTo(lines[n], 0); x.lineTo(lines[n], cv.height); } else { x.moveTo(0, lines[n]); x.lineTo(cv.width, lines[n]); }
+        x.stroke();
+      });
+      const L = lines.iL - lines.oL, Rr = lines.oR - lines.iR, T = lines.iT - lines.oT, Bb = lines.oB - lines.iB, cw = lines.oR - lines.oL, ch = lines.oB - lines.oT;
+      if (L + Rr <= 0 || T + Bb <= 0 || cw <= 0 || ch <= 0) { rd.textContent = ''; verdict.textContent = 'The lines are out of order. Drag them back onto the edges.'; verdict.className = 'verdict bad'; return; }
+      const lr = L / (L + Rr) * 100, tb = T / (T + Bb) * 100, mm = (v, tot, size) => (v * size / tot).toFixed(1);
+      const pair = p => Math.round(p) + ' / ' + Math.round(100 - p);
+      // allow for the design's own top/bottom (and left/right) difference
+      let alr = lr, atb = tb;
+      if (design) { const a = L / cw / design.L, b = Rr / cw / design.R, c2 = T / ch / design.T, d2 = Bb / ch / design.B; alr = a / (a + b) * 100; atb = c2 / (c2 + d2) * 100; }
+      const adj = design && (Math.abs(alr - lr) > 1.5 || Math.abs(atb - tb) > 1.5);
+      rd.innerHTML = '<div><small>Left / right</small><b>' + pair(lr) + '</b><small>' + mm(L, cw, 63) + ' / ' + mm(Rr, cw, 63) + ' mm</small></div>' +
+        '<div><small>Top / bottom</small><b>' + pair(tb) + '</b><small>' + mm(T, ch, 88) + ' / ' + mm(Bb, ch, 88) + ' mm</small></div>' +
+        (adj ? '<div class="adj">Allowing for this card\'s design (its catalogue picture has a ' + pair(design.T / (design.T + design.B) * 100) + ' top / bottom border): <b>' + pair(alr) + '</b> left / right, <b>' + pair(atb) + '</b> top / bottom</div>' : '');
+      const worst = Math.max(alr, 100 - alr, atb, 100 - atb);
+      const [txt, cls] = worst <= 55.5 ? ['Very well centred. Within what top grades generally want (about 55/45 or better).', 'good'] :
+        worst <= 60.5 ? ['Reasonably centred. Borderline for a top grade (about 60/40).', ''] :
+        worst <= 65.5 ? ['Noticeably off-centre. Likely to cost a grade.', 'bad'] : ['Heavily off-centre. This will weigh on the grade.', 'bad'];
+      verdict.textContent = txt; verdict.className = 'verdict ' + cls;
+    };
+    let drag = null;
+    const where = e => { const r = cv.getBoundingClientRect(), k = cv.width / r.width; return [(e.clientX - r.left) * k, (e.clientY - r.top) * k, k]; };
+    cv.onpointerdown = e => {
+      const [x, y, k] = where(e); let bd = 26 * k; drag = null;
+      V.forEach(n => { const d = Math.abs(lines[n] - x); if (d < bd) { bd = d; drag = n; } });
+      H.forEach(n => { const d = Math.abs(lines[n] - y); if (d < bd) { bd = d; drag = n; } });
+      if (drag) { cv.setPointerCapture(e.pointerId); e.preventDefault(); }
+    };
+    cv.onpointermove = e => { if (!drag) return; const [x, y] = where(e); lines[drag] = Math.max(0, Math.min(V.includes(drag) ? cv.width : cv.height, V.includes(drag) ? x : y)); redraw(); };
+    cv.onpointerup = cv.onpointercancel = () => { drag = null; };
+    again = redraw; redraw();
+  }
+}
+
 async function openPriceCheck(l, setId, setName, card, variant) {
   const pc = $('pc'), body = pc.querySelector('.body');
   pc.querySelector('img').src = card.image ? lowSrc(card.image) : '';
@@ -2984,6 +3219,7 @@ async function openPriceCheck(l, setId, setName, card, variant) {
       (m && m.idProduct ? '<a target="_blank" rel="noopener" href="https://www.cardmarket.com/en/Pokemon/Products/Singles?idProduct=' + m.idProduct + '">Cardmarket</a>' : '') +
       '<a target="_blank" rel="noopener" href="https://www.pricecharting.com/search-products?type=prices&q=' + q + '">PriceCharting</a>';
     body.appendChild(links);
+    if (card.image) { const cb = makeButton('📐 Centering check', () => openCentering(card), 'Photograph the card and measure how evenly its border is centred'); cb.className = 'ctrbtn'; body.appendChild(cb); }
     body.appendChild(el('div', 'note small', 'TCGplayer figures are US listings in USD and Cardmarket are European in EUR, both converted at today\'s rate. Australian shop prices usually sit above these once postage and GST are counted.'));
   };
   draw();
