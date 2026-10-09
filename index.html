@@ -272,6 +272,31 @@
   #scan .result .choices { grid-column: 1 / -1; }
   #scan .row2 { display: flex; gap: 8px; }
   #scanRig, #scanRigAdj { flex: 1 1 0; }
+  /* Bulk add: a big mark over the camera view says what happened to the card, so you know when to drop the next one */
+  #rigTick { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); display: none; flex-direction: column; align-items: center; gap: 10px; pointer-events: none; z-index: 3; }
+  #rigTick.show { display: flex; animation: tickPop 1.6s ease-out forwards; }
+  #rigTick b { display: grid; place-items: center; width: 150px; height: 150px; border-radius: 50%; font-size: 100px; line-height: 1; color: #fff; background: #2e9e5b; box-shadow: 0 0 0 8px rgba(255,255,255,.85), 0 6px 30px rgba(0,0,0,.6); }
+  #rigTick.owned b { background: #2b7de9; }
+  #rigTick.ask b { background: #e8a317; }
+  #rigTick.family b { background: var(--who, #8e44ad); }
+  #rigTick em { display: flex; align-items: center; gap: 6px; font-style: normal; }
+  #rigTick em:empty { display: none; }
+  #rigTick em i { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; font-style: normal; font-weight: 700; color: #fff; border: 2px solid #fff; }
+  #rigTick em u { text-decoration: none; padding: 5px 12px; border-radius: 999px; background: rgba(0,0,0,.78); color: #fff; font-size: 15px; font-weight: 700; }
+  #scanResult .famneed { margin-top: 6px; display: flex; align-items: center; gap: 6px; font-size: 13px; color: #ffd21f; }
+  #scanResult .famneed i { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font-style: normal; font-weight: 700; font-size: 12px; color: #fff; }
+  #rigTick span { max-width: 80vw; padding: 6px 14px; border-radius: 999px; background: rgba(0,0,0,.72); color: #fff; font-size: 16px; font-weight: 600; text-align: center; }
+  @keyframes tickPop { 0% { transform: translate(-50%,-50%) scale(.4); opacity: 0; } 12% { transform: translate(-50%,-50%) scale(1.12); opacity: 1; } 22% { transform: translate(-50%,-50%) scale(1); } 75% { opacity: 1; } 100% { transform: translate(-50%,-50%) scale(1); opacity: 0; } }
+  #scan .guide.flash-added { border-color: #2ee06f; } #scan .guide.flash-owned { border-color: #5aa0ff; } #scan .guide.flash-ask { border-color: #ffb020; }
+  #scan .modes button { flex: 1 1 0; padding: 12px 8px; font-weight: 600; }
+  #scan .modes button.primary { background: #2e9e5b; border-color: #2e9e5b; }
+  /* Bulk add shows the rig controls; Scan & grade shows the one-card buttons */
+  #scan.m-bulk .row2:has(#scanSnap), #scan.m-bulk .row2:has(#scanCenter) { display: none; }
+  #scan:not(.m-bulk) .row2:has(#scanRig), #scan:not(.m-bulk) #rigBoxRow { display: none; }
+  #rigBoxRow select { flex: 1 1 0; min-width: 0; background: #262932; color: #fff; border: 1px solid #3a3e48; border-radius: 10px; padding: 8px; font: inherit; }
+  #rigBoxRow[hidden] { display: none; }
+  #rigBoxRow button { flex: none; }
+  #scan #scanRig.full { background: #b3261e; border-color: #b3261e; }
   #scan .rigadj { display: grid; gap: 8px; background: #1e2128; border-radius: 12px; padding: 10px 12px; font-size: 14px; color: #c9ccd4; }
   #scan .rigadj[hidden] { display: none; }
   #scan .rigadj label { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 8px; }
@@ -407,8 +432,9 @@
 <footer id="foot"><div id="syncStatus"></div>Tap a card to mark it owned by the user selected at the top. Use Export to back up. Card data and prices from TCGdex. <span id="ver"></span></footer>
 <div id="lb"><img id="lbImg" alt=""></div>
 <div id="scan">
-  <div class="cam"><video playsinline autoplay muted></video><div class="guide"><span>Fill the outline with the card and hold still.<br>Glare is fine — it matches the picture, not the number.</span><i class="zone"></i></div></div>
+  <div class="cam"><video playsinline autoplay muted></video><div class="guide"><span>Fill the outline with the card and hold still.<br>Glare is fine — it matches the picture, not the number.</span><i class="zone"></i></div><div id="rigTick" aria-live="polite"><b></b><span></span><em></em></div></div>
   <div class="panel">
+    <div class="row2 modes"><button id="modeBulk" title="Drop cards in the rig one after another: each is scanned and added">📚 Bulk add</button><button id="modeSingle" title="One card: identify it and check its centering">🔍 Scan &amp; grade</button></div>
     <div class="status" id="scanStatus">Starting camera…</div>
     <div class="peek"><canvas id="scanPeek" width="10" height="10"></canvas><span id="scanRead"></span></div>
     <div class="result" id="scanResult" hidden></div>
@@ -416,9 +442,10 @@
       <input id="scanManual" placeholder="or type it: 001/084 PBL" autocapitalize="characters" autocomplete="off">
       <button id="scanManualGo">Find</button>
     </div>
-    <div class="row2"><button id="scanSnap" class="primary big" hidden>📸 Snap &amp; read</button></div>
+    <div class="row2"><button id="scanSnap" class="primary big" hidden>🔍 Scan &amp; grade this card</button></div>
     <div class="row2"><button id="scanCenter" title="Measure the border centering of the card in view, without naming it">📐 Centering check</button></div>
-    <div class="row2"><button id="scanRig" title="For the card-slot stand: the phone sits in a fixed spot, so the card is always in the same place in the picture">🧰 Rig mode: off</button><button id="scanRigAdj" hidden>↔ Line up</button></div>
+    <div class="row2"><button id="scanRig" title="Cards in the box. Tap to line the outline up with the rig.">🧰 Box</button><button id="scanRigAdj" hidden>↔ Line up</button></div>
+    <div class="row2" id="rigBoxRow" hidden><select id="rigKind" title="What the cards in the box are"><option value="sleeved">Sleeved cards</option><option value="bare">Bare cards</option></select><button id="rigMinus" title="Take one off the count">−1</button><button id="rigEmptied" title="Tap after you empty the box">🗑 Box emptied</button></div>
     <div class="rigadj" id="rigAdj" hidden>
       <label>Left – right <input type="range" id="rigX" min="20" max="80" step="0.5"></label>
       <label>Up – down <input type="range" id="rigY" min="20" max="80" step="0.5"></label>
@@ -483,7 +510,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v67';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v71';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -1005,6 +1032,16 @@ function langCounts(setId, personId) {
 const langName = l => ((LANGS.find(x => x[0] === l) || ['', l.toUpperCase()])[1]).replace(/ \(.*/, '');
 function ownedIn(setId) { return ownedBy(state.current, setId); }
 function ownedCount(setId) { return Object.keys(ownedIn(setId)).length; }
+// Family members other than the person scanning who have STARTED this set in this print language (own at least one card of it
+// in that language) and do not have this card in that language yet.
+function familyNeeds(setId, localId, lang) {
+  const has = mark => Object.values(marks(mark)).some(v => langsOf(v).includes(lang));
+  return state.people.filter(p => {
+    if (p.id === state.current) return false;
+    const raw = (state.owned[p.id] || {})[setKey(setId)] || {};
+    return Object.values(raw).some(has) && !(raw[localId] && has(raw[localId]));
+  });
+}
 function ownersOf(setId, localId) { return state.people.filter(p => ownedBy(p.id, setId)[localId]); }
 function whoBadges(setId, localId) {
   const others = ownersOf(setId, localId).filter(p => p.id !== state.current);
@@ -2560,6 +2597,7 @@ const TESS_LANG = 'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast
 const EN_WORDS = /weakness|resistance|retreat|evolves|ability|illus|pok[eé]mon|energy|trainer|damage|attack/gi;
 const CARD_WORDS = /宝可梦|能量|伤害|弱点|抗性|撤退|进化|训练家|特性|招式/g;
 const RIG_KEY = 'tcgPokedex.rig';
+const RIG_D_EMPTY = 82, RIG_STACK_MAX = 24, RIG_T_SLEEVED = 0.75, RIG_T_BARE = 0.3;   // mm: lens to an empty box, pile the box is built for, card thickness
 const scanner = {
   stream: null, worker: null, timer: null, busy: false, found: null,
   async open() {
@@ -2570,7 +2608,8 @@ const scanner = {
     const status = m => { $('scanStatus').textContent = m; };
     $('scanManual').value = '';
     this.torch = false; $('scanTorch').hidden = true; $('scanTorch').textContent = '🔦 Light'; $('scanSnap').hidden = true;
-    this.rigLoad(); this.rigCount = 0; this.rigLock = false; this.rigRef = null; this.rigPrev = null;
+    this.gradeAt = 0; this.snapPhoto = null;
+    this.rigLoad(); this.rigCount = 0; this.rigCounted = false; this.rigLock = false; this.rigRef = null; this.rigPrev = null;
     try {
       // ask for the sharpest feed the phone will give: the number is small print, and the card sits further away now
       this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false });
@@ -2628,33 +2667,62 @@ const scanner = {
   rigLoad() {
     let r = null;
     try { r = JSON.parse(localStorage.getItem(RIG_KEY) || 'null'); } catch (e) {}
-    this.rig = Object.assign({ on: false, x: 0.5, y: 0.46, s: 0.55, set: false, auto: true }, r || {});
+    this.rig = Object.assign({ on: false, x: 0.5, y: 0.46, s: 0.55, set: false, auto: true, kind: 'sleeved', n: 0, nCal: 0 }, r || {});
     this.rigApply();
+    if (this.rig.on && !this.rig.set) this.rigAdjust(true);       // first time: line the outline up with the pad
   },
   liveSet() { return LIVE_SETS[this.tries % (this.rig && this.rig.on ? 2 : LIVE_SETS.length)]; },
+  // kind: 'added' (green ✓), 'owned' (blue ✓, nothing changed), 'ask' (amber ?, needs a tap from you)
+  tick(kind, label, needers) {
+    const t = $('rigTick'), g = $('scan').querySelector('.guide');
+    needers = needers || [];
+    const fam = needers.length && kind !== 'ask';                           // a family member needs it: their colour wins over green / blue
+    t.className = ''; void t.offsetWidth;                                   // restart the animation if one is already showing
+    t.classList.add('show', kind); if (fam) t.classList.add('family');
+    const col = fam ? colour(needers[0]) : '';
+    t.style.setProperty('--who', col);
+    t.querySelector('b').textContent = kind === 'ask' ? '?' : fam ? '★' : '✓';          // a star, not a tick: a family colour can look like green or blue
+    t.querySelector('span').textContent = (label || '') + (fam && kind === 'added' ? ' · added' : '');
+    t.querySelector('em').innerHTML = needers.map(p => '<i style="background:' + colour(p) + '">' + esc(initial(p)) + '</i>').join('') + (needers.length ? '<u>' + esc(needers.map(p => p.name).join(' & ')) + ' ' + (needers.length > 1 ? 'need' : 'needs') + ' it</u>' : '');
+    g.classList.remove('flash-added', 'flash-owned', 'flash-ask'); g.classList.add('flash-' + kind); g.style.borderColor = col;
+    clearTimeout(this.tickT); this.tickT = setTimeout(() => { t.className = ''; g.style.borderColor = ''; g.classList.remove('flash-added', 'flash-owned', 'flash-ask'); }, 1900);
+    try { if (navigator.vibrate) navigator.vibrate(fam ? [50, 50, 50, 50, 50] : kind === 'added' ? 40 : [30, 70, 30]); } catch (e) {}
+  },
   rigSave() { try { localStorage.setItem(RIG_KEY, JSON.stringify(this.rig)); } catch (e) {} },
+  // The box is a plain pile with no spring: every card raises the top one toward the camera by its own thickness, so the card looks
+  // bigger. The rig puts the lens ~82 mm above an empty box and ~58 mm above a full one (24 mm of pile). The outline is resized
+  // from the number of cards counted since the box was emptied, relative to the pile when it was lined up.
+  rigDist(n) { return RIG_D_EMPTY - n * (this.rig.kind === 'bare' ? RIG_T_BARE : RIG_T_SLEEVED); },
+  rigCap() { return Math.floor(RIG_STACK_MAX / (this.rig.kind === 'bare' ? RIG_T_BARE : RIG_T_SLEEVED)); },
+  rigScale() { const r = this.rig; return Math.max(0.6, Math.min(2, this.rigDist(r.nCal || 0) / Math.max(20, this.rigDist(r.n || 0)))); },
   rigApply() {
     const box = $('scan'), g = box.querySelector('.guide'), r = this.rig, on = !!r.on;
     box.classList.toggle('rig', on);
-    g.style.left = on ? r.x * 100 + '%' : ''; g.style.top = on ? r.y * 100 + '%' : ''; g.style.width = on ? r.s * 100 + '%' : '';
+    g.style.left = on ? r.x * 100 + '%' : ''; g.style.top = on ? r.y * 100 + '%' : ''; g.style.width = on ? r.s * this.rigScale() * 100 + '%' : '';
     g.querySelector('span').innerHTML = on ? 'Put a card on the pad.<br>The outline is the stand\'s fixed spot.' : 'Fill the outline with the card and hold still.<br>Glare is fine — it matches the picture, not the number.';
-    $('scanRig').textContent = '🧰 Rig mode: ' + (on ? 'on' : 'off');
-    $('scanRig').classList.toggle('primary', on);
+    const full = on && r.n >= this.rigCap();
+    $('scanRig').textContent = full ? '⚠ Box full — empty it' : '🧰 Box ' + (r.n || 0) + '/' + this.rigCap();
+    $('scanRig').classList.toggle('full', full);
+    box.classList.toggle('m-bulk', on);
+    $('modeBulk').classList.toggle('primary', on); $('modeSingle').classList.toggle('primary', !on);
+    $('rigBoxRow').hidden = !on; $('rigKind').value = r.kind || 'sleeved';
     $('scanRigAdj').hidden = !on;
     $('rigAuto').checked = r.auto !== false; $('rigX').value = r.x * 100; $('rigY').value = r.y * 100; $('rigS').value = r.s * 100;
     if (!on) this.rigAdjust(false);
   },
   rigAdjust(show) { $('rigAdj').hidden = !show; $('scan').classList.toggle('adjusting', !!show); },
-  rigToggle() {
-    this.rig.on = !this.rig.on;
-    this.rigLock = false; this.rigRef = null; this.rigPrev = null;
-    this.rigApply(); this.rigSave();
-    // the first time, the outline has to be lined up with the slot
+  setMode(bulk) {
+    if (!!this.rig.on === !!bulk) return;
+    this.rig.on = !!bulk; this.rigSave();
+    this.rigLock = false; this.rigRef = null; this.rigPrev = null; this.rigCounted = false;
+    this.found = null; this.last = null; this.coarseHist = []; this.shown = null; $('scanResult').hidden = true; $('scanResult').innerHTML = '';
+    this.rigApply();
     if (this.rig.on && !this.rig.set) this.rigAdjust(true);
-    $('scanStatus').textContent = this.rig.on ? (this.rig.set ? 'Rig mode: put a card on the pad.' : 'Rig mode: put a card on the pad, then line the outline up with it.') : 'Fill the outline with the card and hold still.';
+    $('scanStatus').textContent = this.rig.on ? (this.rig.set ? 'Bulk add: drop a card in the rig.' : 'Bulk add: put a card in the rig, then line the outline up with it.') : 'Scan & grade: hold one card in the outline and tap the button.';
   },
   rigMove() {
     this.rig.x = $('rigX').value / 100; this.rig.y = $('rigY').value / 100; this.rig.s = $('rigS').value / 100;
+    this.rig.nCal = this.rig.n || 0;     // the outline was just lined up against the pile as it is now
     this.rig.set = true; this.rigApply(); this.rigSave();
   },
   // a tiny grey picture of whatever is inside the outline, to tell "the same card" from "a different card" or "nothing"
@@ -2673,6 +2741,7 @@ const scanner = {
   rigWatch(v) {
     if (!this.rigLock) {
       if (!this.found) return false;
+      if (!this.rigCounted) { this.rigCounted = true; this.rig.n = (this.rig.n || 0) + 1; this.rigSave(); this.rigApply(); }   // count first: it resizes the outline
       this.rigLock = true; this.rigRef = this.rigSample(v); this.rigPrev = this.rigRef;
       return true;
     }
@@ -2681,7 +2750,7 @@ const scanner = {
     const now = this.rigSample(v), moved = this.rigDiff(now, this.rigRef) > 0.1, steady = this.rigDiff(now, this.rigPrev) < 0.03;
     this.rigPrev = now;
     if (moved && steady && Date.now() - (this.shown ? this.shown.at : 0) > 500) {
-      this.rigLock = false; this.rigRef = null; this.found = null; this.last = null; this.coarseHist = []; this.shown = null;
+      this.rigLock = false; this.rigRef = null; this.rigCounted = false; this.found = null; this.last = null; this.coarseHist = []; this.shown = null;
       $('scanResult').hidden = true; $('scanResult').innerHTML = '';
       $('scanStatus').textContent = this.rigCount ? '✓ ' + this.rigCount + ' added this session — next card.' : 'Rig mode: next card.';
     }
@@ -2768,6 +2837,7 @@ const scanner = {
       pick = byNumber || (inOpen.length === 1 ? inOpen[0] : null);
       if (!pick) {
         status('That picture is in ' + ties.length + ' sets — which one?');
+        if (this.rig && this.rig.on) this.tick('ask', 'Which set? Tap one');
         const r = $('scanResult'); r.hidden = false; r.innerHTML = '<div class="choices"></div><button class="dismiss" aria-label="Dismiss">✕</button>';
         ties.slice(0, 6).forEach(c => {
           const b = makeButton('', () => { this.found = { localId: c.card.localId }; this.show(c.card.set, this.found); });
@@ -2785,11 +2855,11 @@ const scanner = {
     return 'shown';
   },
   // centering check: a full-size photo from this camera (the live frame if the camera cannot do that), then the camera closes
-  async centering(card) {
-    if (!this.stream) return;
+  async centering(card, photo) {
+    if (!this.stream && !photo) return;
     $('scanStatus').textContent = 'Taking the photo…';
-    let bmp = null;
-    if (window.ImageCapture) {
+    let bmp = photo || null;
+    if (!bmp && window.ImageCapture) {
       try {
         const blob = await new ImageCapture(this.stream.getVideoTracks()[0]).takePhoto().catch(() => null);
         if (blob) { try { bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' }); } catch (e) { bmp = await createImageBitmap(blob); } }
@@ -2806,12 +2876,18 @@ const scanner = {
     const v = $('scan').querySelector('video');
     try {
       status('Reading photo…');
+      if (this.snapPhoto && this.snapPhoto.close) this.snapPhoto.close();
+      this.snapPhoto = null;
       let src = v, sw0 = v.videoWidth, sh0 = v.videoHeight, note = 'live frame';
       if (window.ImageCapture) {
         try {
           const ic = new ImageCapture(this.stream.getVideoTracks()[0]);
           const blob = await ic.takePhoto().catch(() => null);
-          if (blob) { src = await createImageBitmap(blob); sw0 = src.width; sh0 = src.height; note = 'photo'; }
+          if (blob) {
+            src = await createImageBitmap(blob); sw0 = src.width; sh0 = src.height; note = 'photo';
+            // kept for the centering check that follows when this was a Scan & grade
+            try { this.snapPhoto = await createImageBitmap(blob, { imageOrientation: 'from-image' }); } catch (e) { try { this.snapPhoto = await createImageBitmap(blob); } catch (e2) {} }
+          }
         } catch (e) {}
       }
       // map the on-screen outline into the source: the photo shares the video's width of view, with extra height either side
@@ -2863,6 +2939,7 @@ const scanner = {
       }
       else status('Could not match it. Fill the outline with the card, hold still, Snap again — or type the number.');
       if (src !== v && src.close) src.close();
+      if (!this.found && $('scanResult').hidden) this.gradeAt = 0;      // nothing identified: do not grade whatever turns up later
     } catch (e) { status('Snap failed: ' + (e.message || e)); }
     this.snapping = false;
   },
@@ -2982,6 +3059,14 @@ const scanner = {
     const lt = r.querySelector('.t'), note = el('div', 'langnote');
     note.textContent = rl ? 'Recognised as the ' + regionName(rl) + ' edition' : (heard && heard !== 'en' && !set.custom ? 'Printed in ' + regionName(heard) + '. The picture is the English card with the same artwork.' : '');
     lt.appendChild(cardLangSelect()); if (note.textContent) lt.appendChild(note);
+    // someone else in the family has started this set in this language and does not have this card yet
+    const needers = familyNeeds(set.id, card.localId, cardLang);
+    if (needers.length) {
+      const fn = el('div', 'famneed');
+      fn.innerHTML = needers.map(p => '<i style="background:' + colour(p) + '">' + esc(initial(p)) + '</i>').join('') + '<span>' + esc(needers.map(p => p.name).join(' & ')) + ' ' + (needers.length > 1 ? 'need' : 'needs') + ' this — has started the set</span>';
+      lt.appendChild(fn);
+    }
+    const needTxt = needers.length ? ' ' + needers.map(p => p.name).join(' & ') + (needers.length > 1 ? ' need' : ' needs') + ' it too.' : '';
     status('Found ' + card.name + ' — which printing?');
     // the number is the same on every printing, so ask which one: fetch the card's printings (cached per set when known)
     let avail = 'n';
@@ -3010,18 +3095,26 @@ const scanner = {
     };
     // Rig mode: a card with a single printing is marked straight away (the ✓ button is the undo); several printings still ask
     if (this.rig && this.rig.on && this.rig.auto !== false) {
-      const v = avail.length === 1 ? avail : null, m0 = marks(ownedIn(set.id)[card.localId]);
+      // only a picture match is trusted for this: a card named from its printed number alone (hit has no localId) is shown, never ticked
+      const v = avail.length === 1 && hit.localId ? avail : null, m0 = marks(ownedIn(set.id)[card.localId]);
       if (v) {
         const got0 = !!m0[v] || (!avail.includes('n') && v === avail[0] && !!m0.n);
         if (!got0) {
           setCard(state.current, key, card.localId, true, v);
           if (window._set && window._set.id === set.id && (location.hash || '').startsWith('#/set/')) renderSet();
           this.rigCount = (this.rigCount || 0) + 1;
-          status('✓ Added ' + card.name + ' for ' + me().name + ' (' + this.rigCount + ' this session) — next card.');
-        } else status(card.name + ' was already owned — next card.');
-      } else status(card.name + ' — which printing?');
+          status('✓ Added ' + card.name + ' for ' + me().name + ' (' + this.rigCount + ' this session).' + needTxt + ' Next card.');
+          this.tick('added', card.name, needers);
+        } else { status(card.name + ' was already owned.' + needTxt + ' Next card.'); this.tick('owned', card.name + ' · already owned', needers); }
+      } else { status(card.name + (hit.localId ? ' — which printing?' : ' — read from the number, not the picture. Check it, then tap.') + needTxt); this.tick('ask', card.name + ' — tap to choose', needers); }
     }
     draw();
+    // Scan & grade: once the card is named, go straight into the centering check with the photo that identified it
+    if (this.gradeAt && Date.now() - this.gradeAt < 60000 && card.image && !card.custom && !card.extra) {
+      this.gradeAt = 0; const ph = this.snapPhoto; this.snapPhoto = null;
+      status('Found ' + card.name + ' — checking the centering…');
+      setTimeout(() => this.centering(card, ph || undefined), 500);
+    }
   }
 };
 // Crop a region of the video, enlarge it, flatten the background (foil, gradients, glare), then threshold.
@@ -3083,11 +3176,16 @@ function parseScan(text, typed) {
 }
 $('scanClose').onclick = () => scanner.close();
 $('scanCenter').onclick = () => scanner.centering(null);
-$('scanSnap').onclick = () => scanner.snap();
+$('scanSnap').onclick = () => { scanner.gradeAt = Date.now(); scanner.snap(); };
 $('scanTorch').onclick = () => scanner.toggleTorch();
-$('scanRig').onclick = () => scanner.rigToggle();
+$('scanRig').onclick = () => scanner.rigAdjust($('rigAdj').hidden);
+$('modeBulk').onclick = () => scanner.setMode(true);
+$('modeSingle').onclick = () => scanner.setMode(false);
 $('scanRigAdj').onclick = () => scanner.rigAdjust($('rigAdj').hidden);
 $('rigDone').onclick = () => { scanner.rig.set = true; scanner.rigSave(); scanner.rigAdjust(false); $('scanStatus').textContent = 'Rig mode: put a card on the pad.'; };
+$('rigKind').onchange = () => { scanner.rig.kind = $('rigKind').value; scanner.rig.n = 0; scanner.rig.nCal = 0; scanner.rigSave(); scanner.rigApply(); };
+$('rigMinus').onclick = () => { scanner.rig.n = Math.max(0, (scanner.rig.n || 0) - 1); scanner.rigSave(); scanner.rigApply(); };
+$('rigEmptied').onclick = () => { scanner.rig.n = 0; scanner.rigSave(); scanner.rigApply(); $('scanStatus').textContent = 'Box emptied — count is back to 0.'; };
 $('rigAuto').onchange = () => { scanner.rig.auto = $('rigAuto').checked; scanner.rigSave(); };
 ['rigX', 'rigY', 'rigS'].forEach(id => { $(id).oninput = () => scanner.rigMove(); });
 $('scanManualGo').onclick = () => {
