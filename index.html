@@ -460,7 +460,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v61';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v63';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -2587,6 +2587,21 @@ const scanner = {
     this.show(pick.card.set, this.found);
     return 'shown';
   },
+  // centering check: a full-size photo from this camera (the live frame if the camera cannot do that), then the camera closes
+  async centering(card) {
+    if (!this.stream) return;
+    $('scanStatus').textContent = 'Taking the photo…';
+    let bmp = null;
+    if (window.ImageCapture) {
+      try {
+        const blob = await new ImageCapture(this.stream.getVideoTracks()[0]).takePhoto().catch(() => null);
+        if (blob) { try { bmp = await createImageBitmap(blob, { imageOrientation: 'from-image' }); } catch (e) { bmp = await createImageBitmap(blob); } }
+      } catch (e) {}
+    }
+    if (!bmp) { try { bmp = await createImageBitmap($('scan').querySelector('video')); } catch (e) {} }
+    this.close();
+    openCentering(card, bmp || undefined);
+  },
   async snap() {
     if (!this.stream || this.snapping) return;
     this.snapping = true; this.found = null; $('scanResult').hidden = true;
@@ -2775,6 +2790,7 @@ const scanner = {
         btns.appendChild(b);
       });
       btns.appendChild(makeButton('Open set', () => { this.close(); ui.q = card.localId; location.hash = '#/set/' + set.id; }));
+      if (card.image && !card.custom && !card.extra) btns.appendChild(makeButton('📐 Centering check', () => this.centering(card), 'Measure how evenly this card\'s border is centred, from a photo taken now'));
       btns.appendChild(makeButton('✕ Wrong card', () => { this.found = null; this.last = null; this.coarseHist = []; r.hidden = true; status('Fill the outline with the next card.'); }, 'Dismiss and keep scanning'));
     };
     draw();
@@ -2945,8 +2961,8 @@ const ctrDist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 const ctrMedian = a => { const s = Float32Array.from(a).sort(); return s[s.length >> 1]; };
 
 async function ctrBitmap(file) {
-  let bmp;
-  try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (e) { bmp = await createImageBitmap(file); }
+  let bmp = file;
+  if (file instanceof Blob) { try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (e) { bmp = await createImageBitmap(file); } }
   const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
   c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
@@ -3081,7 +3097,7 @@ async function ctrBaseline(card) {
   } catch (e) { return null; }
 }
 
-function openCentering(card) {
+function openCentering(card, photo) {
   let design = null, again = null;
   ctrBaseline(card).then(b => { design = b; if (again) again(); });
   const o = $('ctr'), body = o.querySelector('.body');
@@ -3099,6 +3115,7 @@ function openCentering(card) {
   };
   mk('📷 Take a photo', true); mk('🖼 Choose a photo', false);
   body.appendChild(row); body.appendChild(res);
+  if (photo) setTimeout(() => run(photo), 50);
   async function run(file) {
     res.innerHTML = '<div class="empty">Measuring…</div>';
     let base, lines;
@@ -3219,7 +3236,6 @@ async function openPriceCheck(l, setId, setName, card, variant) {
       (m && m.idProduct ? '<a target="_blank" rel="noopener" href="https://www.cardmarket.com/en/Pokemon/Products/Singles?idProduct=' + m.idProduct + '">Cardmarket</a>' : '') +
       '<a target="_blank" rel="noopener" href="https://www.pricecharting.com/search-products?type=prices&q=' + q + '">PriceCharting</a>';
     body.appendChild(links);
-    if (card.image) { const cb = makeButton('📐 Centering check', () => openCentering(card), 'Photograph the card and measure how evenly its border is centred'); cb.className = 'ctrbtn'; body.appendChild(cb); }
     body.appendChild(el('div', 'note small', 'TCGplayer figures are US listings in USD and Cardmarket are European in EUR, both converted at today\'s rate. Australian shop prices usually sit above these once postage and GST are counted.'));
   };
   draw();
