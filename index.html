@@ -251,7 +251,9 @@
   /* kept smallish on purpose: a card that fills a big outline is too close for the phone to focus */
   #scan .guide { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); width: min(66vw, 42vh); aspect-ratio: 63 / 88; border: 3px solid #ffd21f; border-radius: 10px; box-shadow: 0 0 0 100vmax rgba(0,0,0,.45); }
   #scan .guide span { position: absolute; left: -30vw; right: -30vw; top: -44px; text-align: center; font-size: 13px; line-height: 1.3; color: #ffd21f; text-shadow: 0 1px 2px #000; }
-  #scan .guide .zone { position: absolute; left: 0; right: 0; bottom: 0; height: 14%; border-top: 2px dashed rgba(255,210,31,.8); border-radius: 0 0 7px 7px; }
+  #scanResult select.cardlang { margin-top: 6px; max-width: 100%; }
+  #scanResult .langnote { margin-top: 4px; font-size: 12px; color: #ffd21f; }
+  #scan .guide .zone { position: absolute; left: 0; right: 0; bottom: 0; height: 14%; border-radius: 0 0 7px 7px; }
   #scan .panel { background: #15171c; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); display: grid; gap: 10px; }
   #scan .status { font-size: 14px; color: #c9ccd4; min-height: 20px; }
   #scan .peek { display: flex; gap: 10px; align-items: center; min-height: 28px; }
@@ -269,6 +271,17 @@
   #scan .result .btns button { flex: 1 1 auto; }
   #scan .result .choices { grid-column: 1 / -1; }
   #scan .row2 { display: flex; gap: 8px; }
+  #scanRig, #scanRigAdj { flex: 1 1 0; }
+  #scan .rigadj { display: grid; gap: 8px; background: #1e2128; border-radius: 12px; padding: 10px 12px; font-size: 14px; color: #c9ccd4; }
+  #scan .rigadj[hidden] { display: none; }
+  #scan .rigadj label { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 8px; }
+  #scan .rigadj input[type=range] { padding: 0; accent-color: #ffd21f; }
+  #scan .rigadj label.chk { display: flex; gap: 8px; align-items: center; }
+  #scan .rigadj label.chk input { flex: none; width: 20px; height: 20px; padding: 0; }
+  #scan .rigadj small { color: #9a9a92; }
+  #scan.rig .guide { border-style: dashed; }
+  /* while lining up, give the camera view the room: only the sliders and the buttons stay */
+  #scan.adjusting .peek, #scan.adjusting #scanResult, #scan.adjusting .row2:has(#scanManual), #scan.adjusting .row2:has(#scanSnap), #scan.adjusting .row2:has(#scanCenter) { display: none; }
   #scan .setrow { align-items: center; font-size: 14px; color: #c9ccd4; }
   #scan .setrow select { flex: 1; min-width: 0; background: #262932; color: #fff; border-color: #3a3e48; }
   #scan .choices img { width: 40px; vertical-align: middle; margin-right: 8px; border-radius: 3px; }
@@ -404,6 +417,16 @@
       <button id="scanManualGo">Find</button>
     </div>
     <div class="row2"><button id="scanSnap" class="primary big" hidden>📸 Snap &amp; read</button></div>
+    <div class="row2"><button id="scanCenter" title="Measure the border centering of the card in view, without naming it">📐 Centering check</button></div>
+    <div class="row2"><button id="scanRig" title="For the card-slot stand: the phone sits in a fixed spot, so the card is always in the same place in the picture">🧰 Rig mode: off</button><button id="scanRigAdj" hidden>↔ Line up</button></div>
+    <div class="rigadj" id="rigAdj" hidden>
+      <label>Left – right <input type="range" id="rigX" min="20" max="80" step="0.5"></label>
+      <label>Up – down <input type="range" id="rigY" min="20" max="80" step="0.5"></label>
+      <label>Size <input type="range" id="rigS" min="30" max="95" step="0.5"></label>
+      <label class="chk"><input type="checkbox" id="rigAuto"> Mark cards owned automatically (tap ✓ Owned to undo)</label>
+      <small>Put a card on the pad, then move the yellow outline until it sits exactly on the card's edges. It is remembered on this phone.</small>
+      <button id="rigDone" class="primary">Done</button>
+    </div>
     <div class="row2"><button id="scanTorch" hidden>🔦 Light</button><button id="scanClose">Close</button></div>
   </div>
 </div>
@@ -460,7 +483,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v63';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v67';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -2381,15 +2404,16 @@ function coarseSearch(cams, K, hist) {
 }
 // fine fingerprints of catalogue pictures, fetched on demand and kept for the session
 const fineCache = new Map();
+const thumbOf = card => { const u = card.img || (cardImageUrl(card) ? cardImageUrl(card) + '/low.webp' : ''); return u; };
 function cardImageUrl(card) { const serie = window._serieOf && window._serieOf[card.set]; return serie ? 'https://assets.tcgdex.net/en/' + serie + '/' + card.set + '/' + card.localId : null; }
 function fineFor(card) {
   const key = card.set + '-' + card.localId;
   if (fineCache.has(key)) return fineCache.get(key);
-  const url = cardImageUrl(card);
+  const base = cardImageUrl(card), url = card.img || (base ? base + '/low.webp' : null);
   if (!url) return Promise.resolve(null);
   const load = u => new Promise((ok, bad) => { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => ok(im); im.onerror = bad; im.src = u; });
   // a copy saved by the service worker without CORS cannot be read back; a query string gets a fresh readable one
-  const p = load(url + '/low.webp').catch(() => load(url + '/low.webp?fp')).then(fingerprintOf).catch(() => null);
+  const p = load(url).catch(() => load(url + '?fp')).then(fingerprintOf).catch(() => null);
   fineCache.set(key, p);
   p.then(v => { if (!v) fineCache.delete(key); });
   return p;
@@ -2434,6 +2458,52 @@ function coarseFromImage(im) {
   const out = new Int8Array(L);
   coarseVec(t.g, tc.c, w, h, cw, ch, out, 0);
   return out;
+}
+// Regional editions the family has added (the Chinese 30th Celebration) have no pictures of their own: each card borrows
+// one (ART). Those borrowed pictures go into the scanner's index too, filed under the edition and the card's own number,
+// so a Chinese card is recognised as that edition's card, not as the English one with the same artwork.
+const regionLangOf = setId => { const r = ((state.customSets || {})[setId] || {}).region; const l = LANGS.find(x => regionName(x[0]) === r); return l ? l[0] : null; };
+function regionalCards() {
+  const out = [];
+  Object.keys(state.customSets || {}).forEach(id => {
+    const cs = state.customSets[id], a = ART[cs.abbr];
+    if (!a) return;
+    Object.entries(a.map).forEach(([localId, enId]) => out.push({ set: id, localId, regional: true, img: lowSrc(enId.startsWith('S:') ? SCRYDEX + enId.slice(2) : a.base + enId) }));
+  });
+  return out;
+}
+async function addRegional(onProgress) {
+  if (!IDX) return;
+  const want = regionalCards();
+  if (!want.length) return;
+  let hash = 0; want.forEach(c => { const t = c.set + '|' + c.localId + '|' + c.img; for (let i = 0; i < t.length; i++) hash = (hash * 31 + t.charCodeAt(i)) | 0; });
+  const sig = want.length + ':' + hash + ':' + FP_FILE;
+  if (IDX.regSig === sig) return;
+  IDX.regSig = sig;
+  const L = IDX.L, vecs = new Map(), cached = cacheGet('fpreg');
+  if (cached && cached.sig === sig) {
+    const raw = atob(cached.vec);
+    cached.ids.forEach((id, i) => { const v = new Int8Array(L); for (let k = 0; k < L; k++) v[k] = (raw.charCodeAt(i * L + k) << 24) >> 24; vecs.set(id, v); });
+  } else {
+    const load = u => new Promise((ok, bad) => { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => ok(im); im.onerror = bad; im.src = u; });
+    let next = 0, done = 0;
+    const worker = async () => {
+      while (next < want.length) {
+        const c = want[next++];
+        try { const im = await load(c.img).catch(() => load(c.img + '?fp')); vecs.set(c.set + '|' + c.localId, coarseFromImage(im)); } catch (e) {}
+        done++; if (onProgress) onProgress(done, want.length);
+      }
+    };
+    await Promise.all([0, 1, 2, 3, 4, 5].map(worker));
+    const ids = [...vecs.keys()];
+    let b = ''; ids.forEach(id => { const v = vecs.get(id); for (let k = 0; k < L; k++) b += String.fromCharCode(v[k] & 255); });
+    if (ids.length) cacheSet('fpreg', { sig, ids, vec: btoa(b) });
+  }
+  const have = want.filter(c => vecs.has(c.set + '|' + c.localId));
+  if (!have.length) return;
+  const vec = new Int8Array((IDX.n + have.length) * L); vec.set(IDX.vec);
+  have.forEach((c, i) => { vec.set(vecs.get(c.set + '|' + c.localId), (IDX.n + i) * L); IDX.cards.push(c); });
+  IDX.vec = vec; IDX.n += have.length;
 }
 async function extendIndex(onProgress) {
   if (!IDX || IDX.extended) return;
@@ -2482,6 +2552,14 @@ async function extendIndex(onProgress) {
 
 /* ---------- camera scan: match the picture, or read "001/084 PBL" off the card, and jump to it ---------- */
 const TESS_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+// Language of the printed card, from its text: English, Japanese or Simplified Chinese. The English reader is the one already
+// loaded; Japanese and Simplified Chinese use Tesseract's small models (about 2 MB each, fetched once from the Tesseract project
+// on GitHub and kept by the browser). English words win first, then kana (only Japanese has them), then Chinese characters.
+// Traditional Chinese reads as Simplified and can be changed with the language chooser on the result.
+const TESS_LANG = 'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/main';
+const EN_WORDS = /weakness|resistance|retreat|evolves|ability|illus|pok[eé]mon|energy|trainer|damage|attack/gi;
+const CARD_WORDS = /宝可梦|能量|伤害|弱点|抗性|撤退|进化|训练家|特性|招式/g;
+const RIG_KEY = 'tcgPokedex.rig';
 const scanner = {
   stream: null, worker: null, timer: null, busy: false, found: null,
   async open() {
@@ -2492,6 +2570,7 @@ const scanner = {
     const status = m => { $('scanStatus').textContent = m; };
     $('scanManual').value = '';
     this.torch = false; $('scanTorch').hidden = true; $('scanTorch').textContent = '🔦 Light'; $('scanSnap').hidden = true;
+    this.rigLoad(); this.rigCount = 0; this.rigLock = false; this.rigRef = null; this.rigPrev = null;
     try {
       // ask for the sharpest feed the phone will give: the number is small print, and the card sits further away now
       this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false });
@@ -2525,6 +2604,7 @@ const scanner = {
       this.ready = true;
       status(this.stream ? 'Fill the outline with the card and hold still.' : 'Type the number below.');
       // newer cards than the file knows: added in the background, scanning works meanwhile
+      addRegional((d, n) => { if (!this.found) status('Adding your added sets to the index… ' + d + '/' + n); }).then(() => { if (!this.found && /added sets/.test($('scanStatus').textContent)) status('Fill the outline with the card and hold still.'); }).catch(() => {});
       extendIndex((d, n) => { if (!this.found) status('Adding ' + n + ' new cards to the index… ' + d + '/' + n); }).then(() => { if (!this.found && /new cards/.test($('scanStatus').textContent)) status('Fill the outline with the card and hold still.'); }).catch(() => {});
     } catch (e) {
       this.ready = false;
@@ -2533,12 +2613,79 @@ const scanner = {
   },
   close() {
     clearTimeout(this.timer); this.timer = null;
+    if (this.langW) { Object.values(this.langW).forEach(p => p.then(w => w.terminate()).catch(() => {})); this.langW = null; }
     if (this.stream) { this.stream.getTracks().forEach(t => t.stop()); this.stream = null; }
     const v = $('scan').querySelector('video'); v.pause(); v.srcObject = null;   // iPhones otherwise keep the camera light on
     this.found = null; this.busy = false; this.checking = false;
     $('scanResult').hidden = true; $('scanResult').innerHTML = '';
     $('scanManual').blur();
     $('scan').classList.remove('open');
+    this.rigAdjust(false);
+  },
+  // ---- Rig mode: the phone sits in the card-slot stand, so the card is always in the same place in the picture ----
+  // The outline is stored as fractions of the camera view (centre x, centre y, width) and applied to the on-screen guide,
+  // so guideBox() and everything built on it work unchanged.
+  rigLoad() {
+    let r = null;
+    try { r = JSON.parse(localStorage.getItem(RIG_KEY) || 'null'); } catch (e) {}
+    this.rig = Object.assign({ on: false, x: 0.5, y: 0.46, s: 0.55, set: false, auto: true }, r || {});
+    this.rigApply();
+  },
+  liveSet() { return LIVE_SETS[this.tries % (this.rig && this.rig.on ? 2 : LIVE_SETS.length)]; },
+  rigSave() { try { localStorage.setItem(RIG_KEY, JSON.stringify(this.rig)); } catch (e) {} },
+  rigApply() {
+    const box = $('scan'), g = box.querySelector('.guide'), r = this.rig, on = !!r.on;
+    box.classList.toggle('rig', on);
+    g.style.left = on ? r.x * 100 + '%' : ''; g.style.top = on ? r.y * 100 + '%' : ''; g.style.width = on ? r.s * 100 + '%' : '';
+    g.querySelector('span').innerHTML = on ? 'Put a card on the pad.<br>The outline is the stand\'s fixed spot.' : 'Fill the outline with the card and hold still.<br>Glare is fine — it matches the picture, not the number.';
+    $('scanRig').textContent = '🧰 Rig mode: ' + (on ? 'on' : 'off');
+    $('scanRig').classList.toggle('primary', on);
+    $('scanRigAdj').hidden = !on;
+    $('rigAuto').checked = r.auto !== false; $('rigX').value = r.x * 100; $('rigY').value = r.y * 100; $('rigS').value = r.s * 100;
+    if (!on) this.rigAdjust(false);
+  },
+  rigAdjust(show) { $('rigAdj').hidden = !show; $('scan').classList.toggle('adjusting', !!show); },
+  rigToggle() {
+    this.rig.on = !this.rig.on;
+    this.rigLock = false; this.rigRef = null; this.rigPrev = null;
+    this.rigApply(); this.rigSave();
+    // the first time, the outline has to be lined up with the slot
+    if (this.rig.on && !this.rig.set) this.rigAdjust(true);
+    $('scanStatus').textContent = this.rig.on ? (this.rig.set ? 'Rig mode: put a card on the pad.' : 'Rig mode: put a card on the pad, then line the outline up with it.') : 'Fill the outline with the card and hold still.';
+  },
+  rigMove() {
+    this.rig.x = $('rigX').value / 100; this.rig.y = $('rigY').value / 100; this.rig.s = $('rigS').value / 100;
+    this.rig.set = true; this.rigApply(); this.rigSave();
+  },
+  // a tiny grey picture of whatever is inside the outline, to tell "the same card" from "a different card" or "nothing"
+  rigSample(v) {
+    const g = this.guideBox('guide'), c = this.rigCv || (this.rigCv = document.createElement('canvas'));
+    c.width = 16; c.height = 22;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(v, g.x, g.y, g.w, g.h, 0, 0, 16, 22);
+    const d = x.getImageData(0, 0, 16, 22).data, a = new Float32Array(352);
+    for (let i = 0; i < 352; i++) a[i] = (d[i * 4] + d[i * 4 + 1] + d[i * 4 + 2]) / 3;
+    return a;
+  },
+  rigDiff(a, b) { let s = 0; for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]); return s / a.length / 255; },
+  // Once a card has been named, scanning pauses until the picture in the outline changes and settles
+  // (the card slid out, or the next one slid in); then the result is cleared and scanning starts again.
+  rigWatch(v) {
+    if (!this.rigLock) {
+      if (!this.found) return false;
+      this.rigLock = true; this.rigRef = this.rigSample(v); this.rigPrev = this.rigRef;
+      return true;
+    }
+    // dismissed (✕ Wrong card): look again at the card still in the slot
+    if ($('scanResult').hidden && !this.found) { this.rigLock = false; this.rigRef = null; return false; }
+    const now = this.rigSample(v), moved = this.rigDiff(now, this.rigRef) > 0.1, steady = this.rigDiff(now, this.rigPrev) < 0.03;
+    this.rigPrev = now;
+    if (moved && steady && Date.now() - (this.shown ? this.shown.at : 0) > 500) {
+      this.rigLock = false; this.rigRef = null; this.found = null; this.last = null; this.coarseHist = []; this.shown = null;
+      $('scanResult').hidden = true; $('scanResult').innerHTML = '';
+      $('scanStatus').textContent = this.rigCount ? '✓ ' + this.rigCount + ' added this session — next card.' : 'Rig mode: next card.';
+    }
+    return this.rigLock;
   },
   // the on-screen guide (or its number strip) in the coordinates of a source that shares the video's width of view
   guideBox(which, src) {
@@ -2550,14 +2697,64 @@ const scanner = {
     const kx = sw0 / v.videoWidth, cy = sh0 / 2 - (v.videoHeight / 2) * kx;
     return { x: (g.left - c.left - ox) / scale * kx, y: (g.top - c.top - oy) / scale * kx + cy, w: g.width / scale * kx, h: g.height / scale * kx };
   },
-  setName(setId) { const s = window._sets && window._sets.find(s => s.id === setId); return s ? s.name : setId; },
+  // the card as a picture of its own: the guide box from the live video or a photo
+  cardShot(src, G) {
+    const W = 1100, H = Math.round(W * G.h / G.w), cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    cv.getContext('2d').drawImage(src, G.x, G.y, G.w, G.h, 0, 0, W, H);
+    return cv;
+  },
+  async langWorker(code) {
+    this.langW = this.langW || {};
+    if (!this.langW[code]) this.langW[code] = code === 'eng' ? Tesseract.createWorker('eng', 1) : Tesseract.createWorker(code, 1, { langPath: TESS_LANG, gzip: false });
+    return this.langW[code];
+  },
+  async readLang(cv, code, band) {
+    const W = Math.max(1400, cv.width), H = Math.round(cv.height * (band[1] - band[0]) * W / cv.width), c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    c.getContext('2d').drawImage(cv, 0, cv.height * band[0], cv.width, cv.height * (band[1] - band[0]), 0, 0, W, H);
+    const w = await this.langWorker(code);
+    await w.setParameters({ tessedit_pageseg_mode: '6' });
+    return (await w.recognize(c)).data.text || '';
+  },
+  // 'en' | 'ja' | 'zh-cn' | null (cannot tell), for the card in this picture.
+  // The Japanese reader also turns Chinese text into kana-like marks, so kana alone cannot tell the two apart: a Japanese card is
+  // mostly kana (over 70% of what the Japanese reader returns), a Chinese one about half kana and half Han characters, with the
+  // Simplified Chinese reader returning plenty of Han. Thresholds tuned on Chris's three Chinese cards and a few catalogue cards.
+  async detectLanguage(cv) {
+    if (!window.Tesseract || !(await this.ocrReady)) return null;
+    try {
+      const band = [0.45, 0.97], n = (t, re) => (t.match(re) || []).length;
+      const en = await this.readLang(cv, 'eng', band);
+      if (n(en, EN_WORDS) >= 3) return 'en';
+      const [ja, zh] = await Promise.all([this.readLang(cv, 'jpn', band), this.readLang(cv, 'chi_sim', band)]);
+      const kana = n(ja, /[\u3040-\u30ff]/g), jaHan = n(ja, /[\u4e00-\u9fff]/g), zhHan = n(zh, /[\u4e00-\u9fff]/g);
+      if (kana >= 20 && kana / (kana + jaHan) >= 0.7) return 'ja';
+      if (zhHan >= 35 || n(zh, CARD_WORDS) >= 2) return 'zh-cn';
+      return n(en, /[A-Za-z]{4,}/g) >= 8 && zhHan < 25 ? 'en' : null;
+    } catch (e) { return null; }
+  },
+  // the language of the card in view, kept for a few seconds so the same card is not read twice
+  async langFor(src, G, key) {
+    const m = this.langMemo;
+    if (m && m.key === key && Date.now() - m.at < 12000) return m.val;
+    const status = t => { $('scanStatus').textContent = t; };
+    status('Checking the language…');
+    const val = await this.detectLanguage(this.cardShot(src, G));
+    this.langMemo = { key, at: Date.now(), val };
+    this.langNow = { val, at: Date.now() };
+    return val;
+  },
+  setName(setId) { const s = window._sets && window._sets.find(s => s.id === setId); return s ? s.name : ((state.customSets || {})[setId] || {}).name || setId; },
   // a card's name if its set is already cached (it will be after show()), else its number
   cardName(card) { const s = cacheGet('sets/' + card.set); const c = s && s.cards.find(c => c.localId === card.localId); return c ? c.name : this.setName(card.set) + ' ' + card.localId; },
   key(card) { return card.set + '-' + card.localId; },
   // Weigh up a ranked search result. Returns 'shown' when a card (or a which-set choice) is on screen, else false.
   // hit = a number read off the card, used to pick between reprints with the same picture.
-  decide(list, hit) {
+  decide(list, hit, lang) {
     const status = m => { $('scanStatus').textContent = m; };
+    // a card read as printed in a language prefers that language's edition of the same picture, and the other way round
+    if (lang) list = list.map(c => c.card.regional ? { ...c, fine: c.fine + (regionLangOf(c.card.set) === lang ? 0.08 : -0.08) } : c).sort((a, b) => b.fine - a.fine);
     const best = list[0];
     if (!best || best.fine < 0.45) return false;
     const ties = list.filter(c => best.fine - c.fine < 0.03);           // the same artwork in several sets
@@ -2574,8 +2771,8 @@ const scanner = {
         const r = $('scanResult'); r.hidden = false; r.innerHTML = '<div class="choices"></div><button class="dismiss" aria-label="Dismiss">✕</button>';
         ties.slice(0, 6).forEach(c => {
           const b = makeButton('', () => { this.found = { localId: c.card.localId }; this.show(c.card.set, this.found); });
-          const url = cardImageUrl(c.card);
-          b.innerHTML = (url ? '<img alt="" src="' + url + '/low.webp">' : '') + esc(this.setName(c.card.set)) + ' · ' + esc(c.card.localId) + (dateOf(c.card.set) ? ' · ' + dateOf(c.card.set).slice(0, 4) : '');
+          const url = thumbOf(c.card);
+          b.innerHTML = (url ? '<img alt="" src="' + url + '">' : '') + esc(this.setName(c.card.set)) + ' · ' + esc(c.card.localId) + (dateOf(c.card.set) ? ' · ' + dateOf(c.card.set).slice(0, 4) : '');
           r.querySelector('.choices').appendChild(b);
         });
         r.querySelector('.dismiss').onclick = () => { this.found = null; this.last = null; this.coarseHist = []; r.hidden = true; status('Fill the outline with the next card.'); };
@@ -2644,7 +2841,9 @@ const scanner = {
           if (hit) break;
         }
       }
-      if (list && this.decide(list, hit)) {}
+      let lang = null;
+      if (list && list[0] && list[0].fine >= 0.25) lang = await this.langFor(src, G, this.key(list[0].card));
+      if (list && this.decide(list, hit, lang)) {}
       else if (hit) { this.found = hit; await this.resolve(hit); }
       else if (list && list[0] && list[0].fine >= 0.25) {
         // 3. not sure: offer the closest pictures and let the eye decide
@@ -2656,8 +2855,8 @@ const scanner = {
           if (seen.some(s => Math.abs(s.fine - c.fine) < 0.03)) continue;      // one of each picture
           seen.push(c);
           const b = makeButton('', () => { this.found = { localId: c.card.localId }; this.show(c.card.set, this.found); });
-          const url = cardImageUrl(c.card);
-          b.innerHTML = (url ? '<img alt="" src="' + url + '/low.webp">' : '') + esc(this.setName(c.card.set)) + ' · ' + esc(c.card.localId);
+          const url = thumbOf(c.card);
+          b.innerHTML = (url ? '<img alt="" src="' + url + '">' : '') + esc(this.setName(c.card.set)) + ' · ' + esc(c.card.localId);
           r.querySelector('.choices').appendChild(b);
         }
         r.querySelector('.dismiss').onclick = () => { r.hidden = true; status('Fill the outline with the card and hold still, then Snap again.'); };
@@ -2679,6 +2878,10 @@ const scanner = {
   // is read too (slow), which covers cards the index has no picture for.
   async loop() {
     if (!$('scan').classList.contains('open') || !this.stream) return;
+    if (this.rig && this.rig.on && !this.busy) {
+      const rv = $('scan').querySelector('video');
+      if (rv.videoWidth && this.rigWatch(rv)) { this.timer = setTimeout(() => this.loop(), 100); return; }
+    }
     if (!this.busy && !this.found) {
       this.busy = true;
       try {
@@ -2688,7 +2891,7 @@ const scanner = {
           if (this.ready) {
             const box = this.guideBox('guide');
             const pk = $('scanPeek'); pk.width = 36; pk.height = 50; pk.getContext('2d').drawImage(v, box.x, box.y, box.w, box.h, 0, 0, 36, 50);
-            const coarse = await searchPicture(v, box, { set: LIVE_SETS[this.tries % LIVE_SETS.length], hist: this.coarseHist, k: 40, coarseOnly: true });
+            const coarse = await searchPicture(v, box, { set: this.liveSet(), hist: this.coarseHist, k: 40, coarseOnly: true });
             this.coarseHist.push(coarse.scores); if (this.coarseHist.length > 3) this.coarseHist.shift();
             coarse.slice(0, 12).forEach(c => fineFor(c.card));            // start fetching the likely pictures now, so the fine check has them
             const keys = coarse.slice(0, 3).map(c => this.key(c.card));
@@ -2698,8 +2901,9 @@ const scanner = {
             const again = this.shown && this.shown.key === keys[0] && Date.now() - this.shown.at < 6000;
             if (steady && !again) {
               $('scanStatus').textContent = 'Checking ' + this.cardName(coarse[0].card) + '…';
-              const list = await searchPicture(v, box, { set: LIVE_SETS[this.tries % LIVE_SETS.length], hist: this.coarseHist, k: 40 });
-              if (!this.found && !this.decide(list, null)) {
+              const list = await searchPicture(v, box, { set: this.liveSet(), hist: this.coarseHist, k: 40 });
+              const lang = !this.found && !(this.rig && this.rig.on) && list[0] && list[0].fine >= 0.3 ? await this.langFor(v, box, this.key(list[0].card)) : null;
+              if (!this.found && !this.decide(list, null, lang)) {
                 if (list[0] && list[0].fine >= 0.3) { $('scanStatus').textContent = 'Looks like ' + this.cardName(list[0].card) + ' — hold still, fill the outline…'; getJSON('sets/' + list[0].card.set).catch(() => {}); }
                 else $('scanStatus').textContent = 'Looking… fill the outline with the card, or tap Snap.';
               }
@@ -2719,7 +2923,7 @@ const scanner = {
       } catch (e) {}
       this.busy = false;
     }
-    this.timer = setTimeout(() => this.loop(), this.ready ? 120 : 400);
+    this.timer = setTimeout(() => this.loop(), this.rig && this.rig.on ? 40 : this.ready ? 120 : 400);
   },
   async resolve(hit) {
     const status = m => { $('scanStatus').textContent = m; };
@@ -2733,6 +2937,10 @@ const scanner = {
     }
     if (!candidates.length && window._set && (location.hash || '').startsWith('#/set/') && (!hit.denom || window._set.cardCount.official === hit.denom)) candidates = [window._set];
     if (!candidates.length && hit.denom) candidates = sets.filter(s => s.cardCount.official === hit.denom);
+    const alnum = x => String(x || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const regional = Object.keys(state.customSets || {}).map(id => ({ id, name: state.customSets[id].name, ab: alnum(state.customSets[id].abbr), off: state.customSets[id].official }));
+    const named = regional.filter(r => r.ab.length >= 3 && hit.raw && alnum(hit.raw).includes(r.ab));
+    if (named.length) candidates = named; else candidates = candidates.concat(regional.filter(r => !hit.code && r.off && r.off === hit.denom));
     candidates = candidates.slice().reverse();          // newest first
     if (!candidates.length) { status('Read ' + hit.num + '/' + (hit.denom || '?') + (hit.code ? ' ' + hit.code : '') + ' but no set matches. Try again or type it with the set code.'); this.found = null; return; }
     if (candidates.length > 1) {
@@ -2760,6 +2968,10 @@ const scanner = {
       r.querySelector('.dismiss').onclick = () => { this.found = null; this.last = null; this.coarseHist = []; r.hidden = true; status('Fill the outline with the next card.'); };
       return;
     }
+    // the language to record: the edition's own, else what the card's text said a moment ago
+    const heard = this.langNow && Date.now() - this.langNow.at < 20000 ? this.langNow.val : null;
+    const rl = set.custom && set.region ? regionLangOf(set.id) : null, want = rl || heard;
+    if (want && want !== cardLang && !(want === 'en' && ['en', 'fr', 'de', 'es', 'it', 'pt', 'id'].includes(cardLang))) setCardLang(want);
     const key = setKey(set.id);
     const r = $('scanResult'); r.hidden = false;
     r.innerHTML = (card.image ? '<img alt="" src="' + lowSrc(card.image) + '">' : '') + '<div class="t"><b></b><small></small></div><div class="btns"></div><button class="dismiss" title="Wrong card — keep scanning" aria-label="Dismiss">✕</button>';
@@ -2767,6 +2979,9 @@ const scanner = {
     this.shown = { key: set.id + '-' + card.localId, at: Date.now() };
     r.querySelector('b').textContent = card.name;
     r.querySelector('small').textContent = set.name + ' · ' + card.localId + (set.cardCount.official ? '/' + String(set.cardCount.official).padStart(card.localId.length, '0') : '');
+    const lt = r.querySelector('.t'), note = el('div', 'langnote');
+    note.textContent = rl ? 'Recognised as the ' + regionName(rl) + ' edition' : (heard && heard !== 'en' && !set.custom ? 'Printed in ' + regionName(heard) + '. The picture is the English card with the same artwork.' : '');
+    lt.appendChild(cardLangSelect()); if (note.textContent) lt.appendChild(note);
     status('Found ' + card.name + ' — which printing?');
     // the number is the same on every printing, so ask which one: fetch the card's printings (cached per set when known)
     let avail = 'n';
@@ -2793,6 +3008,19 @@ const scanner = {
       if (card.image && !card.custom && !card.extra) btns.appendChild(makeButton('📐 Centering check', () => this.centering(card), 'Measure how evenly this card\'s border is centred, from a photo taken now'));
       btns.appendChild(makeButton('✕ Wrong card', () => { this.found = null; this.last = null; this.coarseHist = []; r.hidden = true; status('Fill the outline with the next card.'); }, 'Dismiss and keep scanning'));
     };
+    // Rig mode: a card with a single printing is marked straight away (the ✓ button is the undo); several printings still ask
+    if (this.rig && this.rig.on && this.rig.auto !== false) {
+      const v = avail.length === 1 ? avail : null, m0 = marks(ownedIn(set.id)[card.localId]);
+      if (v) {
+        const got0 = !!m0[v] || (!avail.includes('n') && v === avail[0] && !!m0.n);
+        if (!got0) {
+          setCard(state.current, key, card.localId, true, v);
+          if (window._set && window._set.id === set.id && (location.hash || '').startsWith('#/set/')) renderSet();
+          this.rigCount = (this.rigCount || 0) + 1;
+          status('✓ Added ' + card.name + ' for ' + me().name + ' (' + this.rigCount + ' this session) — next card.');
+        } else status(card.name + ' was already owned — next card.');
+      } else status(card.name + ' — which printing?');
+    }
     draw();
   }
 };
@@ -2851,14 +3079,20 @@ function parseScan(text, typed) {
   if (!code) code = tokens[0] || '';
   // a camera read with no recognised set code must at least look like a real number line, or "10" and "70" off the card body get through
   if (!typed && !known.has(code) && !padded && !prefix) return null;
-  return { num, denom, code, prefix };
+  return { num, denom, code, prefix, raw: t };
 }
 $('scanClose').onclick = () => scanner.close();
+$('scanCenter').onclick = () => scanner.centering(null);
 $('scanSnap').onclick = () => scanner.snap();
 $('scanTorch').onclick = () => scanner.toggleTorch();
+$('scanRig').onclick = () => scanner.rigToggle();
+$('scanRigAdj').onclick = () => scanner.rigAdjust($('rigAdj').hidden);
+$('rigDone').onclick = () => { scanner.rig.set = true; scanner.rigSave(); scanner.rigAdjust(false); $('scanStatus').textContent = 'Rig mode: put a card on the pad.'; };
+$('rigAuto').onchange = () => { scanner.rig.auto = $('rigAuto').checked; scanner.rigSave(); };
+['rigX', 'rigY', 'rigS'].forEach(id => { $(id).oninput = () => scanner.rigMove(); });
 $('scanManualGo').onclick = () => {
   const hit = parseScan($('scanManual').value, true);
-  if (hit) { $('scanManual').value = ''; $('scanManual').blur(); scanner.found = hit; scanner.resolve(hit); }
+  if (hit) { $('scanManual').value = ''; $('scanManual').blur(); scanner.langNow = null; scanner.found = hit; scanner.resolve(hit); }
   else $('scanStatus').textContent = 'Type it like 001/084 PBL';
 };
 $('scanManual').addEventListener('keydown', e => { if (e.key === 'Enter') $('scanManualGo').click(); });
@@ -3083,7 +3317,7 @@ function ctrEdges(c, bg) {
 // of the same card gives that built-in difference (assumed to be a well-centred copy), and the check allows for it.
 async function ctrBaseline(card) {
   try {
-    if (!card.image) return null;
+    if (!card || !card.image) return null;
     const bmp = await createImageBitmap(await (await fetch(highSrc(card.image))).blob());
     const CW = Math.round(CTR_W * (1 + 2 * CTR_M)), CH = Math.round(CTR_H * (1 + 2 * CTR_M)), c = document.createElement('canvas');
     c.width = CW; c.height = CH;
@@ -3101,7 +3335,7 @@ function openCentering(card, photo) {
   let design = null, again = null;
   ctrBaseline(card).then(b => { design = b; if (again) again(); });
   const o = $('ctr'), body = o.querySelector('.body');
-  o.querySelector('small').textContent = card.name;
+  o.querySelector('small').textContent = card ? card.name : 'Any card';
   o.classList.add('open');
   o.querySelector('.x').onclick = () => o.classList.remove('open');
   o.onclick = e => { if (e.target === o) o.classList.remove('open'); };
@@ -3126,8 +3360,8 @@ function openCentering(card, photo) {
     res.innerHTML = '';
     if (!lines.ok) res.appendChild(el('div', 'note small', 'The border could not be found everywhere automatically (full-art cards have none). Lines are placed roughly. Drag them onto the real edges.'));
     const cv = el('canvas'); cv.width = base.width; cv.height = base.height;
-    const rd = el('div', 'ctrd'), verdict = el('div', 'verdict');
-    res.appendChild(cv); res.appendChild(rd); res.appendChild(verdict);
+    const rd = el('div', 'ctrd'), verdict = el('div', 'verdict'), hint = el('div', 'note small');
+    res.appendChild(cv); res.appendChild(rd); res.appendChild(verdict); res.appendChild(hint);
     res.appendChild(el('div', 'note small', 'Red lines are the inner edge of the border, white dashed lines the card edge. Drag any line to fix it; the numbers update. Graders also judge corners, edges and surface, which this cannot see, so treat it as a guide only.'));
     const V = ['oL', 'iL', 'iR', 'oR'], H = ['oT', 'iT', 'iB', 'oB'];
     const redraw = () => {
@@ -3154,6 +3388,7 @@ function openCentering(card, photo) {
         worst <= 60.5 ? ['Reasonably centred. Borderline for a top grade (about 60/40).', ''] :
         worst <= 65.5 ? ['Noticeably off-centre. Likely to cost a grade.', 'bad'] : ['Heavily off-centre. This will weigh on the grade.', 'bad'];
       verdict.textContent = txt; verdict.className = 'verdict ' + cls;
+      hint.textContent = design ? '' : 'No catalogue picture was available to compare with. Many modern cards print the bottom border thinner than the top, so a perfectly centred one can read about 55 to 60 top / bottom. Judge by the left / right figure and by how the lines sit on the card.';
     };
     let drag = null;
     const where = e => { const r = cv.getBoundingClientRect(), k = cv.width / r.width; return [(e.clientX - r.left) * k, (e.clientY - r.top) * k, k]; };
