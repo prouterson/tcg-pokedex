@@ -245,7 +245,7 @@
   /* camera scanner */
   #scan { position: fixed; inset: 0; background: #000; color: #fff; z-index: 26; display: none; flex-direction: column; }
   #scan.open { display: flex; }
-  #scan .cam { position: relative; flex: 1; min-height: 0; overflow: hidden; }
+  #scan .cam { position: relative; flex: 0 0 56%; min-height: 0; overflow: hidden; }       /* a fixed share of the screen: the outline is placed as a share of this box, so it must not grow or shrink when the panel below changes */
   #scan video { width: 100%; height: 100%; object-fit: cover; }
   /* a card-shaped outline (63:88); the reader looks at the bottom strip of it, where the number is printed */
   /* kept smallish on purpose: a card that fills a big outline is too close for the phone to focus */
@@ -259,7 +259,7 @@
   #scan .peek { display: flex; gap: 10px; align-items: center; min-height: 28px; }
   #scan .peek canvas { height: 28px; width: auto; max-width: 55%; border-radius: 4px; background: #fff; }
   #scan .peek span { flex: 1; min-width: 0; font: 12px/1.2 ui-monospace, Consolas, monospace; color: #9a9a92; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #scan .panel { overflow: hidden; }
+  #scan .panel { overflow-x: hidden; overflow-y: auto; flex: 1 1 0; min-height: 0; align-content: start; }
   #scan .panel > * { min-width: 0; }     /* nothing in the panel may push it wider than the screen */
   #scan .result { display: grid; grid-template-columns: 64px 1fr; gap: 10px 12px; align-items: center; background: #1e2128; border-radius: 12px; padding: 10px; position: relative; }
   #scan .result .dismiss { position: absolute; top: -8px; right: -8px; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: #e3350d; border-color: #e3350d; font-size: 14px; }
@@ -271,6 +271,25 @@
   #scan .result .btns button { flex: 1 1 auto; }
   #scan .result .choices { grid-column: 1 / -1; }
   #scan .row2 { display: flex; gap: 8px; }
+  #scan #scanScope { flex: 1 1 0; min-width: 0; background: #262932; color: #fff; border: 1px solid #3a3e48; border-radius: 10px; padding: 10px; font: inherit; }
+  #scan #mainRow button { flex: 0 0 auto; padding: 10px 14px; }
+  #scan:not(.m-bulk) #scanScope { display: none; }
+  #scan #moreBox { display: grid; gap: 10px; } #scan #moreBox[hidden] { display: none; }
+  #scan #sessBar { display: flex; align-items: center; gap: 10px; background: #1e2128; border-radius: 12px; padding: 8px 8px 8px 14px; } #scan #sessBar[hidden] { display: none; }
+  #scan #sessBar b { font-size: 16px; } #scan #sessBar span { flex: 1; color: #9a9a92; font-size: 14px; } #scan #sessBar button { padding: 10px 14px; }
+  #scan .result .px { color: #ffd21f; font-size: 13px; margin-top: 2px; }
+  #sessList { position: fixed; inset: 0; z-index: 28; background: rgba(0,0,0,.6); display: flex; align-items: flex-end; } #sessList[hidden] { display: none; }
+  #sessList .sbox { background: #15171c; color: #fff; width: 100%; max-width: 560px; margin: 0 auto; max-height: 88vh; border-radius: 18px 18px 0 0; display: flex; flex-direction: column; }
+  #sessList .shead { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; } #sessList .shead b { font-size: 18px; }
+  #sessList button { background: #262932; color: #fff; border: 1px solid #3a3e48; border-radius: 10px; padding: 10px 14px; font: inherit; }
+  #sessList button.primary { background: #2e9e5b; border-color: #2e9e5b; }
+  #sessRows { overflow: auto; padding: 0 12px; display: grid; gap: 8px; align-content: start; }
+  #sessRows .srow { display: grid; grid-template-columns: 48px 1fr auto; gap: 6px 10px; align-items: center; background: #1e2128; border-radius: 12px; padding: 8px; }
+  #sessRows .srow img { width: 48px; border-radius: 4px; } #sessRows .srow .n { font-weight: 600; } #sessRows .srow small { color: #9a9a92; display: block; }
+  #sessRows .srow .x { width: 32px; height: 32px; padding: 0; border-radius: 50%; }
+  #sessRows .srow .chips { grid-column: 2 / -1; display: flex; gap: 6px; flex-wrap: wrap; } #sessRows .srow .chips button { padding: 6px 12px; border-radius: 999px; font-size: 13px; } #sessRows .srow .chips button.on { background: #2e9e5b; border-color: #2e9e5b; }
+  #sessRows .srow .have { color: #5ac98a; }
+  #sessList .sfoot { display: flex; gap: 10px; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); } #sessList .sfoot .primary { flex: 1; padding: 14px; font-size: 17px; font-weight: 600; }
   #scanRig, #scanRigAdj { flex: 1 1 0; }
   /* Bulk add: a big mark over the camera view says what happened to the card, so you know when to drop the next one */
   #rigTick { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); display: none; flex-direction: column; align-items: center; gap: 10px; pointer-events: none; z-index: 3; }
@@ -303,6 +322,8 @@
   #scan .rigadj input[type=range] { padding: 0; accent-color: #ffd21f; }
   #scan .rigadj label.chk { display: flex; gap: 8px; align-items: center; }
   #scan .rigadj label.chk input { flex: none; width: 20px; height: 20px; padding: 0; }
+  #scan .rigadj .focusline { font-size: 13px; color: #c9ccd4; }
+  #scan .rigadj #rigSharp { font: 600 15px ui-monospace, Consolas, monospace; color: #ffd21f; }
   #scan .rigadj small { color: #9a9a92; }
   #scan.rig .guide { border-style: dashed; }
   /* while lining up, give the camera view the room: only the sliders and the buttons stay */
@@ -436,27 +457,37 @@
   <div class="panel">
     <div class="row2 modes"><button id="modeBulk" title="Drop cards in the rig one after another: each is scanned and added">📚 Bulk add</button><button id="modeSingle" title="One card: identify it and check its centering">🔍 Scan &amp; grade</button></div>
     <div class="status" id="scanStatus">Starting camera…</div>
-    <div class="peek"><canvas id="scanPeek" width="10" height="10"></canvas><span id="scanRead"></span></div>
     <div class="result" id="scanResult" hidden></div>
+    <div id="sessBar" hidden><b id="sessN">0 cards</b><span id="sessVal"></span><button id="sessOpen" class="primary">Review ▸</button></div>
+    <div class="row2"><button id="scanSnap" class="primary big" hidden>🔍 Scan &amp; grade this card</button></div>
+    <div class="row2"><button id="scanCenter" title="Measure the border centering of the card in view, without naming it">📐 Centering check</button></div>
+    <div class="row2" id="mainRow"><select id="scanScope" title="Only look for cards from this set. Faster, and far fewer wrong guesses."></select><button id="scanTorch" hidden>🔦 Light</button><button id="scanMore" title="More: type a number, line up the outline, box count">⋯</button><button id="scanClose">Close</button></div>
+    <div id="moreBox" hidden>
+    <div class="peek"><canvas id="scanPeek" width="10" height="10"></canvas><span id="scanRead"></span></div>
     <div class="row2">
       <input id="scanManual" placeholder="or type it: 001/084 PBL" autocapitalize="characters" autocomplete="off">
       <button id="scanManualGo">Find</button>
     </div>
-    <div class="row2"><button id="scanSnap" class="primary big" hidden>🔍 Scan &amp; grade this card</button></div>
-    <div class="row2"><button id="scanCenter" title="Measure the border centering of the card in view, without naming it">📐 Centering check</button></div>
     <div class="row2"><button id="scanRig" title="Cards in the box. Tap to line the outline up with the rig.">🧰 Box</button><button id="scanRigAdj" hidden>↔ Line up</button></div>
     <div class="row2" id="rigBoxRow" hidden><select id="rigKind" title="What the cards in the box are"><option value="sleeved">Sleeved cards</option><option value="bare">Bare cards</option></select><button id="rigMinus" title="Take one off the count">−1</button><button id="rigEmptied" title="Tap after you empty the box">🗑 Box emptied</button></div>
     <div class="rigadj" id="rigAdj" hidden>
       <label>Left – right <input type="range" id="rigX" min="20" max="80" step="0.5"></label>
       <label>Up – down <input type="range" id="rigY" min="20" max="80" step="0.5"></label>
       <label>Size <input type="range" id="rigS" min="30" max="95" step="0.5"></label>
-      <label class="chk"><input type="checkbox" id="rigAuto"> Mark cards owned automatically (tap ✓ Owned to undo)</label>
+      <div class="focusline" id="rigFocus">Focus check: put a card in the rig and move the phone nearer and further; watch the sharpness.</div>
+      <div class="focusline" id="rigSharp">Sharpness: —</div>
+      <label class="chk"><input type="checkbox" id="rigAuto"> Add each card straight away (skip the review list)</label>
       <small>Put a card on the pad, then move the yellow outline until it sits exactly on the card's edges. It is remembered on this phone.</small>
       <button id="rigDone" class="primary">Done</button>
     </div>
-    <div class="row2"><button id="scanTorch" hidden>🔦 Light</button><button id="scanClose">Close</button></div>
+    </div>
   </div>
 </div>
+<div id="sessList" hidden><div class="sbox">
+  <div class="shead"><b id="sessTitle">Review</b><button id="sessX" aria-label="Close">✕</button></div>
+  <div id="sessRows"></div>
+  <div class="sfoot"><button id="sessClear">Clear</button><button id="sessAdd" class="primary">Add all</button></div>
+</div></div>
 <div id="sheet"><div class="box">
   <div class="head"><img alt=""><div class="t"><b></b><small></small></div><button class="x" aria-label="Close">✕</button></div>
   <div class="acts"></div>
@@ -510,7 +541,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v71';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v79';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -2361,7 +2392,10 @@ function rectsOf(fr, scales, shifts) {
   }
   return out;
 }
-function fineRects(fr) { const sh = []; for (const dx of FINE_SHIFTS) for (const dy of FINE_SHIFTS) sh.push([dx, dy]); return rectsOf(fr, FINE_SCALES, sh); }
+function fineRects(fr, scales) { const sh = []; for (const dx of FINE_SHIFTS) for (const dy of FINE_SHIFTS) sh.push([dx, dy]); return rectsOf(fr, scales || FINE_SCALES, sh); }
+// Rig mode, when the card looks much bigger or smaller than the outline (the pile has grown or been emptied): a wider sweep
+const LIVE_WIDE = { scales: [0.64, 0.68, 0.72, 0.76, 0.8, 0.84, 1.13, 1.18, 1.23, 1.28, 1.33, 1.39], shifts: CORNERS(0.02), tilt: 0 };
+const FINE_WIDE = [0.62, 0.68, 0.74, 0.8, 0.86, 0.92, 1.0, 1.08, 1.16, 1.24, 1.34, 1.46];
 function fineCam(v) {
   const t = thumbPx(v.f, v.x, v.y, v.w, v.h);
   const mask = new Uint8Array(t.g.length), mask2 = new Uint8Array(t.g.length * 2);
@@ -2418,10 +2452,12 @@ function coarseCam(v) {
 }
 // scores every card against each camera variant (max over variants); with prev, averages in the previous pass's
 // scores so a steady card rises over a couple of frames while glare moves about. Returns { top: [...K best], scores }.
-function coarseSearch(cams, K, hist) {
+function coarseSearch(cams, K, hist, only) {
   const { n, L, vec } = IDX, best = new Float32Array(n).fill(-1e9);
+  const ok = only ? Uint8Array.from(IDX.cards, c => only.has(c.set) ? 1 : 0) : null;       // limited to these sets
   for (const cam of cams) {
     for (let k = 0, o = 0; k < n; k++, o += L) {
+      if (ok && !ok[k]) continue;
       let s = 0;
       for (let i = 0; i < L; i++) s += cam[i] * vec[o + i];
       if (s > best[k]) best[k] = s;
@@ -2432,6 +2468,7 @@ function coarseSearch(cams, K, hist) {
   // partial sort: the K best
   const top = [];
   for (let k = 0; k < n; k++) {
+    if (ok && !ok[k]) continue;
     if (top.length === K && best[k] <= top[K - 1].s) continue;
     let j = top.length; top.push({ k, s: best[k] });
     while (j > 0 && top[j - 1].s < top[j].s) { const t = top[j]; top[j] = top[j - 1]; top[j - 1] = t; j--; }
@@ -2474,13 +2511,26 @@ async function searchPicture(src, box, opts) {
   const frames = angles.map(a => camFrame(src, box.x, box.y, box.w, box.h, a));
   const cams = [];
   frames.forEach(fr => rectsOf(fr, set.scales, set.shifts).forEach(v => cams.push(coarseCam(v))));
-  const res = coarseSearch(cams, opts.k || 40, opts.hist);
+  const res = coarseSearch(cams, opts.k || 40, opts.hist, opts.only);
   const coarse = res.top; coarse.scores = res.scores;
   if (opts.coarseOnly) return coarse;
   const fps = await Promise.all(coarse.map(c => fineFor(c.card)));
   const fines = [];
-  frames.forEach(fr => fineRects(fr).forEach(v => fines.push(fineCam(v))));
-  coarse.forEach((c, i) => { c.fine = fps[i] ? Math.max(...fines.map(f => scoreFP(f, fps[i]))) : -1; });
+  const fscales = opts.fineScales || FINE_SCALES, perFrame = fscales.length * FINE_SHIFTS.length * FINE_SHIFTS.length;
+  frames.forEach(fr => fineRects(fr, fscales).forEach(v => fines.push(fineCam(v))));
+  coarse.forEach((c, i) => {
+    if (!fps[i]) { c.fine = -1; return; }
+    const per = new Array(fscales.length).fill(-9), nsh = FINE_SHIFTS.length * FINE_SHIFTS.length;
+    fines.forEach((f, j) => { const sc = scoreFP(f, fps[i]), si = Math.floor((j % perFrame) / nsh); if (sc > per[si]) per[si] = sc; });
+    let bi = 0; per.forEach((v, k) => { if (v > per[bi]) bi = k; });
+    c.fine = per[bi];
+    let sc0 = fscales[bi];                                                        // the card looked this much bigger than the outline...
+    if (bi > 0 && bi < per.length - 1) {                                          // ...refined between the grid steps
+      const a = per[bi - 1], b = per[bi], d = per[bi + 1], den = a - 2 * b + d;
+      if (den < -1e-6) { const t = Math.max(-0.5, Math.min(0.5, 0.5 * (a - d) / den)); sc0 += t * (t > 0 ? fscales[bi + 1] - fscales[bi] : fscales[bi] - fscales[bi - 1]); }
+    }
+    c.fineScale = sc0;
+  });
   coarse.sort((a, b) => b.fine - a.fine);
   return coarse;
 }
@@ -2597,6 +2647,7 @@ const TESS_LANG = 'https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast
 const EN_WORDS = /weakness|resistance|retreat|evolves|ability|illus|pok[eé]mon|energy|trainer|damage|attack/gi;
 const CARD_WORDS = /宝可梦|能量|伤害|弱点|抗性|撤退|进化|训练家|特性|招式/g;
 const RIG_KEY = 'tcgPokedex.rig';
+const RIG_SC_REF = 0.94;     // what the matcher reports for a card that exactly fills a well-fitted outline
 const RIG_D_EMPTY = 82, RIG_STACK_MAX = 24, RIG_T_SLEEVED = 0.75, RIG_T_BARE = 0.3;   // mm: lens to an empty box, pile the box is built for, card thickness
 const scanner = {
   stream: null, worker: null, timer: null, busy: false, found: null,
@@ -2609,7 +2660,7 @@ const scanner = {
     $('scanManual').value = '';
     this.torch = false; $('scanTorch').hidden = true; $('scanTorch').textContent = '🔦 Light'; $('scanSnap').hidden = true;
     this.gradeAt = 0; this.snapPhoto = null;
-    this.rigLoad(); this.rigCount = 0; this.rigCounted = false; this.rigLock = false; this.rigRef = null; this.rigPrev = null;
+    this.rigLoad(); this.rigMiss = 0; this.lastWide = null; this.rigCount = 0; this.rigCounted = false; this.rigLock = false; this.rigRef = null; this.rigPrev = null;
     try {
       // ask for the sharpest feed the phone will give: the number is small print, and the card sits further away now
       this.stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } }, audio: false });
@@ -2617,6 +2668,11 @@ const scanner = {
       // the phone's flash, where the browser allows it (Android Chrome; iPhones do not expose it to web pages)
       const track = this.stream.getVideoTracks()[0];
       const caps = track.getCapabilities ? track.getCapabilities() : {};
+      try {
+        const fd = caps.focusDistance;
+        $('rigFocus').textContent = fd && fd.min > 0 ? 'This camera says it can focus as close as about ' + Math.round(fd.min * 1000) + ' mm (the rig puts the card 58-82 mm from the lens).'
+          : 'This phone/browser does not report its closest focus. Use the sharpness reading: move the card nearer and further and see where it drops.';
+      } catch (e) {}
       if (caps.torch) $('scanTorch').hidden = false;
       // keep the camera focusing on something held close
       const adv = [];
@@ -2667,11 +2723,11 @@ const scanner = {
   rigLoad() {
     let r = null;
     try { r = JSON.parse(localStorage.getItem(RIG_KEY) || 'null'); } catch (e) {}
-    this.rig = Object.assign({ on: false, x: 0.5, y: 0.46, s: 0.55, set: false, auto: true, kind: 'sleeved', n: 0, nCal: 0 }, r || {});
-    this.rigApply();
+    this.rig = Object.assign({ on: false, x: 0.5, y: 0.46, s: 0.55, set: false, quick: false, scope: '', kind: 'sleeved', n: 0, nCal: 0, k: 1 }, r || {});
+    this.sessLoad(); this.rigApply();
     if (this.rig.on && !this.rig.set) this.rigAdjust(true);       // first time: line the outline up with the pad
   },
-  liveSet() { return LIVE_SETS[this.tries % (this.rig && this.rig.on ? 2 : LIVE_SETS.length)]; },
+  liveSet() { if (this.rig && this.rig.on && (this.rigMiss || 0) >= 4 && this.tries % 3 === 0) return LIVE_WIDE; return LIVE_SETS[this.tries % (this.rig && this.rig.on ? 2 : LIVE_SETS.length)]; },
   // kind: 'added' (green ✓), 'owned' (blue ✓, nothing changed), 'ask' (amber ?, needs a tap from you)
   tick(kind, label, needers) {
     const t = $('rigTick'), g = $('scan').querySelector('.guide');
@@ -2688,6 +2744,152 @@ const scanner = {
     clearTimeout(this.tickT); this.tickT = setTimeout(() => { t.className = ''; g.style.borderColor = ''; g.classList.remove('flash-added', 'flash-owned', 'flash-ask'); }, 1900);
     try { if (navigator.vibrate) navigator.vibrate(fam ? [50, 50, 50, 50, 50] : kind === 'added' ? 40 : [30, 70, 30]); } catch (e) {}
   },
+  // The card looked `sc` times bigger than the outline: take most of that on as a correction (k). If the correction becomes large the
+  // counter was wrong (a box emptied without tapping the button, a card taken out), so fold it back into the counter.
+  rigLearn(sc) {
+    const r = this.rig;
+    if (!sc) return;
+    // the stored picture fingerprints leave out a thin border, so a perfectly fitted outline reports a size a little under 1:
+    // the first confident match after lining up sets that baseline, and everything later is measured against it
+    if (!r.scRef) { if (Math.abs((r.n || 0) - (r.nCal || 0)) <= 2) r.scRef = Math.max(0.86, Math.min(1.02, sc)); else r.scRef = RIG_SC_REF; }
+    sc = sc / r.scRef;
+    if (Math.abs(sc - 1) < 0.02) return;
+    r.k = Math.max(0.5, Math.min(2, (r.k || 1) * (1 + 0.7 * (sc - 1))));
+    if (Math.abs(r.k - 1) > 0.1) {
+      const total = this.rigScale() * r.k, t = r.kind === 'bare' ? RIG_T_BARE : RIG_T_SLEEVED;
+      const dNew = this.rigDist(r.nCal || 0) / total;
+      const nNew = Math.max(0, Math.min(Math.round(this.rigCap() * 1.5), Math.round((RIG_D_EMPTY - dNew) / t)));
+      if (Math.abs(nNew - (r.n || 0)) >= 2) {
+        r.n = nNew; r.k = 1;
+        $('scanStatus').textContent = 'Stack height re-measured from the picture (about ' + nNew + ' cards in the box).';
+      }
+    }
+    this.rigSave(); this.rigApply();
+  },
+  // Sharpness: mean edge strength of a 300 x 300 patch of the video at full resolution (no scaling, so blur shows). Compared with the best
+  // seen since the camera opened, so the numbers mean "how much of its best focus is the camera getting at this distance".
+  rigSharpness(v) {
+    const g = this.guideBox('guide'), c = this.sharpCv || (this.sharpCv = document.createElement('canvas')), N = 300;
+    c.width = N; c.height = N;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(v, g.x + g.w / 2 - N / 2, g.y + g.h * 0.38 - N / 2, N, N, 0, 0, N, N);
+    const d = x.getImageData(0, 0, N, N).data; let sum = 0, n = 0;
+    for (let y = 1; y < N - 1; y++) for (let xx = 1; xx < N - 1; xx++) {
+      const i = (y * N + xx) * 4, l = d[i] * 0.3 + d[i + 1] * 0.59 + d[i + 2] * 0.11;
+      const r = d[i + 4] * 0.3 + d[i + 5] * 0.59 + d[i + 6] * 0.11, b = d[i + N * 4] * 0.3 + d[i + N * 4 + 1] * 0.59 + d[i + N * 4 + 2] * 0.11;
+      sum += Math.abs(r - l) + Math.abs(b - l); n += 2;
+    }
+    return sum / n;
+  },
+  rigSharpShow(v) {
+    const sh = this.rigSharpness(v);
+    this.sharpMax = Math.max(sh, (this.sharpMax || 0) * 0.995);
+    const pc = this.sharpMax ? Math.round(sh / this.sharpMax * 100) : 0;
+    $('rigSharp').textContent = 'Sharpness ' + sh.toFixed(1) + '  ·  best seen ' + this.sharpMax.toFixed(1) + '  ·  ' + pc + '% ' + (pc >= 85 ? '(sharp)' : pc >= 60 ? '(a little soft)' : '(blurry)');
+  },
+  // ---- the bulk-add list: cards wait here until "Add all" ----
+  sessLoad() { try { this.sess = JSON.parse(localStorage.getItem('tcgPokedex.sess') || '[]'); } catch (e) { this.sess = []; } if (!Array.isArray(this.sess)) this.sess = []; },
+  sessSave() { try { localStorage.setItem('tcgPokedex.sess', JSON.stringify(this.sess)); } catch (e) {} },
+  scopeSet() {
+    const id = this.rig && this.rig.on && this.rig.scope; if (!id) return null;
+    const ids = new Set([id]);
+    Object.keys(state.customSets || {}).forEach(k => { if (parentOf(k) === id) ids.add(k); });       // its regional editions too
+    return ids;
+  },
+  scopeFill() {
+    const sel = $('scanScope'), sets = (window._sets || []).slice().reverse();
+    if (!sets.length && sel.options.length) return;
+    sel.innerHTML = '<option value="">Any set</option>' + sets.map(x => '<option value="' + esc(x.id) + '">' + esc(x.name) + (abbrOf(x.id) ? ' · ' + esc(abbrOf(x.id)) : '') + '</option>').join('');
+    sel.value = (this.rig && this.rig.scope) || '';
+    if (sel.value !== ((this.rig && this.rig.scope) || '')) sel.value = '';
+  },
+  sessValue(r) { const d = knownPrice({ lang, setId: r.setId, localId: r.localId }); return d && d.p != null ? toAUD(d.p, d.u) : null; },
+  sessBarUpdate() {
+    const bar = $('sessBar'), n = (this.sess || []).reduce((a, r) => a + r.qty, 0);
+    bar.hidden = !(this.rig && this.rig.on) || !n;
+    if (bar.hidden) return;
+    let tot = 0, unk = 0; this.sess.forEach(r => { const v = this.sessValue(r); if (v == null) unk++; else tot += v * r.qty; });
+    $('sessN').textContent = n + (n === 1 ? ' card' : ' cards');
+    $('sessVal').textContent = (tot ? '≈ ' + money(tot, 'AUD') : '') + (unk && tot ? ' + ' + unk + ' unpriced' : unk ? 'prices loading…' : '');
+  },
+  async printingsOf(set, card) {
+    const cachedSet = cacheGet('details3/' + set.id);
+    if (cachedSet && cachedSet.cards[card.localId]) return cachedSet.cards[card.localId].v || 'n';
+    try { return variantsFrom(await getJSONL(lang, 'cards/' + card.id)); } catch (e) { return 'n'; }
+  },
+  async queueCard(set, card) {
+    const status = m => { $('scanStatus').textContent = m; };
+    const avail = (await this.printingsOf(set, card)) || 'n', swap = this.swap; this.swap = false;
+    if (swap && this.rigRow) { const old = this.rigRow; if (old.qty > 1) old.qty--; else this.sess = this.sess.filter(x => x !== old); }
+    const id = set.id + '|' + card.localId + '|' + cardLang;
+    let row = this.sess.find(x => x.id === id);
+    if (row) row.qty++;
+    else {
+      row = { id, setId: set.id, key: setKey(set.id), localId: card.localId, name: card.name, setName: set.name, lang: cardLang, avail, qty: 1,
+        num: card.localId + (set.cardCount.official ? '/' + String(set.cardCount.official).padStart(card.localId.length, '0') : ''), img: card.image || '',
+        v: avail.length === 1 ? [avail] : [avail.includes('n') ? 'n' : avail.includes('h') ? 'h' : avail[0]] };       // rares with no plain version start on holo, not reverse
+      this.sess.push(row);
+    }
+    this.rigRow = row; this.sessSave(); this.sessBarUpdate();
+    if (this.sessValue(row) == null) loadPrices([{ lang, setId: set.id, localId: card.localId }], () => this.sessBarUpdate());
+    const needers = familyNeeds(set.id, card.localId, cardLang), price = this.sessValue(row);
+    const r = $('scanResult'); r.hidden = false;
+    r.innerHTML = (card.image ? '<img alt="" src="' + lowSrc(card.image) + '">' : '') + '<div class="t"><b></b><small></small><div class="px"></div></div><div class="btns"></div><button class="dismiss" title="Take it out of the list" aria-label="Remove">✕</button>';
+    r.querySelector('b').textContent = card.name + (row.qty > 1 ? ' ×' + row.qty : '');
+    r.querySelector('small').textContent = set.name + ' · ' + row.num + (cardLang !== 'en' ? ' · ' + regionName(cardLang) : '');
+    r.querySelector('.px').textContent = [price != null ? money(price, 'AUD') : '', needers.length ? needers.map(p => p.name).join(' & ') + (needers.length > 1 ? ' need' : ' needs') + ' it' : ''].filter(Boolean).join(' · ');
+    const btns = r.querySelector('.btns');
+    if ((this.cand || []).length > 1) btns.appendChild(makeButton('↻ Not this one', () => {
+      this.candI = (this.candI + 1) % this.cand.length; const nx = this.cand[this.candI];
+      this.swap = true; this.found = { localId: nx.localId }; this.show(nx.set, this.found);
+    }, 'Try the next best match'));
+    r.querySelector('.dismiss').onclick = () => {
+      if (row.qty > 1) row.qty--; else this.sess = this.sess.filter(x => x !== row);
+      this.sessSave(); this.sessBarUpdate(); r.hidden = true; r.innerHTML = ''; this.found = { gone: true };      // stay quiet until the card is moved
+      status('Taken out. Next card.');
+    };
+    this.shown = { key: set.id + '-' + card.localId, at: Date.now() };
+    status(card.name + ' is in the list. Next card.');
+    this.tick('added', card.name + ' · in the list', needers);
+  },
+  sessOpen() { this.sessRender(); $('sessList').hidden = false; },
+  sessRender() {
+    const box = $('sessRows'); box.innerHTML = '';
+    const n = this.sess.reduce((a, r) => a + r.qty, 0);
+    $('sessTitle').textContent = 'Review · ' + n + (n === 1 ? ' card' : ' cards');
+    $('sessAdd').textContent = 'Add all for ' + me().name; $('sessAdd').disabled = !n;
+    if (!n) { box.appendChild(el('div', 'note', 'Nothing in the list yet.')); return; }
+    this.sess.forEach(r => {
+      const m = marks(ownedIn(r.setId)[r.localId]), have = Object.keys(m).length > 0, val = this.sessValue(r);
+      const d = el('div', 'srow');
+      d.innerHTML = (r.img ? '<img alt="" src="' + lowSrc(r.img) + '">' : '<span></span>') + '<div><div class="n"></div><small></small></div><button class="x" aria-label="Remove">✕</button><div class="chips"></div>';
+      d.querySelector('.n').textContent = r.name + (r.qty > 1 ? ' ×' + r.qty : '');
+      d.querySelector('small').innerHTML = esc(r.setName + ' · ' + r.num) + (val != null ? ' · ' + money(val, 'AUD') : '') + (r.lang !== 'en' ? ' · ' + esc(regionName(r.lang)) : '') + (have ? ' · <span class="have">you have a printing</span>' : '');
+      d.querySelector('.x').onclick = () => { this.sess = this.sess.filter(x => x !== r); this.sessSave(); this.sessBarUpdate(); this.sessRender(); };
+      const chips = d.querySelector('.chips');
+      if (r.avail.length > 1) [...r.avail].forEach(v => {
+        const b = makeButton(VNAME[v], () => { r.v = r.v.includes(v) ? r.v.filter(x => x !== v) : r.v.concat(v); this.sessSave(); b.classList.toggle('on', r.v.includes(v)); });
+        b.className = r.v.includes(v) ? 'on' : ''; chips.appendChild(b);
+      }); else chips.remove();
+      box.appendChild(d);
+    });
+  },
+  sessAddAll() {
+    const keep = cardLang; let added = 0, had = 0;
+    this.sess.forEach(r => {
+      cardLang = r.lang;
+      r.v.forEach(v => {
+        const m = marks(ownedIn(r.setId)[r.localId]);
+        if (m[v] || (!r.avail.includes('n') && v === r.avail[0] && m.n)) had++; else { setCard(state.current, r.key, r.localId, true, v); added++; }
+      });
+    });
+    cardLang = keep;
+    this.sess = []; this.sessSave(); this.sessBarUpdate(); $('sessList').hidden = true;
+    $('scanResult').hidden = true; $('scanResult').innerHTML = '';
+    this.found = { gone: true };       // the card still on the pad is already in; wait for the next one rather than listing it again
+    $('scanStatus').textContent = 'Added ' + added + ' for ' + me().name + (had ? ' (' + had + ' already owned)' : '') + '.';
+    if (window._set && (location.hash || '').startsWith('#/set/')) renderSet();
+  },
   rigSave() { try { localStorage.setItem(RIG_KEY, JSON.stringify(this.rig)); } catch (e) {} },
   // The box is a plain pile with no spring: every card raises the top one toward the camera by its own thickness, so the card looks
   // bigger. The rig puts the lens ~82 mm above an empty box and ~58 mm above a full one (24 mm of pile). The outline is resized
@@ -2698,7 +2900,7 @@ const scanner = {
   rigApply() {
     const box = $('scan'), g = box.querySelector('.guide'), r = this.rig, on = !!r.on;
     box.classList.toggle('rig', on);
-    g.style.left = on ? r.x * 100 + '%' : ''; g.style.top = on ? r.y * 100 + '%' : ''; g.style.width = on ? r.s * this.rigScale() * 100 + '%' : '';
+    g.style.left = on ? r.x * 100 + '%' : ''; g.style.top = on ? r.y * 100 + '%' : ''; g.style.width = on ? r.s * this.rigScale() * (r.k || 1) * 100 + '%' : '';
     g.querySelector('span').innerHTML = on ? 'Put a card on the pad.<br>The outline is the stand\'s fixed spot.' : 'Fill the outline with the card and hold still.<br>Glare is fine — it matches the picture, not the number.';
     const full = on && r.n >= this.rigCap();
     $('scanRig').textContent = full ? '⚠ Box full — empty it' : '🧰 Box ' + (r.n || 0) + '/' + this.rigCap();
@@ -2707,10 +2909,10 @@ const scanner = {
     $('modeBulk').classList.toggle('primary', on); $('modeSingle').classList.toggle('primary', !on);
     $('rigBoxRow').hidden = !on; $('rigKind').value = r.kind || 'sleeved';
     $('scanRigAdj').hidden = !on;
-    $('rigAuto').checked = r.auto !== false; $('rigX').value = r.x * 100; $('rigY').value = r.y * 100; $('rigS').value = r.s * 100;
+    $('rigAuto').checked = !!r.quick; this.sessBarUpdate(); this.scopeFill(); $('rigX').value = r.x * 100; $('rigY').value = r.y * 100; $('rigS').value = r.s * 100;
     if (!on) this.rigAdjust(false);
   },
-  rigAdjust(show) { $('rigAdj').hidden = !show; $('scan').classList.toggle('adjusting', !!show); },
+  rigAdjust(show) { $('rigAdj').hidden = !show; $('scan').classList.toggle('adjusting', !!show); if (show) $('moreBox').hidden = false; },
   setMode(bulk) {
     if (!!this.rig.on === !!bulk) return;
     this.rig.on = !!bulk; this.rigSave();
@@ -2722,7 +2924,7 @@ const scanner = {
   },
   rigMove() {
     this.rig.x = $('rigX').value / 100; this.rig.y = $('rigY').value / 100; this.rig.s = $('rigS').value / 100;
-    this.rig.nCal = this.rig.n || 0;     // the outline was just lined up against the pile as it is now
+    this.rig.nCal = this.rig.n || 0; this.rig.k = 1; this.rig.scRef = null;     // the outline was just lined up against the pile as it is now
     this.rig.set = true; this.rigApply(); this.rigSave();
   },
   // a tiny grey picture of whatever is inside the outline, to tell "the same card" from "a different card" or "nothing"
@@ -2736,20 +2938,47 @@ const scanner = {
     return a;
   },
   rigDiff(a, b) { let s = 0; for (let i = 0; i < a.length; i++) s += Math.abs(a[i] - b[i]); return s / a.length / 255; },
+  // how alike two samples are in shape, ignoring overall brightness (1 = the same picture). Two different cards of similar tones barely
+  // differ in average brightness (measured 6% on two green cards, under the 10% "moved" limit), but their shapes correlate at about 0.6;
+  // the same card in the same place correlates at 0.9999.
+  rigCorr(a, b) {
+    let ma = 0, mb = 0; for (let i = 0; i < a.length; i++) { ma += a[i]; mb += b[i]; } ma /= a.length; mb /= a.length;
+    let sab = 0, saa = 0, sbb = 0; for (let i = 0; i < a.length; i++) { const x = a[i] - ma, y = b[i] - mb; sab += x * y; saa += x * x; sbb += y * y; }
+    return sab / Math.sqrt(saa * sbb || 1);
+  },
+  // Is the pad empty? An empty box is smooth and dull, and the picture matcher will still name the closest plain card (the Poké Ball
+  // promo SWSH146 at 0.53), then add it. Measured on Chris's Fold in the holder: empty pad contrast 5.3 and edge detail 0.66; a busy
+  // Pokémon card 31 and 12; a plain trainer card (Gwynn) 38 and 13. So under 12 contrast and under 3 edge detail means nothing is there.
+  rigEmpty(v) {
+    const g = this.guideBox('guide'), c = this.emptyCv || (this.emptyCv = document.createElement('canvas')), W = 64, H = 88;
+    c.width = W; c.height = H;
+    const x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(v, g.x, g.y, g.w, g.h, 0, 0, W, H);
+    const d = x.getImageData(0, 0, W, H).data, L = new Float32Array(W * H);
+    let m = 0; for (let i = 0; i < W * H; i++) { L[i] = d[i * 4] * 0.3 + d[i * 4 + 1] * 0.59 + d[i * 4 + 2] * 0.11; m += L[i]; } m /= W * H;
+    let s = 0, e = 0, n = 0;
+    for (let i = 0; i < W * H; i++) s += (L[i] - m) * (L[i] - m);
+    for (let y = 1; y < H - 1; y++) for (let xx = 1; xx < W - 1; xx++) { const i = y * W + xx; e += Math.abs(L[i + 1] - L[i - 1]) + Math.abs(L[i + W] - L[i - W]); n++; }
+    return Math.sqrt(s / (W * H)) < 12 && e / n / 2 < 3;
+  },
   // Once a card has been named, scanning pauses until the picture in the outline changes and settles
   // (the card slid out, or the next one slid in); then the result is cleared and scanning starts again.
   rigWatch(v) {
     if (!this.rigLock) {
       if (!this.found) return false;
       if (!this.rigCounted) { this.rigCounted = true; this.rig.n = (this.rig.n || 0) + 1; this.rigSave(); this.rigApply(); }   // count first: it resizes the outline
-      this.rigLock = true; this.rigRef = this.rigSample(v); this.rigPrev = this.rigRef;
+      this.rigLock = true; this.rigRef = this.rigSample(v); this.rigPrev = this.rigRef; this.rigMovedOnce = false;
       return true;
     }
     // dismissed (✕ Wrong card): look again at the card still in the slot
     if ($('scanResult').hidden && !this.found) { this.rigLock = false; this.rigRef = null; return false; }
-    const now = this.rigSample(v), moved = this.rigDiff(now, this.rigRef) > 0.1, steady = this.rigDiff(now, this.rigPrev) < 0.03;
+    const now = this.rigSample(v), moved = this.rigDiff(now, this.rigRef) > 0.1 || this.rigCorr(now, this.rigRef) < 0.9, steady = this.rigDiff(now, this.rigPrev) < 0.03;
+    // the same card put in twice ends up looking just like the first, so the end picture proves nothing: any real movement in the
+    // outline since the card was named (the old card leaving, the next one sliding in) counts as a change once things settle
+    if (moved || this.rigDiff(now, this.rigPrev) > 0.05) this.rigMovedOnce = true;
     this.rigPrev = now;
-    if (moved && steady && Date.now() - (this.shown ? this.shown.at : 0) > 500) {
+    if ((moved || this.rigMovedOnce) && steady && Date.now() - (this.shown ? this.shown.at : 0) > 500) {
+      this.rigMovedOnce = false;
       this.rigLock = false; this.rigRef = null; this.rigCounted = false; this.found = null; this.last = null; this.coarseHist = []; this.shown = null;
       $('scanResult').hidden = true; $('scanResult').innerHTML = '';
       $('scanStatus').textContent = this.rigCount ? '✓ ' + this.rigCount + ' added this session — next card.' : 'Rig mode: next card.';
@@ -2825,10 +3054,11 @@ const scanner = {
     // a card read as printed in a language prefers that language's edition of the same picture, and the other way round
     if (lang) list = list.map(c => c.card.regional ? { ...c, fine: c.fine + (regionLangOf(c.card.set) === lang ? 0.08 : -0.08) } : c).sort((a, b) => b.fine - a.fine);
     const best = list[0];
-    if (!best || best.fine < 0.45) return false;
+    const scoped = !!this.scopeSet(), lo = scoped ? 0.36 : 0.45, gap = scoped ? 0.04 : 0.05;      // limited to one set there is far less to confuse it with
+    if (!best || best.fine < lo) return false;
     const ties = list.filter(c => best.fine - c.fine < 0.03);           // the same artwork in several sets
     const next = list.find(c => best.fine - c.fine >= 0.03);
-    if (next && best.fine - next.fine < 0.05) return false;              // a different picture scores almost as well: not sure
+    if (next && best.fine - next.fine < gap) return false;              // a different picture scores almost as well: not sure
     let pick = ties[0];
     if (ties.length > 1) {
       const open = window._set && (location.hash || '').startsWith('#/set/') ? window._set.id : null;
@@ -2850,6 +3080,9 @@ const scanner = {
         return 'shown';
       }
     }
+    const seenC = new Set(), cands = [];
+    for (const c of list) { const k = c.card.set + '-' + c.card.localId; if (c.fine < 0.3 || seenC.has(k)) continue; seenC.add(k); cands.push(c.card); if (cands.length >= 6) break; }
+    this.cand = cands; this.candI = Math.max(0, cands.findIndex(c => c.set === pick.card.set && c.localId === pick.card.localId));
     this.found = { localId: pick.card.localId };
     this.show(pick.card.set, this.found);
     return 'shown';
@@ -2955,6 +3188,10 @@ const scanner = {
   // is read too (slow), which covers cards the index has no picture for.
   async loop() {
     if (!$('scan').classList.contains('open') || !this.stream) return;
+    if (this.rig && this.rig.on && !$('rigAdj').hidden) {
+      const sv = $('scan').querySelector('video');
+      if (sv.videoWidth && !this.sharpBusy) { this.sharpBusy = true; try { this.rigSharpShow(sv); } catch (e) {} setTimeout(() => { this.sharpBusy = false; }, 250); }
+    }
     if (this.rig && this.rig.on && !this.busy) {
       const rv = $('scan').querySelector('video');
       if (rv.videoWidth && this.rigWatch(rv)) { this.timer = setTimeout(() => this.loop(), 100); return; }
@@ -2963,22 +3200,36 @@ const scanner = {
       this.busy = true;
       try {
         const v = $('scan').querySelector('video');
+        if (v.videoWidth && this.rig && this.rig.on && this.rigEmpty(v)) {       // nothing on the pad: look at nothing, name nothing
+          this.last = null; this.lastWide = null; this.coarseHist = []; this.rigMiss = 0;
+          $('scanStatus').textContent = 'Pad is empty. Put a card in.';
+          this.busy = false; this.timer = setTimeout(() => this.loop(), 120); return;
+        }
         if (v.videoWidth) {
           this.tries = (this.tries || 0) + 1;
           if (this.ready) {
             const box = this.guideBox('guide');
             const pk = $('scanPeek'); pk.width = 36; pk.height = 50; pk.getContext('2d').drawImage(v, box.x, box.y, box.w, box.h, 0, 0, 36, 50);
-            const coarse = await searchPicture(v, box, { set: this.liveSet(), hist: this.coarseHist, k: 40, coarseOnly: true });
+            const coarse = await searchPicture(v, box, { set: this.liveSet(), hist: this.coarseHist, k: 40, coarseOnly: true, only: this.scopeSet() });
             this.coarseHist.push(coarse.scores); if (this.coarseHist.length > 3) this.coarseHist.shift();
             coarse.slice(0, 12).forEach(c => fineFor(c.card));            // start fetching the likely pictures now, so the fine check has them
             const keys = coarse.slice(0, 3).map(c => this.key(c.card));
             $('scanRead').textContent = v.videoWidth + '×' + v.videoHeight + ': ' + coarse.slice(0, 3).map(c => this.key(c.card) + ' ' + c.coarse.toFixed(2)).join(', ');
-            const steady = this.last && this.last.includes(keys[0]);
-            this.last = keys;
+            // the wide sweep (rig mode, card much bigger or smaller than the outline) is compared with its own previous result
+            const isWide = !!(this.rig && this.rig.on) && this.liveSet() === LIVE_WIDE;
+            const prevKeys = isWide ? this.lastWide : this.last;
+            const steady = prevKeys && prevKeys.includes(keys[0]);
+            if (isWide) this.lastWide = keys; else this.last = keys;
+            if (this.rig && this.rig.on && !steady && !isWide) this.rigMiss = (this.rigMiss || 0) + 1;
             const again = this.shown && this.shown.key === keys[0] && Date.now() - this.shown.at < 6000;
             if (steady && !again) {
               $('scanStatus').textContent = 'Checking ' + this.cardName(coarse[0].card) + '…';
-              const list = await searchPicture(v, box, { set: this.liveSet(), hist: this.coarseHist, k: 40 });
+              const ls = this.liveSet();
+              const list = await searchPicture(v, box, { set: ls, fineScales: ls === LIVE_WIDE ? FINE_WIDE : undefined, hist: this.coarseHist, k: 40, only: this.scopeSet() });
+              if (this.rig && this.rig.on) {
+                if (list[0] && list[0].fine >= 0.5) { this.rigMiss = 0; this.rigLearn(list[0].fineScale); }
+                else if (!list[0] || list[0].fine < 0.45) this.rigMiss = (this.rigMiss || 0) + 1;
+              }
               const lang = !this.found && !(this.rig && this.rig.on) && list[0] && list[0].fine >= 0.3 ? await this.langFor(v, box, this.key(list[0].card)) : null;
               if (!this.found && !this.decide(list, null, lang)) {
                 if (list[0] && list[0].fine >= 0.3) { $('scanStatus').textContent = 'Looks like ' + this.cardName(list[0].card) + ' — hold still, fill the outline…'; getJSON('sets/' + list[0].card.set).catch(() => {}); }
@@ -3049,6 +3300,7 @@ const scanner = {
     const heard = this.langNow && Date.now() - this.langNow.at < 20000 ? this.langNow.val : null;
     const rl = set.custom && set.region ? regionLangOf(set.id) : null, want = rl || heard;
     if (want && want !== cardLang && !(want === 'en' && ['en', 'fr', 'de', 'es', 'it', 'pt', 'id'].includes(cardLang))) setCardLang(want);
+    if (this.rig && this.rig.on && !this.rig.quick && hit.localId) { await this.queueCard(set, card); return; }       // bulk add: into the list, nothing is saved yet
     const key = setKey(set.id);
     const r = $('scanResult'); r.hidden = false;
     r.innerHTML = (card.image ? '<img alt="" src="' + lowSrc(card.image) + '">' : '') + '<div class="t"><b></b><small></small></div><div class="btns"></div><button class="dismiss" title="Wrong card — keep scanning" aria-label="Dismiss">✕</button>';
@@ -3094,7 +3346,7 @@ const scanner = {
       btns.appendChild(makeButton('✕ Wrong card', () => { this.found = null; this.last = null; this.coarseHist = []; r.hidden = true; status('Fill the outline with the next card.'); }, 'Dismiss and keep scanning'));
     };
     // Rig mode: a card with a single printing is marked straight away (the ✓ button is the undo); several printings still ask
-    if (this.rig && this.rig.on && this.rig.auto !== false) {
+    if (this.rig && this.rig.on && this.rig.quick) {
       // only a picture match is trusted for this: a card named from its printed number alone (hit has no localId) is shown, never ticked
       const v = avail.length === 1 && hit.localId ? avail : null, m0 = marks(ownedIn(set.id)[card.localId]);
       if (v) {
@@ -3185,8 +3437,14 @@ $('scanRigAdj').onclick = () => scanner.rigAdjust($('rigAdj').hidden);
 $('rigDone').onclick = () => { scanner.rig.set = true; scanner.rigSave(); scanner.rigAdjust(false); $('scanStatus').textContent = 'Rig mode: put a card on the pad.'; };
 $('rigKind').onchange = () => { scanner.rig.kind = $('rigKind').value; scanner.rig.n = 0; scanner.rig.nCal = 0; scanner.rigSave(); scanner.rigApply(); };
 $('rigMinus').onclick = () => { scanner.rig.n = Math.max(0, (scanner.rig.n || 0) - 1); scanner.rigSave(); scanner.rigApply(); };
-$('rigEmptied').onclick = () => { scanner.rig.n = 0; scanner.rigSave(); scanner.rigApply(); $('scanStatus').textContent = 'Box emptied — count is back to 0.'; };
-$('rigAuto').onchange = () => { scanner.rig.auto = $('rigAuto').checked; scanner.rigSave(); };
+$('rigEmptied').onclick = () => { scanner.rig.n = 0; scanner.rig.k = 1; scanner.rigMiss = 0; scanner.rigSave(); scanner.rigApply(); $('scanStatus').textContent = 'Box emptied — count is back to 0.'; };
+$('rigAuto').onchange = () => { scanner.rig.quick = $('rigAuto').checked; scanner.rigSave(); };
+$('scanMore').onclick = () => { $('moreBox').hidden = !$('moreBox').hidden; };
+$('scanScope').onchange = () => { scanner.rig.scope = $('scanScope').value; scanner.rigSave(); scanner.last = null; scanner.lastWide = null; scanner.coarseHist = []; };
+$('sessOpen').onclick = () => scanner.sessOpen();
+$('sessX').onclick = () => { $('sessList').hidden = true; };
+$('sessClear').onclick = () => { if (scanner.sess.length && confirm('Clear this list without adding anything?')) { scanner.sess = []; scanner.sessSave(); scanner.sessBarUpdate(); $('sessList').hidden = true; } };
+$('sessAdd').onclick = () => scanner.sessAddAll();
 ['rigX', 'rigY', 'rigS'].forEach(id => { $(id).oninput = () => scanner.rigMove(); });
 $('scanManualGo').onclick = () => {
   const hit = parseScan($('scanManual').value, true);
