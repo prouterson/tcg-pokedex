@@ -455,10 +455,10 @@
 <div id="scan">
   <div class="cam"><video playsinline autoplay muted></video><div class="guide"><span>Fill the outline with the card and hold still.<br>Glare is fine — it matches the picture, not the number.</span><i class="zone"></i></div><div id="rigTick" aria-live="polite"><b></b><span></span><em></em></div></div>
   <div class="panel">
-    <div class="row2 modes"><button id="modeBulk" title="Drop cards in the rig one after another: each is scanned and added">📚 Bulk add</button><button id="modeSingle" title="One card: identify it and check its centering">🔍 Scan &amp; grade</button></div>
+    <div class="row2 modes" title="Tap the camera view to read the card again"><button id="modeBulk" title="Drop cards in the rig one after another: each is scanned and added">📚 Bulk add</button><button id="modeSingle" title="One card: identify it and check its centering">🔍 Scan &amp; grade</button></div>
     <div class="status" id="scanStatus">Starting camera…</div>
     <div class="result" id="scanResult" hidden></div>
-    <div id="sessBar" hidden><b id="sessN">0 cards</b><span id="sessVal"></span><button id="sessOpen" class="primary">Review ▸</button></div>
+    <div id="sessBar" hidden><b id="sessN">0 cards</b><span id="sessVal"></span><button id="sessAgain" title="The same card went in again and was missed: count one more">＋ Again</button><button id="sessOpen" class="primary">Review ▸</button></div>
     <div class="row2"><button id="scanSnap" class="primary big" hidden>🔍 Scan &amp; grade this card</button></div>
     <div class="row2"><button id="scanCenter" title="Measure the border centering of the card in view, without naming it">📐 Centering check</button></div>
     <div class="row2" id="mainRow"><select id="scanScope" title="Only look for cards from this set. Faster, and far fewer wrong guesses."></select><button id="scanTorch" hidden>🔦 Light</button><button id="scanMore" title="More: type a number, line up the outline, box count">⋯</button><button id="scanClose">Close</button></div>
@@ -541,7 +541,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v79';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v81';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -2852,6 +2852,24 @@ const scanner = {
     status(card.name + ' is in the list. Next card.');
     this.tick('added', card.name + ' · in the list', needers);
   },
+  // the same card went in again and the scanner did not notice: one more copy, and the box is one card fuller
+  sessAgain() {
+    const row = this.rigRow && this.sess.includes(this.rigRow) ? this.rigRow : this.sess[this.sess.length - 1];
+    if (!row) return;
+    row.qty++; this.rigRow = row; this.sessSave(); this.sessBarUpdate();
+    if (this.rig && this.rig.on) { this.rig.n = (this.rig.n || 0) + 1; this.rigSave(); this.rigApply(); }
+    const t = $('scanResult').querySelector('.t b'); if (t && !$('scanResult').hidden) t.textContent = row.name + ' ×' + row.qty;
+    $('scanStatus').textContent = row.name + ' ×' + row.qty + ' in the list.';
+    this.tick('added', row.name + ' ×' + row.qty, []);
+  },
+  // tapping the camera view says "look again": whatever is in the outline is read afresh and listed (the same card again gets one more)
+  rescan() {
+    if (!(this.rig && this.rig.on) || !this.stream) return;
+    this.rigLock = false; this.rigRef = null; this.rigPrev = null; this.rigCounted = false; this.rigMovedOnce = false;
+    this.found = null; this.last = null; this.lastWide = null; this.coarseHist = []; this.shown = null;
+    $('scanResult').hidden = true; $('scanResult').innerHTML = '';
+    $('scanStatus').textContent = 'Looking again…';
+  },
   sessOpen() { this.sessRender(); $('sessList').hidden = false; },
   sessRender() {
     const box = $('sessRows'); box.innerHTML = '';
@@ -2901,7 +2919,7 @@ const scanner = {
     const box = $('scan'), g = box.querySelector('.guide'), r = this.rig, on = !!r.on;
     box.classList.toggle('rig', on);
     g.style.left = on ? r.x * 100 + '%' : ''; g.style.top = on ? r.y * 100 + '%' : ''; g.style.width = on ? r.s * this.rigScale() * (r.k || 1) * 100 + '%' : '';
-    g.querySelector('span').innerHTML = on ? 'Put a card on the pad.<br>The outline is the stand\'s fixed spot.' : 'Fill the outline with the card and hold still.<br>Glare is fine — it matches the picture, not the number.';
+    g.querySelector('span').innerHTML = on ? 'Put a card on the pad.<br>Tap the picture to read it again.' : 'Fill the outline with the card and hold still.<br>Glare is fine — it matches the picture, not the number.';
     const full = on && r.n >= this.rigCap();
     $('scanRig').textContent = full ? '⚠ Box full — empty it' : '🧰 Box ' + (r.n || 0) + '/' + this.rigCap();
     $('scanRig').classList.toggle('full', full);
@@ -3442,6 +3460,8 @@ $('rigAuto').onchange = () => { scanner.rig.quick = $('rigAuto').checked; scanne
 $('scanMore').onclick = () => { $('moreBox').hidden = !$('moreBox').hidden; };
 $('scanScope').onchange = () => { scanner.rig.scope = $('scanScope').value; scanner.rigSave(); scanner.last = null; scanner.lastWide = null; scanner.coarseHist = []; };
 $('sessOpen').onclick = () => scanner.sessOpen();
+$('sessAgain').onclick = () => scanner.sessAgain();
+$('scan').querySelector('.cam').addEventListener('click', () => scanner.rescan());
 $('sessX').onclick = () => { $('sessList').hidden = true; };
 $('sessClear').onclick = () => { if (scanner.sess.length && confirm('Clear this list without adding anything?')) { scanner.sess = []; scanner.sessSave(); scanner.sessBarUpdate(); $('sessList').hidden = true; } };
 $('sessAdd').onclick = () => scanner.sessAddAll();
