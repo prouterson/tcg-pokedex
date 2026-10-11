@@ -100,6 +100,38 @@
   h1 span { display: inline-block; width: 18px; height: 18px; vertical-align: -3px; margin-right: 6px; border-radius: 50%; color: transparent; overflow: hidden;
     background: radial-gradient(circle, #fff 0 2.2px, var(--ball-line) 2.2px 3.8px, transparent 3.8px), linear-gradient(var(--ball-top) 0 43%, var(--ball-line) 43% 57%, #fff 57%); box-shadow: 0 0 0 1.5px var(--ball-line); }
   .count { font-weight: 600; white-space: nowrap; }
+  /* who is using the app: tap to switch person */
+  .whochip { display: flex; align-items: center; gap: 9px; padding: 3px 12px 3px 3px; border-radius: 999px; flex: none; max-width: 62%; text-align: left; }
+  .whochip i { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-style: normal; font-weight: 700; font-size: 16px; flex: none; }
+  .whochip span { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+  .whochip b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 16px; }
+  .whochip small { font-size: 11px; opacity: .65; white-space: nowrap; }
+  .whochip.compact { padding: 3px; } .whochip.compact span { display: none; }
+  /* bottom bar: Sets, Lookout, Scan in the middle, Value, More */
+  body { padding-bottom: calc(66px + env(safe-area-inset-bottom)); }
+  #tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: grid; grid-template-columns: repeat(5, 1fr); height: calc(60px + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom); background: var(--panel); border-top: 1px solid var(--line); }
+  #tabs button { background: none; border: 0; border-radius: 0; padding: 4px 0 2px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; font-size: 11px; color: var(--muted); }
+  #tabs button .ic { display: flex; height: 26px; align-items: center; justify-content: center; }
+  .i { width: 1.2em; height: 1.2em; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; vertical-align: -.2em; }
+  #tabs .i { width: 25px; height: 25px; }
+  .lbl { display: flex; align-items: center; gap: 10px; font-style: normal; } .lbl .i { width: 21px; height: 21px; }
+  button > .i { margin-right: 6px; }
+  #sheet .acts button .lbl .tx { color: inherit; font-size: inherit; }
+  #tabs button.on { color: var(--accent); font-weight: 600; }
+  #tabs button.scan { color: var(--text); }
+  #tabs button.scan .ic { width: 56px; height: 56px; margin-top: -24px; border-radius: 50%; background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center; border: 4px solid var(--panel); box-shadow: 0 3px 10px rgba(0,0,0,.28); }
+  #tabs button.scan .i { width: 27px; height: 27px; stroke-width: 1.9; }
+  #toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
+  .row .ic { width: 36px; height: 36px; border-radius: 50%; background: var(--card-miss); display: flex; align-items: center; justify-content: center; flex: none; font-size: 17px; }
+  .morebox { display: grid; gap: 10px; }
+  .morebox .sel { display: grid; gap: 6px; }
+  .morebox .sel label { font-size: 13px; color: var(--muted); }
+  .morebox select { width: 100%; padding: 10px; }
+  #sheet .acts .wdot { width: 30px; height: 30px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; font-style: normal; flex: none; }
+  #sheet .acts button.cur { border-color: var(--accent); font-weight: 600; }
+  #sheet .acts .seg { display: flex; } #sheet .acts .seg button { flex: 1; justify-content: center; padding: 11px 6px; font-size: 15px; border-radius: 0; }
+  #sheet .acts .seg button:first-child { border-radius: 12px 0 0 12px; } #sheet .acts .seg button:last-child { border-radius: 0 12px 12px 0; }
+  #sheet .acts .seg button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
   .bar { height: 8px; background: var(--card-miss); border-radius: 4px; overflow: hidden; margin-top: 8px; }
   .bar > i { display: block; height: 100%; background: var(--owned); width: 0; transition: width .25s; }
   .stats { font-size: 12px; color: var(--muted); margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap; }
@@ -224,7 +256,8 @@
   .people { max-width: 520px; }
   .people .p { display: flex; align-items: center; gap: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; }
   .people .p .dot { width: 22px; height: 22px; border-radius: 50%; flex: none; color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
-  .people .p b { flex: 1; }
+  .people .p { flex-wrap: wrap; }
+  .people .p b { flex: 1; min-width: 60px; }
   .people .p small { color: var(--muted); }
   .people .p .val { font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums; }
   .people .p.total { border-color: var(--accent); }
@@ -438,7 +471,7 @@
   @media print {
     @page { size: A4; margin: 8mm; }
     body { background: #fff; color: #000; }
-    header, main, footer, #lb, #printOpts, #toast { display: none !important; }
+    header, main, footer, #lb, #printOpts, #toast, #tabs { display: none !important; }
     #print { display: block; }
     .page { display: grid; grid-template-columns: repeat(3, 63mm); grid-template-rows: 7mm repeat(3, 88mm); gap: 2mm; justify-content: center; align-content: start; height: 277mm; break-after: page; break-inside: avoid; }
     .page:last-child { break-after: auto; }
@@ -457,6 +490,7 @@
 <body>
 <header>
   <div class="top">
+    <button id="who" class="whochip" aria-label="Switch person" hidden></button>
     <button class="back" id="back" aria-label="Back" hidden>‹</button>
     <button class="back" id="home" aria-label="Home" title="Home" hidden>⌂</button>
     <h1 id="title"><span>◆</span> TCG Pokédex</h1>
@@ -467,7 +501,7 @@
   <div class="controls" id="controls"></div>
 </header>
 <main id="main"></main>
-<footer id="foot"><div id="syncStatus"></div>Tap a card to mark it owned by the user selected at the top. Use Export to back up. Card data and prices from TCGdex. <span id="ver"></span></footer>
+<footer id="foot"><div id="syncStatus"></div>Tap a card to mark it owned by the person shown top left. Backups are under More. Card data and prices from TCGdex. <span id="ver"></span></footer>
 <div id="lb"><div class="flipper" id="lbFlip"><div class="side face"><img id="lbImg" alt=""></div><div class="side lbback" id="lbBack"></div></div><button id="lbBtn" class="lbbtn" hidden>↺ Flip</button></div>
 <div id="scan">
   <div class="cam"><video playsinline autoplay muted></video><div class="guide"><span>Fill the outline with the card and hold still.<br>Glare is fine — it matches the picture, not the number.</span><i class="zone"></i></div><div id="rigTick" aria-live="polite"><b></b><span></span><em></em></div></div>
@@ -529,6 +563,13 @@
 </div></div>
 <div id="print"></div>
 
+<nav id="tabs" aria-label="Main">
+  <button data-tab="sets"><span class="ic"></span>Sets</button>
+  <button data-tab="lookout"><span class="ic"></span>Lookout</button>
+  <button data-tab="scan" class="scan" aria-label="Scan a card"><span class="ic"></span>Scan</button>
+  <button data-tab="value"><span class="ic"></span>Value</button>
+  <button data-tab="more"><span class="ic"></span>More</button>
+</nav>
 <div id="toast" hidden><span>A new version is ready.</span><button id="toastBtn">Update</button></div>
 <script>
 // theme first, so there is no flash of the wrong colours
@@ -558,7 +599,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v85';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v88';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -986,11 +1027,13 @@ function rerender() {
   else if (h === '#/people') viewPeople();
   else if (h === '#/sync') viewSync();
   else if (h === '#/lookout') viewLookout();
+  else if (h === '#/value') viewValue();
+  else if (h === '#/more') viewMore();
   else if (h === '#/' && window._sets) renderHome();
 }
 
 function viewSync() {
-  setHeader({ title: 'Family sync', back: '#/' });
+  setHeader({ title: 'Family sync', back: '#/more' });
   const main = $('main');
   main.innerHTML = '';
   const box = el('div', 'people');
@@ -1182,7 +1225,7 @@ function langSelect() {
 }
 
 function viewPeople() {
-  setHeader({ title: 'Users', back: '#/' });
+  setHeader({ title: 'People', back: '#/more' });
   const main = $('main');
   main.innerHTML = '';
   const box = el('div', 'people');
@@ -1262,11 +1305,87 @@ const $ = id => document.getElementById(id);
 function el(tag, cls, html) { const d = document.createElement(tag); if (cls) d.className = cls; if (html != null) d.innerHTML = html; return d; }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
-function setHeader({ title, back, count, progress, controls }) {
+const ICONS = {
+  sets: '<rect x="3.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.8"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.8"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.8"/>',
+  star: '<path d="M12 3.6l2.6 5.4 5.9.8-4.3 4.1 1 5.9-5.2-2.8-5.2 2.8 1-5.9L3.5 9.8l5.9-.8z"/>',
+  camera: '<path d="M4 8h3l1.6-2.2h6.8L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"/><circle cx="12" cy="13.2" r="3.6"/>',
+  value: '<circle cx="12" cy="12" r="8.6"/><path d="M14.6 9.4c-.5-.9-1.4-1.3-2.6-1.3-1.5 0-2.6.8-2.6 2 0 2.8 5.2 1.4 5.2 4.2 0 1.2-1.2 2.1-2.7 2.1-1.2 0-2.2-.5-2.7-1.4M12 6.3v1.8m0 7.8v1.8"/>',
+  more: '<path d="M4.5 7h15M4.5 12h15M4.5 17h15"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  user: '<circle cx="12" cy="8" r="3.8"/><path d="M4.5 20c0-3.8 3.4-5.8 7.5-5.8s7.5 2 7.5 5.8"/>',
+  users: '<circle cx="9" cy="8.6" r="3.4"/><path d="M2.8 19.5c0-3.2 2.8-5 6.2-5s6.2 1.8 6.2 5"/><path d="M15.6 5.4a3.4 3.4 0 0 1 0 6.4M18 14.6c1.9.6 3.2 2.1 3.2 4.9"/>',
+  download: '<path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/>',
+  upload: '<path d="M12 16V5m0 0L8 9m4-4l4 4M5 20h14"/>',
+  pencil: '<path d="M4.5 19.5l.9-4L16.2 4.7a1.6 1.6 0 0 1 2.3 0l.8.8a1.6 1.6 0 0 1 0 2.3L8.5 18.6z"/><path d="M14.5 6.5l3 3"/>',
+  print: '<path d="M7 9V4h10v5"/><path d="M7 17H5a1 1 0 0 1-1-1v-6a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1h-2"/><rect x="7" y="14" width="10" height="6" rx="1"/>',
+  palette: '<path d="M12 3.5a8.5 8.5 0 1 0 0 17c1.1 0 1.7-.8 1.4-1.7-.3-1 .3-2.1 1.4-2.1H17a3.7 3.7 0 0 0 3.7-3.7C20.7 6.6 16.8 3.5 12 3.5z"/><circle cx="7.6" cy="11" r=".6"/><circle cx="10.4" cy="7.4" r=".6"/><circle cx="15" cy="7.8" r=".6"/>',
+  sliders: '<path d="M4 7h9M19 7h1M4 17h1M11 17h9"/><circle cx="16" cy="7" r="2.2"/><circle cx="8" cy="17" r="2.2"/>',
+  plusbox: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8.5v7M8.5 12h7"/>'
+};
+const ico = n => '<svg class="i" viewBox="0 0 24 24" aria-hidden="true">' + ICONS[n] + '</svg>';
+const lbl = (n, text) => '<em class="lbl">' + ico(n) + '<span class="tx">' + esc(text) + '</span></em>';
+const myCards = p => Object.values(state.owned[p.id] || {}).reduce((n, st) => n + Object.keys(st).length, 0);
+function updateWho(mode) {
+  const w = $('who'), p = me();
+  w.hidden = !mode;
+  if (!mode || !p) return;
+  w.className = 'whochip' + (mode === 'home' ? '' : ' compact');
+  w.innerHTML = '<i style="background:' + colour(p) + '">' + esc(initial(p)) + '</i><span><b></b><small>Tap to switch</small></span>';
+  w.querySelector('b').textContent = p.name;
+  w.onclick = openWho;
+}
+// the main pages and which bottom-bar button each one lights up
+function updateTabs() {
+  const h = location.hash || '#/';
+  const on = h === '#/lookout' ? 'lookout' : h === '#/value' ? 'value' : (h === '#/more' || h === '#/sync' || h === '#/people') ? 'more' : 'sets';
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === on));
+}
+const TAB_ICON = { sets: 'sets', lookout: 'star', scan: 'camera', value: 'value', more: 'more' };
+document.querySelectorAll('#tabs button').forEach(b => { b.querySelector('.ic').innerHTML = ico(TAB_ICON[b.dataset.tab]); });
+document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
+  const t = b.dataset.tab;
+  if (t === 'scan') { scanner.open(); return; }
+  ui.q = '';
+  const to = t === 'sets' ? '#/' : '#/' + t;
+  if ((location.hash || '#/') === to) { route(); window.scrollTo(0, 0); } else location.hash = to;
+});
+// the person switcher, with the card language and look of the app below it
+function openWho() {
+  const sh = $('sheet'), acts = sh.querySelector('.acts');
+  sh.classList.add('noimg');
+  sh.querySelector('b').textContent = "Who's using the app?";
+  sh.querySelector('small').textContent = 'Tap a person to switch to their cards';
+  acts.innerHTML = '';
+  const close = () => sh.classList.remove('open');
+  state.people.forEach(p => {
+    const n = myCards(p), cur = p.id === state.current;
+    const b = el('button', cur ? 'cur' : '', '<em style="display:flex;gap:10px;align-items:center;font-style:normal"><i class="wdot" style="background:' + colour(p) + '">' + esc(initial(p)) + '</i><span style="color:inherit;font-size:16px"></span></em><span>' + n + ' card' + (n === 1 ? '' : 's') + (cur ? ' ✓' : '') + '</span>');
+    b.querySelector('em span').textContent = p.name;
+    b.onclick = () => { state.current = p.id; saveState(); close(); route(); };
+    acts.appendChild(b);
+  });
+  acts.appendChild(makeButton(lbl('plus', 'Add a person'), () => {
+    const p = addUser();
+    const n = prompt('Name for the new user', p.name);
+    if (n && n.trim()) p.name = n.trim();
+    savePerson(p); close(); route();
+  }));
+  acts.appendChild(makeButton(lbl('pencil', 'Rename, colour or remove people'), () => { close(); location.hash = '#/people'; }));
+  acts.appendChild(el('div', 'hint', 'On this phone'));
+  acts.appendChild(cardLangSelect());
+  acts.appendChild(themeSelect());
+  sh.querySelector('.x').onclick = close;
+  sh.onclick = e => { if (e.target === sh) close(); };
+  sh.classList.add('open');
+}
+function setHeader({ title, back, count, progress, controls, tab }) {
   $('title').innerHTML = title;
+  updateWho(tab || 'compact');
+  updateTabs();
+  back = tab ? null : back;
   $('back').hidden = !back;
   $('back').onclick = back ? () => { location.hash = back; } : null;
-  $('home').hidden = !back;                                   // anywhere but home: a straight way back to the start
+  $('home').hidden = true;                                    // the Sets button in the bottom bar is the way home
   $('home').onclick = () => { ui.q = ''; location.hash = '#/'; };
   $('title').onclick = back ? () => { ui.q = ''; location.hash = '#/'; } : null;
   $('title').style.cursor = back ? 'pointer' : '';
@@ -1552,7 +1671,7 @@ async function viewLookout() {
     try { await refreshRaptor(p => { rapBtn.textContent = 'Reading ' + p + '/14'; }); } catch (e) { rapBtn.textContent = 'No connection'; await new Promise(r => setTimeout(r, 1500)); }
     if (location.hash === '#/lookout') viewLookout();
   };
-  setHeader({ title: '★ Lookout', back: '#/', controls: [whoSel, rapBtn, makeSeg([['grid', '▦', 'Pictures'], ['list', '☰', 'Compact list']], ui.mode, k => { ui.mode = k; viewLookout(); })] });
+  setHeader({ title: '★ Lookout', tab: true, controls: [whoSel, rapBtn, makeSeg([['grid', '▦', 'Pictures'], ['list', '☰', 'Compact list']], ui.mode, k => { ui.mode = k; viewLookout(); })] });
   const wishes = allWishes().filter(w => lookoutWho === 'all' || w.pid === lookoutWho);
   if (!wishes.length) {
     main.innerHTML = '<div class="note">Nothing on the lookout list' + (lookoutWho === 'all' ? '' : ' for ' + esc((state.people.find(p => p.id === lookoutWho) || {}).name)) + '. On any set page, tap ☆ on a card you want to find — it shows up here for the whole family, with its price, and drops off automatically once it is marked owned.</div>';
@@ -1656,7 +1775,7 @@ function lookoutCardMenu(g, setName, num, c) {
 async function viewHome() {
   const main = $('main');
   main.innerHTML = '<div class="empty">Loading…</div>';
-  setHeader({ title: '<span>◆</span> TCG Pokédex', controls: [personSelect(), cardLangSelect(), themeSelect(), scanButton(), makeSearch('Search cards, sets or codes', () => renderHome())] });
+  setHeader({ title: '', tab: 'home', count: myCards(me()) + (myCards(me()) === 1 ? ' card' : ' cards'), controls: [makeSearch('Search cards, sets or codes', () => renderHome())] });
   try {
     window._series = await getJSON('series');
     window._sets = await getJSON('sets');
@@ -1666,6 +1785,41 @@ async function viewHome() {
     window._sets = window._sets || []; window._series = window._series || [];
   }
   renderHome();
+}
+
+function viewValue() {
+  setHeader({ title: 'Collection value', tab: true });
+  const main = $('main');
+  main.innerHTML = '';
+  if (!allOwnedCards().length) { main.appendChild(el('div', 'note', 'Nothing here yet. Mark the cards you own and their value adds up here, for each person and for the whole family.')); return; }
+  main.appendChild(valuePanel());
+  loadFamilyValues();
+}
+
+function viewMore() {
+  setHeader({ title: 'More', tab: true });
+  const main = $('main');
+  main.innerHTML = '';
+  const box = el('div', 'morebox');
+  const link = (ic, name, sub, onclick) => {
+    const r = el('button', 'row');
+    r.innerHTML = '<span class="ic">' + ic + '</span><div class="t"><b></b><small></small></div><div class="pct">›</div>';
+    r.querySelector('b').textContent = name; r.querySelector('small').textContent = sub;
+    r.onclick = onclick; box.appendChild(r);
+  };
+  link(ico('users'), 'Family sync', sync.on ? 'Shared with family ' + sync.code : 'Only on this phone', () => { location.hash = '#/sync'; });
+  link(ico('user'), 'People', state.people.length + ' in this family: rename, colour, remove', () => { location.hash = '#/people'; });
+  link(ico('plusbox'), 'Add a set that is not listed', 'Such as the Chinese 30th Celebration', openAddSet);
+  link(ico('download'), 'Export a backup', 'Download everyone\'s cards as a file', exportProgress);
+  link(ico('upload'), 'Import a backup', 'Replace everything with an exported file', importProgress);
+  const sel = (label, node) => { const d = el('div', 'sel'); d.appendChild(el('label', '', label)); d.appendChild(node); box.appendChild(d); };
+  box.appendChild(el('h2', '', 'On this phone'));
+  sel('Language of the cards you mark', cardLangSelect());
+  sel('Look of the app', themeSelect());
+  box.appendChild(el('h2', '', 'Catalogue language'));
+  box.appendChild(el('div', 'note', 'Normally leave this on English. Japanese, Chinese and Korean releases are separate sets with their own numbering, so switch this only if you collect those releases.'));
+  box.appendChild(langSelect());
+  main.appendChild(box);
 }
 
 function renderHome() {
@@ -1700,14 +1854,6 @@ function renderHome() {
     inp.addEventListener('keydown', e => { if (e.key === 'Enter') joinFamily(inp.value.trim().toLowerCase()); });
     main.appendChild(jb);
   }
-
-  const wanted = allWishes().length;
-  const lk = el('button', 'row lookout');
-  lk.innerHTML = '<span class="dot">★</span><div class="t"><b>Be on the lookout</b><small>' + (wanted ? wanted + ' card' + (wanted === 1 ? '' : 's') + ' the family is hunting' : 'Tap ☆ on any card you want to find') + '</small></div><div class="pct">›</div>';
-  lk.onclick = () => { location.hash = '#/lookout'; };
-  main.appendChild(lk);
-
-  if (allOwnedCards().length) { main.appendChild(el('h2', '', 'Collection value')); main.appendChild(valuePanel()); loadFamilyValues(); }
 
   const mine = sets.filter(s => ownedCount(s.id) > 0 || childrenOf(s.id).some(k => ownedCountAll(k) > 0));
   if (mine.length) {
@@ -1798,7 +1944,7 @@ async function viewSeries(id) {
   try { sr = await getJSON('series/' + id); }
   catch (e) { main.innerHTML = '<div class="note">Could not load this series (no internet?).</div>'; return; }
   if (lang === 'en' && !window._dates) await loadDates();
-  setHeader({ title: esc(sr.name), back: '#/', controls: [personSelect()] });
+  setHeader({ title: esc(sr.name), back: '#/' });
   main.innerHTML = '';
   const rows = el('div', 'rows');
   sr.sets.slice().reverse().forEach(s => rows.appendChild(setRow(s)));
@@ -2103,31 +2249,18 @@ function renderSetHeader() {
   const set = window._set, t = setTotals();
   const filters = [['all', 'All'], ['need', 'Need'], ['owned', 'Owned']];
   if (state.people.length > 1) filters.push(['family', 'Family', 'Cards nobody in the family has']);
-  const controls = [
-    personSelect(),
-    languageBar(set),
-    scanButton(),
+  const controls = [];
+  const lb = languageBar(set);
+  if (lb.children.length > 2) controls.push(lb);              // other languages or editions held: switch between them right here
+  controls.push(
     makeSearch('Search name or number', () => renderCards()),
     makeSeg(filters, ui.filter, k => { ui.filter = k; renderSet(); }),
     makeSeg([['grid', '▦', 'Card grid'], ['list', '☰', 'Compact list']], ui.mode, k => { ui.mode = k; renderSet(); })
-  ];
-  if (haveDetails()) {
-    const sel = el('select');
-    sel.innerHTML = '<option value="">All rarities</option>' + rarityOptions().map(r => '<option' + (r === ui.rarity ? ' selected' : '') + '>' + esc(r) + '</option>').join('');
-    sel.onchange = () => { ui.rarity = sel.value; renderCards(); };
-    controls.push(sel);
-    controls.push(makeSeg([['num', '#', 'Number order'], ['price', '$↓', 'Price, highest first']], ui.sort, k => { ui.sort = k; renderSet(); }));
-    const ms = makeButton((master ? '☑' : '☐') + ' Master set', () => { master = !master; try { localStorage.setItem(MASTER_KEY, master ? '1' : '0'); } catch (e) {} renderSet(); },
-      'Master set: count and chase every printing (normal, reverse holo, holo) rather than one of each card');
-    if (master) ms.classList.add('on');
-    controls.push(ms);
-  }
-  const cb = makeButton('🎨 Full colour', () => { colourAll = !colourAll; try { localStorage.setItem(COLOUR_KEY, colourAll ? '1' : '0'); } catch (e) {} renderSetHeader(); },
-    'Show the whole set in full colour, including the cards you do not have yet (owned cards keep their tick and border)');
-  if (colourAll) cb.classList.add('on');
-  controls.push(cb);
+  );
+  const tb = makeButton(ico('sliders') + 'Tools', () => openSetTools(set), 'Rarity, sort, master set, full colour, print placeholders, languages');
+  if (ui.rarity || master || colourAll || ui.sort === 'price') tb.classList.add('on');
+  controls.push(tb);
   document.body.classList.toggle('colourall', colourAll);
-  controls.push(makeButton('Print placeholders', printPlaceholders, 'Print the cards you still need at real size, to fill binder pockets'));
   setHeader({
     title: esc(set.name) + (yearOf(set.id) ? ' <small class="vl yr">' + yearOf(set.id) + '</small>' : '') + (set.region ? ' <small class="vl rg">' + esc(set.region) + '</small>' : '') + (viewLang ? ' <small class="vl">' + esc(langName(viewLang)) + '</small>' : ''), back: set.custom && set.parent ? '#/set/' + set.parent : set.serie ? '#/series/' + set.serie.id : '#/',
     count: t.have + ' / ' + t.total + t.label, progress: pct(t.have, t.total), controls
@@ -2136,6 +2269,36 @@ function renderSetHeader() {
 }
 
 function renderSet() { renderSetHeader(); renderCards(); }
+
+// the less used set tools, in a sheet so the header stays to two rows
+function openSetTools(set) {
+  const sh = $('sheet'), acts = sh.querySelector('.acts');
+  sh.classList.add('noimg');
+  sh.querySelector('b').textContent = 'Set tools';
+  sh.querySelector('small').textContent = set.name;
+  acts.innerHTML = '';
+  const close = () => sh.classList.remove('open');
+  const again = () => { renderSet(); openSetTools(set); };       // redraw the page behind, keep the sheet up to date
+  if (haveDetails()) {
+    const sel = el('select');
+    sel.innerHTML = '<option value="">All rarities</option>' + rarityOptions().map(r => '<option' + (r === ui.rarity ? ' selected' : '') + '>' + esc(r) + '</option>').join('');
+    sel.onchange = () => { ui.rarity = sel.value; again(); };
+    acts.appendChild(sel);
+    acts.appendChild(makeSeg([['num', '# Number order'], ['price', '$↓ Price, highest first']], ui.sort, k => { ui.sort = k; again(); }));
+    const ms = makeButton(lbl('sets', 'Master set — every printing counts'), () => { master = !master; try { localStorage.setItem(MASTER_KEY, master ? '1' : '0'); } catch (e) {} again(); });
+    if (master) ms.classList.add('on');
+    acts.appendChild(ms);
+  }
+  const cb = makeButton(lbl('palette', 'Full colour — show cards you do not have'), () => { colourAll = !colourAll; try { localStorage.setItem(COLOUR_KEY, colourAll ? '1' : '0'); } catch (e) {} again(); });
+  if (colourAll) cb.classList.add('on');
+  acts.appendChild(cb);
+  acts.appendChild(makeButton(lbl('print', 'Print placeholders'), () => { close(); printPlaceholders(); }));
+  acts.appendChild(el('div', 'hint', 'Languages and editions of this set'));
+  acts.appendChild(languageBar(set));
+  sh.querySelector('.x').onclick = close;
+  sh.onclick = e => { if (e.target === sh) close(); };
+  sh.classList.add('open');
+}
 
 function renderCards() {
   const main = $('main');
@@ -4028,6 +4191,8 @@ function route() {
   if (h === '#/people') return viewPeople();
   if (h === '#/sync') return viewSync();
   if (h === '#/lookout') return viewLookout();
+  if (h === '#/value') return viewValue();
+  if (h === '#/more') return viewMore();
   if ((m = h.match(/^#\/set\/([^/]+)/))) { if (m[1] === CLASSIC_ID && lang === 'en') { location.replace('#/set/' + CLASSIC_PARENT); return; } return viewSet(m[1]); }
   if ((m = h.match(/^#\/series\/([^/]+)/))) return viewSeries(m[1]);
   return viewHome();
