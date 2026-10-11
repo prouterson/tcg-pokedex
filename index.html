@@ -240,7 +240,24 @@
   /* lightbox */
   #lb { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; align-items: center; justify-content: center; z-index: 20; padding: 16px; }
   #lb.open { display: flex; }
+  .buy { display: inline-block; margin-top: 3px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #e3e3e3; color: #222; }
+  .buy.bid { background: #ffe08a; color: #5a4300; } .buy.ord { background: #b9d8ff; color: #0b3a73; } .buy.way { background: #bfeccd; color: #0c5a2a; }
+  #lb { flex-direction: column; gap: 14px; }
   #lb img { max-width: 100%; max-height: 90vh; border-radius: 12px; }
+  #lb .flipper { position: relative; width: min(88vw, calc(74vh * 63 / 88)); aspect-ratio: 63 / 88; transform-style: preserve-3d; transition: transform .55s cubic-bezier(.4,.1,.2,1); cursor: pointer; }
+  #lb .flipper.turned { transform: rotateY(180deg); }
+  #lb .side { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; border-radius: 14px; overflow: hidden; }
+  #lb .face img { width: 100%; height: 100%; max-height: none; object-fit: contain; }
+  #lb .lbback { transform: rotateY(180deg); background: linear-gradient(160deg, #1d3d96, #0e1f5c); border: 5px solid #f2c230; border-radius: 16px; color: #fff; padding: 12px; display: flex; flex-direction: column; gap: 8px; overflow: auto; cursor: default; }
+  #lb .lbback h3 { margin: 0; font-size: 18px; } #lb .lbback small { color: #b9c4ee; }
+  #lb .lbback .guide { background: rgba(255,255,255,.12); border-radius: 12px; padding: 8px 12px; } #lb .lbback .guide b { font-size: 24px; display: block; } #lb .lbback .guide small { display: block; }
+  #lb .lbback .links { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  #lb .lbback .links a, #lb .lbback .links button { display: block; text-align: center; padding: 9px 6px; border-radius: 10px; background: rgba(255,255,255,.14); color: #fff; text-decoration: none; font: inherit; font-size: 14px; border: 1px solid rgba(255,255,255,.25); }
+  #lb .lbback .links .wide { grid-column: 1 / -1; background: #2e9e5b; border-color: #2e9e5b; font-weight: 600; }
+  #lb .lbback .raptor { background: rgba(0,0,0,.25); border-radius: 12px; padding: 8px 10px; font-size: 13px; }
+  #lb .lbback .raptor a { color: #fff; }
+  #lb .lbbtn { padding: 12px 26px; border-radius: 999px; border: 1px solid rgba(255,255,255,.4); background: rgba(255,255,255,.14); color: #fff; font: inherit; font-size: 16px; }
+  #lb .lbbtn[hidden] { display: none; }
 
   /* camera scanner */
   #scan { position: fixed; inset: 0; background: #000; color: #fff; z-index: 26; display: none; flex-direction: column; }
@@ -451,7 +468,7 @@
 </header>
 <main id="main"></main>
 <footer id="foot"><div id="syncStatus"></div>Tap a card to mark it owned by the user selected at the top. Use Export to back up. Card data and prices from TCGdex. <span id="ver"></span></footer>
-<div id="lb"><img id="lbImg" alt=""></div>
+<div id="lb"><div class="flipper" id="lbFlip"><div class="side face"><img id="lbImg" alt=""></div><div class="side lbback" id="lbBack"></div></div><button id="lbBtn" class="lbbtn" hidden>↺ Flip</button></div>
 <div id="scan">
   <div class="cam"><video playsinline autoplay muted></video><div class="guide"><span>Fill the outline with the card and hold still.<br>Glare is fine — it matches the picture, not the number.</span><i class="zone"></i></div><div id="rigTick" aria-live="polite"><b></b><span></span><em></em></div></div>
   <div class="panel">
@@ -541,7 +558,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v81';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v83';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -580,6 +597,7 @@ function normalise() {
   if (!state.wish || typeof state.wish !== 'object') state.wish = {};     // wish[pid][setKey][localId] = 1: "be on the lookout"
   if (!state.customSets || typeof state.customSets !== 'object') state.customSets = {};   // customSets[id] = { name, abbr }: whole sets TCGdex does not list
   if (!state.custom || typeof state.custom !== 'object') state.custom = {};   // custom[setKey][localId] = name: cards TCGdex does not list (yet), added by the family
+  if (!state.buy || typeof state.buy !== 'object') state.buy = {};         // buy[setKey][localId] = { s: 'bid'|'ord'|'way', by: person, note, at }: what has been done about a wanted card, for the whole family
   if (!state.people.length) { state.people = [{ id: 'p1', name: 'User 1', c: 0 }]; state.current = 'p1'; }
   if (!state.people.some(p => p.id === state.current)) state.current = state.people[0].id;
   migratePresets();
@@ -634,6 +652,29 @@ function setWish(pid, key, localId, on) {
   if (!Object.keys(person).length) delete state.wish[pid];
   saveState();
   sync.writeWish(pid, key, localId, on);
+  if (!on && !state.people.some(p => wishedBy(p.id, key)[localId])) setBuyKey(key, localId, null);      // nobody wants it any more: the buying note goes too
+}
+// ---- buying notes on wanted cards ("Bidding", "Ordered", "On its way"), shared by the family so the same card is not bought twice ----
+const BUY = { bid: ['🔨', 'Bidding'], ord: ['📦', 'Ordered'], way: ['🚚', 'On its way'] };
+function buyOfKey(key, localId) { return ((state.buy || {})[key] || {})[localId] || null; }
+function setBuyKey(key, localId, v) {
+  if (!state.buy) state.buy = {};
+  const all = state.buy[key] || (state.buy[key] = {});
+  if (!v && !all[localId]) { if (!Object.keys(all).length) delete state.buy[key]; return; }
+  const rec = v ? { s: v.s, by: state.current, note: String(v.note || '').slice(0, 80), at: Date.now() } : null;
+  if (rec) all[localId] = rec; else delete all[localId];
+  if (!Object.keys(all).length) delete state.buy[key];
+  saveState(); sync.writeBuy(key, localId, rec);
+}
+function buyText(rec) {
+  const who = (state.people.find(p => p.id === rec.by) || {}).name;
+  return BUY[rec.s][0] + ' ' + BUY[rec.s][1] + (who ? ' · ' + who : '') + (rec.note ? ' · ' + rec.note : '');
+}
+function buyBadge(key, localId) {
+  const rec = buyOfKey(key, localId);
+  if (!rec || !BUY[rec.s]) return null;
+  const b = el('span', 'buy ' + rec.s); b.textContent = buyText(rec); b.title = 'Tap the card to change this';
+  return b;
 }
 // every wished card as { pid, lang, setId, localId }
 function allWishes() {
@@ -772,6 +813,7 @@ function removeCustomSet(id) {
     sync.removeAt('owned', p.id, key); sync.removeAt('wish', p.id, key);
   });
   delete state.custom[key]; sync.removeAt('custom', key);
+  delete state.buy[key]; sync.removeAt('buy', key);
   delete state.customSets[id]; sync.removeAt('customsets', id);
   saveState();
   window._sets = window._series = null;
@@ -863,6 +905,9 @@ const sync = {
         Object.entries(sets || {}).forEach(([k, cards]) => { wish[pid][unKey(k)] = {}; Object.keys(cards || {}).forEach(id => { wish[pid][unKey(k)][unKey(id)] = 1; }); });
       });
       state.wish = wish;
+      const buy = {};
+      Object.entries(data.buy || {}).forEach(([k, cards]) => { buy[unKey(k)] = {}; Object.entries(cards || {}).forEach(([id, v]) => { if (v && BUY[v.s]) buy[unKey(k)][unKey(id)] = { s: v.s, by: String(v.by || ''), note: String(v.note || ''), at: +v.at || 0 }; }); });
+      state.buy = buy;
       const custom = {};
       Object.entries(data.custom || {}).forEach(([k, cards]) => { custom[unKey(k)] = {}; Object.entries(cards || {}).forEach(([id, name]) => { custom[unKey(k)][unKey(id)] = String(name); }); });
       state.custom = custom;
@@ -886,6 +931,11 @@ const sync = {
     const r = this.path('wish', pid, key, localId);
     (on ? this.fb.db.set(r, 1) : this.fb.db.remove(r)).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
   },
+  writeBuy(key, localId, rec) {
+    if (!this.on) return;
+    const r = this.path('buy', key, localId);
+    (rec ? this.fb.db.set(r, rec) : this.fb.db.remove(r)).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
+  },
   writeCustomSet(id, v) {
     if (!this.on) return;
     const r = this.path('customsets', id);
@@ -901,7 +951,7 @@ const sync = {
   removePerson(pid) { if (this.on) ['people', 'owned', 'wish'].forEach(k => this.fb.db.remove(this.path(k, pid)).catch(() => {})); },
   uploadAll() {
     if (!this.on) return;
-    const people = {}, owned = {}, wish = {}, custom = {}, customsets = {};
+    const people = {}, owned = {}, wish = {}, custom = {}, customsets = {}, buy = {};
     state.people.forEach(p => { people[dbKey(p.id)] = { name: p.name, c: p.c || 0 }; });
     Object.entries(state.owned).forEach(([pid, sets]) => {
       owned[dbKey(pid)] = {};
@@ -913,7 +963,8 @@ const sync = {
     });
     Object.entries(state.custom || {}).forEach(([k, cards]) => { custom[dbKey(k)] = {}; Object.entries(cards).forEach(([id, name]) => { custom[dbKey(k)][dbKey(id)] = name; }); });
     Object.entries(state.customSets || {}).forEach(([id, v]) => { customsets[dbKey(id)] = v; });
-    this.fb.db.set(this.root, { people, owned, wish, custom, customsets }).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
+    Object.entries(state.buy || {}).forEach(([k, cards]) => { buy[dbKey(k)] = {}; Object.entries(cards).forEach(([id, rec]) => { buy[dbKey(k)][dbKey(id)] = rec; }); });
+    this.fb.db.set(this.root, { people, owned, wish, custom, customsets, buy }).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
   }
 };
 function newFamilyCode() {
@@ -1545,11 +1596,13 @@ async function viewLookout() {
           '<div class="num">' + esc(num) + '</div><div class="name"></div><div class="meta">' + badges + '<span class="price">' + ptxt + '</span></div>' + drop;
         n.querySelector('.ph').textContent = c.name; n.querySelector('.name').textContent = c.name;
       }
+      const lkey = g.lang === 'en' ? g.setId : g.lang + '/' + g.setId, bb = buyBadge(lkey, localId);
+      if (bb) { if (ui.mode === 'list') n.querySelector('.name').appendChild(bb); else n.querySelector('.name').insertAdjacentElement('afterend', bb); }
       const rap = el('span', 'rap');
       n.querySelector('.name').insertAdjacentElement('afterend', rap);   // its own line under the name, clear of the price-check button
       if (g.lang === 'en' && set && c.id && !c.custom) raptorJobs.push([rap, g.setId, name, c]); else rap.remove();
       n.onclick = e => {
-        if (e.target.closest('.zoom')) { $('lbImg').src = highSrc(c.image); $('lb').classList.add('open'); return; }
+        if (e.target.closest('.zoom')) { viewCard(c, g.lang, g.setId, name); return; }
         if (e.target.closest('.pcbtn')) { if (c.id) openPriceCheck(g.lang, g.setId, name, c); return; }
         if (e.target.closest('button.want')) { setWish(state.current, g.lang === 'en' ? g.setId : g.lang + '/' + g.setId, localId, false); viewLookout(); return; }
         lookoutCardMenu(g, name, num, c);
@@ -1574,7 +1627,20 @@ function lookoutCardMenu(g, setName, num, c) {
   sh.querySelector('small').textContent = setName + ' · ' + num;
   acts.innerHTML = '';
   const close = () => sh.classList.remove('open');
-  if (c.image) acts.appendChild(makeButton('🔍 View card', () => { close(); $('lbImg').src = highSrc(c.image); $('lb').classList.add('open'); }));
+  if (c.image) acts.appendChild(makeButton('🔍 View card', () => { close(); viewCard(c, g.lang, g.setId, setName); }));
+  // what has been done about it, so the family does not buy it twice
+  const lkey = g.lang === 'en' ? g.setId : g.lang + '/' + g.setId, cur = buyOfKey(lkey, c.localId);
+  acts.appendChild(el('div', 'hint', 'Tell the family what you have done about this card, so nobody buys it twice'));
+  Object.entries(BUY).forEach(([code, [ic, label]]) => {
+    const on = !!cur && cur.s === code;
+    const b = makeButton(ic + ' ' + label + (on ? ' — tap to clear' : ''), () => { setBuyKey(lkey, c.localId, on ? null : { s: code, note: cur ? cur.note : '' }); close(); viewLookout(); });
+    if (on) b.className = 'on';
+    acts.appendChild(b);
+  });
+  if (cur) {
+    acts.appendChild(makeButton('✎ Note (shop, price, when)', () => { const n = prompt('Note for the family:', cur.note || ''); if (n != null) setBuyKey(lkey, c.localId, { s: cur.s, note: n }); close(); viewLookout(); }));
+    acts.appendChild(el('div', 'hint', esc(buyText(cur))));
+  }
   acts.appendChild(makeButton('📂 Go to set', () => {
     close(); ui.q = '';
     if (g.lang !== lang) { lang = g.lang; try { localStorage.setItem(LANG_KEY, lang); } catch (e) {} window._sets = window._series = null; }
@@ -2132,8 +2198,7 @@ function onCardClick(e) {
   const set = window._set, id = node.dataset.id;
   const card = set.cards.find(c => c.localId === id);
   if (e.target.closest('.zoom')) {
-    $('lbImg').src = highSrc(card.image);
-    $('lb').classList.add('open');
+    viewCard(card, lang, set.id, set.name);
     return;
   }
   if (e.target.closest('button.want')) {
@@ -2187,8 +2252,10 @@ function openCardSheet(card) {
       w.onclick = () => { setWish(state.current, key, card.localId, !want); refreshCardNode(card); close(); };
       acts.appendChild(w);
     }
+    const bs = buyOfKey(key, card.localId);
+    if (bs && BUY[bs.s]) acts.appendChild(el('div', 'hint', 'Being bought: ' + esc(buyText(bs))));
     if (!card.custom && !card.extra) acts.appendChild(makeButton('💲 Price check', () => { close(); openPriceCheck(lang, set.id, set.name, card, primaryVariant(card)); }));
-    if (card.image) acts.appendChild(makeButton('View card', () => { close(); $('lbImg').src = highSrc(card.image); $('lb').classList.add('open'); }));
+    if (card.image) acts.appendChild(makeButton('View card', () => { close(); viewCard(card, lang, set.id, set.name); }));
     if (card.custom) {
       acts.appendChild(makeButton('✎ Rename', () => { const name = (prompt('Card name:', card.name) || '').trim(); if (name) { addCustom(set.id, card.localId, name); card.name = name; refreshCardNode(card); } close(); }));
       acts.appendChild(makeButton('🗑 Remove this added card', () => { if (confirm('Remove ' + card.name + ' (' + card.localId + ') from this set for the whole family?')) { removeCustom(set.id, card.localId); setCard(state.current, key, card.localId, false, '*'); mergeCustom(set); renderSet(); } close(); }));
@@ -2221,7 +2288,76 @@ function renderCount() {
   $('count').textContent = t.have + ' / ' + t.total + t.label;
   $('barFill').style.width = pct(t.have, t.total) + '%';
 }
-$('lb').onclick = () => { $('lb').classList.remove('open'); $('lbImg').src = ''; };
+// ---- the card viewer: tap the card and it turns over to its back, which holds the prices and where to shop; ↺ turns it back ----
+let lbCtx = null;
+function viewCard(card, l, setId, setName) {
+  lbCtx = { card, l, setId, setName, built: false };
+  $('lbFlip').classList.remove('turned');
+  $('lbBack').innerHTML = '';
+  $('lbImg').src = highSrc(card.image);
+  $('lbBtn').hidden = false; $('lbBtn').textContent = '↺ Flip';
+  $('lb').classList.add('open');
+}
+function lbCloseNow() { $('lb').classList.remove('open'); $('lbImg').src = ''; lbCtx = null; }
+function lbToggle() {
+  if (!lbCtx) return;
+  const f = $('lbFlip'), turning = !f.classList.contains('turned');
+  if (turning && !lbCtx.built) { lbCtx.built = true; lbBuildBack(); }
+  f.classList.toggle('turned', turning);
+  $('lbBtn').textContent = turning ? '↺ Show the card' : '↺ Flip';
+}
+function quickGuide(d) {
+  const avail = variantsFrom(d), v = avail.includes('h') && !avail.includes('n') ? 'h' : avail[0];
+  const t = d.pricing && d.pricing.tcgplayer, m = d.pricing && d.pricing.cardmarket;
+  const tk = t && (TCGP_KEYS[v] || []).find(k => t[k] && t[k].marketPrice != null), tp = tk ? t[tk] : null;
+  const parts = [];
+  if (tp) parts.push(['TCGplayer market', tp.marketPrice, 'USD']);
+  if (m) {
+    const holo = v !== 'n' && (m['trend-holo'] || m['avg7-holo']);
+    const tr = holo ? m['trend-holo'] : m.trend, a7 = holo ? m['avg7-holo'] : m.avg7;
+    if (tr != null) parts.push(['Cardmarket trend', tr, 'EUR']);
+    if (a7 != null) parts.push(['Cardmarket 7-day', a7, 'EUR']);
+  }
+  const aud = parts.map(p => toAUD(p[1], p[2]));
+  return { v, tp, m, parts, guide: aud.length ? aud.reduce((a, b) => a + b, 0) / aud.length : null };
+}
+async function lbBuildBack() {
+  const c = lbCtx, back = $('lbBack'), card = c.card;
+  back.innerHTML = '<div><h3></h3><small></small></div><div class="guide"><b>…</b><small>Fetching prices…</small></div><div class="links"></div>';
+  back.querySelector('h3').textContent = card.name;
+  back.querySelector('small').textContent = c.setName + ' · ' + card.localId;
+  const q = encodeURIComponent(card.name + ' ' + card.localId + ' ' + c.setName), links = back.querySelector('.links');
+  const add = (label, href) => { const a = el('a', '', label); a.href = href; a.target = '_blank'; a.rel = 'noopener'; links.appendChild(a); return a; };
+  add('eBay AU · for sale', 'https://www.ebay.com.au/sch/i.html?_nkw=' + q);
+  add('eBay AU · sold', 'https://www.ebay.com.au/sch/i.html?_nkw=' + q + '&LH_Sold=1&LH_Complete=1');
+  const gbox = back.querySelector('.guide');
+  if (card.id && !card.custom && !card.extra) {
+    try {
+      const key = c.l + ':' + card.id;
+      let d = pcCache[key];
+      if (!d) { d = await (await fetch('https://api.tcgdex.net/v2/' + c.l + '/cards/' + card.id)).json(); pcCache[key] = d; }
+      if (lbCtx !== c) return;
+      const g = quickGuide(d);
+      gbox.innerHTML = '<b>' + (g.guide != null ? money(g.guide, 'AUD') : 'No price listed') + '</b><small></small>';
+      gbox.querySelector('small').textContent = g.guide != null ? 'Guide price (' + (VNAME[g.v] || '') + ') · ' + g.parts.map(p => p[0] + ' ' + money(p[1], p[2])).join(' · ') : 'Check the links below for live listings';
+      if (g.tp && g.tp.productId) add('TCGplayer', 'https://www.tcgplayer.com/product/' + g.tp.productId);
+      if (g.m && g.m.idProduct) add('Cardmarket', 'https://www.cardmarket.com/en/Pokemon/Products/Singles?idProduct=' + g.m.idProduct);
+    } catch (e) { gbox.innerHTML = '<b>—</b><small>Could not fetch prices (no internet?)</small>'; }
+    add('PriceCharting', 'https://www.pricecharting.com/search-products?type=prices&q=' + q);
+    // the local store: only from the list this phone already holds (the 5 MB read happens in the price check, on request)
+    if (c.l === 'en') {
+      const box = el('div', 'raptor'); box.textContent = 'Raptor Games: not checked yet. ';
+      const go = el('a', '', 'Check now'); go.href = '#'; go.onclick = e => { e.preventDefault(); box.innerHTML = ''; box.appendChild(raptorBox(c.l, c.setId, c.setName, card)); };
+      box.appendChild(go); back.appendChild(box);
+      if (raptorIdx) { box.innerHTML = ''; box.appendChild(raptorBox(c.l, c.setId, c.setName, card)); }
+    }
+    const pcb = el('button', 'wide', '💲 Full price check'); pcb.onclick = () => openPriceCheck(c.l, c.setId, c.setName, card);
+    links.appendChild(pcb);
+  } else { gbox.innerHTML = '<b>—</b><small>This card is not in the price catalogue</small>'; }
+}
+$('lbFlip').addEventListener('click', e => { if (e.target.closest(".lbback")) return; lbToggle(); });
+$('lbBtn').onclick = e => { e.stopPropagation(); lbToggle(); };
+$('lb').addEventListener('click', e => { if (e.target === $('lb')) lbCloseNow(); });
 
 /* ---------- printable binder placeholders ---------- */
 // Ask what to print, then lay out 9-pocket pages in binder order (left to right, top to bottom).
@@ -3895,6 +4031,34 @@ function route() {
   if ((m = h.match(/^#\/series\/([^/]+)/))) return viewSeries(m[1]);
   return viewHome();
 }
+// ---- the phone's Back button closes whatever is open on top, one layer at a time ----
+// Each full-screen layer pushes a marker into the browser history when it opens; Back then lands on the entry below and the
+// layer closes. If a layer is closed by hand, its marker is removed again. A marker left behind (the page changed while the
+// layer was open) is skipped silently on the way back.
+const OVERLAYS = [
+  ['lb',        () => $('lb').classList.contains('open'),        () => lbCloseNow()],
+  ['sheet',     () => $('sheet').classList.contains('open'),     () => $('sheet').classList.remove('open')],
+  ['pc',        () => $('pc').classList.contains('open'),        () => $('pc').classList.remove('open')],
+  ['ctr',       () => $('ctr').classList.contains('open'),       () => $('ctr').classList.remove('open')],
+  ['printOpts', () => $('printOpts').classList.contains('open'), () => $('printOpts').classList.remove('open')],
+  ['scan',      () => $('scan').classList.contains('open'),      () => scanner.close()],
+  ['sessList',  () => !$('sessList').hidden,                     () => { $('sessList').hidden = true; }]
+];
+const ovStack = []; let ovSkip = 0;
+function ovChanged(id, isOpen) {
+  const i = ovStack.indexOf(id);
+  if (isOpen && i < 0) { ovStack.push(id); try { history.pushState({ ov: id }, '', location.href); } catch (e) {} }
+  else if (!isOpen && i >= 0) {
+    ovStack.splice(i, 1);
+    if (history.state && history.state.ov === id) { ovSkip++; history.back(); }          // closed by hand: take its marker off
+  }
+}
+OVERLAYS.forEach(([id, test]) => new MutationObserver(() => ovChanged(id, test())).observe($(id), { attributes: true, attributeFilter: ['class', 'hidden'] }));
+window.addEventListener('popstate', e => {
+  if (ovSkip) { ovSkip--; return; }
+  if (ovStack.length) { const top = OVERLAYS.find(o => o[0] === ovStack[ovStack.length - 1]); if (top) top[2](); return; }
+  if (e.state && e.state.ov) history.back();                                           // a marker left behind: skip it
+});
 window.addEventListener('hashchange', () => { ui.q = ''; ui.langSet = null; viewLang = null; $('sheet').classList.remove('open'); route(); });
 loadState();
 try { $('ver').textContent = '· App ' + APP_VERSION; } catch (e) {}
