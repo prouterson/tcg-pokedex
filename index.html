@@ -558,7 +558,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v83';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v85';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -1041,8 +1041,8 @@ const EXTRA_30TH = [['R', 'Mew R', 'me55-R'], ['G', 'Mew G', 'me55-G'], ['B', 'M
 // TCGdex has no pictures for these English sets; Scrydex (the picture host behind the Pokemon TCG API) does, under the card ids
 // below: set prefix + '-' + card number (leading zeros dropped), with the exceptions listed per set. Checked card by card by number and name.
 const FILL_ART = { 'swsh4.5sv':['swsh45sv',{}], 'sm7.5':['sm75',{}], 'sm3.5':['sm35',{}], 'swsh12.5gg':['swsh12pt5gg',{}], 'smp':['smp',{}], 'ecard2':['ecard2',{'50b':'ecard2-50','50a':'ecard2-50','74a':'ecard2-74','74b':'ecard2-74','95a':'ecard2-95','95b':'ecard2-95','103a':'ecard2-103','103b':'ecard2-103','H01':'ecard2-H1','H02':'ecard2-H2','H03':'ecard2-H3','H04':'ecard2-H4','H05':'ecard2-H5','H06':'ecard2-H6','H07':'ecard2-H7','H08':'ecard2-H8','H09':'ecard2-H9'}], 'ecard3':['ecard3',{'H01':'ecard3-H1','H02':'ecard3-H2','H03':'ecard3-H3','H04':'ecard3-H4','H05':'ecard3-H5','H06':'ecard3-H6','H07':'ecard3-H7','H08':'ecard3-H8','H09':'ecard3-H9'}], 'svp':['svp',{}], 'swsh9tg':['swsh9tg',{}], 'swsh10tg':['swsh10tg',{}], 'swsh11tg':['swsh11tg',{}], 'swsh12tg':['swsh12tg',{}], 'exu':['ex10',{'%3F':'ex10-?'}], '2021swsh':['mcd21',{}], '2022swsh':['mcd22',{}], '2019sm':['mcd19',{}], '2018sm':['mcd18',{}], '2017sm':['mcd17',{}], '2016xy':['mcd16',{}], '2015xy':['mcd15',{}], '2014xy':['mcd14',{}], '2012bw':['mcd12',{}], '2011bw':['mcd11',{}], 'cel25cc':['cel25c',{'CC001':'cel25c-2_A','CC002':'cel25c-4_A','CC003':'cel25c-15_A1','CC004':'cel25c-73_A','CC005':'cel25c-8_A','CC006':'cel25c-15_A2','CC007':'cel25c-15_A3','CC008':'cel25c-24_A','CC009':'cel25c-20_A','CC010':'cel25c-66_A','CC011':'cel25c-9_A','CC012':'cel25c-86_A','CC013':'cel25c-88_A','CC014':'cel25c-93_A','CC015':'cel25c-17_A','CC016':'cel25c-15_A4','CC017':'cel25c-109_A','CC018':'cel25c-145_A','CC019':'cel25c-107_A','CC020':'cel25c-113_A','CC021':'cel25c-114_A','CC022':'cel25c-54_A','CC023':'cel25c-97_A','CC024':'cel25c-76_A','CC025':'cel25c-60_A'}], 'cel25':['cel25',{}], 'sve':['sve',{}], 'swshp':['swshp',{}], 'tk-ex-latia':['tk1a',{}], 'tk-ex-latio':['tk1b',{}], 'tk-ex-p':['tk2a',{}], 'tk-ex-m':['tk2b',{}], 'bog':['bp',{}], 'hgssp':['hsp',{}], 'bwp':['bwp',{'BW04':'bwp-BW004','BW05':'bwp-BW005'}], 'xyp':['xyp',{}], 'pop6':['pop6',{}], 'pl2':['pl2',{}], 'sm6':['sm6',{}], 'sm2':['sm2',{}], 'xy8':['xy8',{}], 'mee':['mee',{}], 'miscp':['miscp',{}], '2023sv':['mcd23',{}], '2024sv':['mcd24',{}], 'mep':['mep',{}] };
-function addMissingArt(set) {
-  const e = lang === 'en' && FILL_ART[set.id];
+function addMissingArt(set, l = lang) {
+  const e = l === 'en' && FILL_ART[set.id];
   if (e && set.cards) set.cards.forEach(c => { if (!c.image) c.image = SCRYDEX + encodeURIComponent(e[1][c.localId] || e[0] + '-' + c.localId.replace(/^0+(?=\d)/, '')); });
   return set;
 }
@@ -1529,14 +1529,15 @@ let lookoutWho = 'all';
 async function getJSONL(l, path) {
   const cm = path.match(/^sets\/(.+)$/);
   if (cm && state.customSets[cm[1]]) return customSetData(cm[1]);
+  if (cm && l === 'en' && lang === 'en') return getJSON(path);       // the same set the set page shows: extra artwork and the 30th classics included (the Lookout went without)
   let cached = null;
   try { cached = JSON.parse(localStorage.getItem(CACHE_PFX + l + ':' + path)); } catch (e) {}
-  if (cached) return l === lang && path.startsWith('sets/') ? mergeCustom(cached) : cached;
+  if (cached) return l === lang && path.startsWith('sets/') ? mergeCustom(cached) : (l === 'en' && cm ? addMissingArt(cached, l) : cached);
   const r = await fetch('https://api.tcgdex.net/v2/' + l + '/' + path);
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const data = await r.json();
   try { localStorage.setItem(CACHE_PFX + l + ':' + path, JSON.stringify(data)); } catch (e) {}
-  return l === lang && path.startsWith('sets/') ? mergeCustom(data) : data;
+  return l === lang && path.startsWith('sets/') ? mergeCustom(data) : (l === 'en' && cm ? addMissingArt(data, l) : data);
 }
 async function viewLookout() {
   const main = $('main');
@@ -4078,13 +4079,22 @@ route();
 /* ---------- installable app: service worker keeps the page and card pictures for offline ---------- */
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').then(reg => {
+    // "Update": ask the waiting worker to take over, and reload anyway after a moment. The page itself always loads fresh from the
+    // network, so a reload is enough even when the worker that raised the notice has been replaced by a newer one (which made the old
+    // button do nothing).
+    const ready = w => {
+      $('toast').hidden = false;
+      $('toastBtn').onclick = () => {
+        $('toastBtn').textContent = 'Updating…';
+        try { (reg.waiting || w).postMessage('skipWaiting'); } catch (e) {}
+        setTimeout(() => { if (!reloaded) { reloaded = true; location.reload(); } }, 1200);
+      };
+    };
+    if (reg.waiting && navigator.serviceWorker.controller) ready(reg.waiting);       // already waiting from an earlier visit
     reg.addEventListener('updatefound', () => {
       const w = reg.installing;
       w && w.addEventListener('statechange', () => {
-        if (w.state === 'installed' && navigator.serviceWorker.controller) {
-          $('toast').hidden = false;
-          $('toastBtn').onclick = () => { w.postMessage('skipWaiting'); };
-        }
+        if (w.state === 'installed' && navigator.serviceWorker.controller) ready(w);
       });
     });
   }).catch(() => {});
