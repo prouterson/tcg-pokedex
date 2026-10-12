@@ -599,7 +599,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v88';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v89';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -1781,11 +1781,21 @@ async function viewHome() {
     window._sets = await getJSON('sets');
     if (lang === 'en' && !window._dates) loadDates().then(() => { if ((location.hash || '#/') === '#/') renderHome(); });
   } catch (e) {
-    main.innerHTML = '<div class="note">Could not load the set list (no internet?). Sets you have opened before still work from the list below.</div>';
     window._sets = window._sets || []; window._series = window._series || [];
+    homeRetry();                                   // a failed first load (a phone waking with no network yet) used to leave the list empty for good
   }
   renderHome();
 }
+// the set list did not load: try again on its own a few times, when the connection returns, and on a tap
+let homeTries = 0;
+function homeRetry() {
+  if (homeTries++ < 4) setTimeout(() => homeReload(), 2500 * homeTries);
+}
+function homeReload() {
+  if ((location.hash || '#/') === '#/' && !(window._sets || []).length) viewHome();
+}
+window.addEventListener('online', () => { homeTries = 0; homeReload(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) homeReload(); });
 
 function viewValue() {
   setHeader({ title: 'Collection value', tab: true });
@@ -1878,7 +1888,11 @@ function renderHome() {
   addSet.title = 'Add a promo series TCGdex does not have, such as 30th-P First Partners';
   addSet.onclick = openAddSet;
   main.appendChild(addSet);
-  if (!mine.length && !(window._series || []).length) main.appendChild(el('div', 'empty', 'Nothing to show.'));
+  if (!(window._sets || []).length && !(window._series || []).length) {
+    const nb = el('div', 'note', 'Could not load the set list yet (no internet?). It tries again by itself. ');
+    const rb = makeButton('Try again', () => { homeTries = 0; viewHome(); });
+    nb.appendChild(rb); main.insertBefore(nb, main.firstChild);
+  }
 }
 
 // ready-made lists for sets TCGdex is known not to have; one tap creates them
