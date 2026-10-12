@@ -152,7 +152,7 @@
   .seg button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
   .rap { display: block; font-size: 11px; font-weight: 600; } .rap.in { color: var(--owned); } .rap.out { color: var(--muted); font-weight: 400; }
   .line .rap { display: inline; margin-left: 6px; }
-  .card .rap { text-align: center; margin-top: 2px; }
+  .card .rap { text-align: left; margin-top: 2px; max-width: calc(100% - 34px); line-height: 1.25; }
   .raptor { margin: 12px 0; padding-top: 10px; border-top: 1px solid var(--line); }
   .raptor h4 { margin: 0 0 6px; font-size: 14px; } .raptor h4 small { color: var(--muted); font-weight: 400; }
   .raptor .rrow { display: flex; gap: 8px; align-items: baseline; padding: 5px 0; color: var(--text); text-decoration: none; border-bottom: 1px dashed var(--line); font-size: 13px; }
@@ -274,6 +274,7 @@
   #lb { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; align-items: center; justify-content: center; z-index: 20; padding: 16px; }
   #lb.open { display: flex; }
   .buy { display: inline-block; margin-top: 3px; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #e3e3e3; color: #222; }
+  .card .buy { display: block; font-size: 11px; padding: 2px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .buy.bid { background: #ffe08a; color: #5a4300; } .buy.ord { background: #b9d8ff; color: #0b3a73; } .buy.way { background: #bfeccd; color: #0c5a2a; }
   #lb { flex-direction: column; gap: 14px; }
   #lb img { max-width: 100%; max-height: 90vh; border-radius: 12px; }
@@ -599,7 +600,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v89';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v91';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -682,6 +683,7 @@ function setCard(pid, key, localId, on, variant) {
   saveState();
   sync.writeCard(pid, key, localId, Object.keys(m).length ? m : false);
   if (on && wishedBy(pid, key)[localId]) setWish(pid, key, localId, false);   // found it: off the lookout list
+  if (on) setBuyKey(key, localId, null);                                       // and its "ordered" note goes too
 }
 function wishedBy(pid, key) { return (state.wish[pid] || {})[key] || {}; }
 function wishersOf(setId, localId) { return state.people.filter(p => wishedBy(p.id, setKey(setId))[localId]); }
@@ -1665,10 +1667,10 @@ async function viewLookout() {
   whoSel.innerHTML = '<option value="all">Everyone</option>' + state.people.map(p => '<option value="' + p.id + '"' + (p.id === lookoutWho ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('');
   whoSel.onchange = () => { lookoutWho = whoSel.value; viewLookout(); };
   const rapBtn = el('button', '', '⟳ Store');
-  rapBtn.title = 'Re-read the Raptor Games price list now' + raptorAgeText();
+  rapBtn.title = 'Re-read the Raptor Games and Gate Keepers price lists now' + raptorAgeText();
   rapBtn.onclick = async () => {
     rapBtn.disabled = true; rapBtn.textContent = 'Reading…';
-    try { await refreshRaptor(p => { rapBtn.textContent = 'Reading ' + p + '/14'; }); } catch (e) { rapBtn.textContent = 'No connection'; await new Promise(r => setTimeout(r, 1500)); }
+    try { await Promise.all([refreshRaptor(p => { rapBtn.textContent = 'Reading ' + p + '/14'; }), refreshGK()]); } catch (e) { rapBtn.textContent = 'No connection'; await new Promise(r => setTimeout(r, 1500)); }
     if (location.hash === '#/lookout') viewLookout();
   };
   setHeader({ title: '★ Lookout', tab: true, controls: [whoSel, rapBtn, makeSeg([['grid', '▦', 'Pictures'], ['list', '☰', 'Compact list']], ui.mode, k => { ui.mode = k; viewLookout(); })] });
@@ -1685,7 +1687,7 @@ async function viewLookout() {
   const token = ++lookoutJob;
   main.innerHTML = '';
   let total = 0;
-  const raptorJobs = [];
+  const raptorJobs = [], gkJobs = [];
   for (const g of list) {
     let set;
     try { set = await getJSONL(g.lang, 'sets/' + g.setId); } catch (e) { set = null; }
@@ -1721,6 +1723,9 @@ async function viewLookout() {
       const rap = el('span', 'rap');
       n.querySelector('.name').insertAdjacentElement('afterend', rap);   // its own line under the name, clear of the price-check button
       if (g.lang === 'en' && set && c.id && !c.custom) raptorJobs.push([rap, g.setId, name, c]); else rap.remove();
+      const gks = el('span', 'rap');
+      (rap.parentNode ? rap : n.querySelector('.name')).insertAdjacentElement('afterend', gks);
+      if ((g.lang === 'en' || g.lang === 'ja') && set && c.id && !c.custom) gkJobs.push([gks, g.lang, g.setId, name, c, set.cardCount && set.cardCount.official]); else gks.remove();
       n.onclick = e => {
         if (e.target.closest('.zoom')) { viewCard(c, g.lang, g.setId, name); return; }
         if (e.target.closest('.pcbtn')) { if (c.id) openPriceCheck(g.lang, g.setId, name, c); return; }
@@ -1734,6 +1739,7 @@ async function viewLookout() {
   main.appendChild(el('div', 'note small', total + ' card' + (total === 1 ? '' : 's') + ' wanted · tap a card to view it or open its set · ★ removes it from your own list'));
   // the local store's price for each card (reads its list once, then it is kept for a day)
   if (raptorJobs.length) loadRaptor().then(rows => { if (token === lookoutJob) raptorJobs.forEach(j => fillRaptor(j[0], j[1], j[2], j[3], rows)); }).catch(() => raptorJobs.forEach(j => j[0].remove()));
+  if (gkJobs.length) loadGK().then(rows => { if (token === lookoutJob) gkJobs.forEach(j => fillGK(j[0], gkMatches(j[4], j[1], j[2], j[3], j[5], rows))); }).catch(() => gkJobs.forEach(j => j[0].remove()));
   // fetch any prices we do not have yet, then redraw
   loadPrices(wishes.map(w => ({ lang: w.lang, setId: w.setId, localId: w.localId })), () => { if (token === lookoutJob && location.hash === '#/lookout') viewLookout(); });
 }
@@ -2201,6 +2207,7 @@ function makeCard(c) {
       (price ? '<span class="price">' + price + '</span>' : '') + star +
       '<span class="st">' + status + (tag ? ' · ' + tag : '') + '</span>';
     n.querySelector('.name').innerHTML = esc(c.name) + (d.r ? '<small>' + esc(d.r) + '</small>' : '');
+    const bl = buyBadge(setKey(window._set.id), c.localId); if (bl) n.querySelector('.name').appendChild(bl);
     return n;
   }
   const n = el('div', 'card' + (have ? ' owned' : '') + (have && !complete && master ? ' partial' : '') + (want ? ' want' : '') + (c.image ? '' : ' noimg'));
@@ -2215,6 +2222,7 @@ function makeCard(c) {
   n.querySelector('.ph').textContent = c.name;
   n.querySelector('.name').textContent = c.name;
   n.querySelector('.rar').textContent = shortRarity(d.r);
+  const bg = buyBadge(setKey(window._set.id), c.localId); if (bg) n.querySelector('.name').insertAdjacentElement('afterend', bg);
   return n;
 }
 
@@ -2430,8 +2438,21 @@ function openCardSheet(card) {
       w.onclick = () => { setWish(state.current, key, card.localId, !want); refreshCardNode(card); close(); };
       acts.appendChild(w);
     }
+    // being bought: tell the family, with or without the lookout list, so nobody buys the same card
     const bs = buyOfKey(key, card.localId);
-    if (bs && BUY[bs.s]) acts.appendChild(el('div', 'hint', 'Being bought: ' + esc(buyText(bs))));
+    if (!got.length) {
+      acts.appendChild(el('div', 'hint', 'Bought or bidding? Tell the family so nobody buys it twice'));
+      Object.entries(BUY).forEach(([code, [ic, label]]) => {
+        const on = !!bs && bs.s === code;
+        const b = makeButton(ic + ' ' + label + (on ? ' — tap to clear' : ''), () => { setBuyKey(key, card.localId, on ? null : { s: code, note: bs ? bs.note : '' }); refreshCardNode(card); close(); });
+        if (on) b.className = 'on';
+        acts.appendChild(b);
+      });
+      if (bs) {
+        acts.appendChild(makeButton('✎ Note (shop, price, when)', () => { const n = prompt('Note for the family:', bs.note || ''); if (n != null) setBuyKey(key, card.localId, { s: bs.s, note: n }); refreshCardNode(card); close(); }));
+        acts.appendChild(el('div', 'hint', esc(buyText(bs))));
+      }
+    } else if (bs && BUY[bs.s]) acts.appendChild(el('div', 'hint', 'Being bought: ' + esc(buyText(bs))));
     if (!card.custom && !card.extra) acts.appendChild(makeButton('💲 Price check', () => { close(); openPriceCheck(lang, set.id, set.name, card, primaryVariant(card)); }));
     if (card.image) acts.appendChild(makeButton('View card', () => { close(); viewCard(card, lang, set.id, set.name); }));
     if (card.custom) {
@@ -2528,6 +2549,12 @@ async function lbBuildBack() {
       const go = el('a', '', 'Check now'); go.href = '#'; go.onclick = e => { e.preventDefault(); box.innerHTML = ''; box.appendChild(raptorBox(c.l, c.setId, c.setName, card)); };
       box.appendChild(go); back.appendChild(box);
       if (raptorIdx) { box.innerHTML = ''; box.appendChild(raptorBox(c.l, c.setId, c.setName, card)); }
+    }
+    if (c.l === 'en' || c.l === 'ja') {
+      const gb = el('div', 'raptor'); gb.textContent = 'Gate Keepers: not checked yet. ';
+      const gg = el('a', '', 'Check now'); gg.href = '#'; gg.onclick = e => { e.preventDefault(); gb.innerHTML = ''; gb.appendChild(gkBox(c.l, c.setId, c.setName, card)); };
+      gb.appendChild(gg); back.appendChild(gb);
+      if (gkIdx) { gb.innerHTML = ''; gb.appendChild(gkBox(c.l, c.setId, c.setName, card)); }
     }
     const pcb = el('button', 'wide', '💲 Full price check'); pcb.onclick = () => openPriceCheck(c.l, c.setId, c.setName, card);
     links.appendChild(pcb);
@@ -3876,6 +3903,94 @@ function raptorBox(l, setId, setName, card) {
   return box;
 }
 
+/* ---------- Gate Keepers (local store, Cleveland QLD): mostly Japanese singles and graded cards ---------- */
+// Same idea as Raptor Games: their public Shopify product list (about 300 items, read once and kept for a day on the phone).
+// English cards are matched by number, set size and name; Japanese cards by number and set size (their names are in Japanese
+// in the catalogue), using the set code in the listing's tags when it has one. Graded slabs are labelled and never shown as the plain price.
+const GK = 'https://gatekeeperstcg.com', GK_KEY = CACHE_PFX + 'gk', GK_AGE = 24 * 3600 * 1000;
+let gkIdx = null, gkLoading = null;
+function refreshGK() { gkIdx = null; try { localStorage.removeItem(GK_KEY); } catch (e) {} return loadGK(); }
+async function loadGK() {
+  if (gkIdx) return gkIdx;
+  try { const c = JSON.parse(localStorage.getItem(GK_KEY)); if (c && Date.now() - c.at < GK_AGE) return (gkIdx = c.rows); } catch (e) {}
+  if (!gkLoading) gkLoading = (async () => {
+    const rows = [];
+    for (let page = 1; page < 20; page++) {
+      const r = await fetch(GK + '/products.json?limit=250&page=' + page);
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      const list = (await r.json()).products || [];
+      if (!list.length) break;
+      list.forEach(pr => {
+        const tags = pr.tags || [], all = pr.title + ' ' + tags.join(' ');
+        if (!/pok[eé]mon/i.test(all) || /one piece/i.test(all)) return;
+        const m = pr.title.match(/^(.*?)\s*\b([A-Z]{0,4}\d{1,3})\/([A-Z]{0,4}\d{1,3})\b\s*(.*)$/i);
+        if (!m) return;
+        const rest = m[4].trim();
+        const l = /simplified chinese/i.test(rest) ? 'zh-cn' : /traditional chinese/i.test(rest) ? 'zh-tw' : /korean/i.test(rest) ? 'ko' : /\bjap(anese)?\b/i.test(rest) ? 'ja' : 'en';
+        const gm = rest.match(/\b(PSA|ACE|BGS|CGC|TAG)\s*(\d+(?:\.\d)?)\b/i);
+        const grade = gm ? gm[1].toUpperCase() + ' ' + gm[2] : /graded/i.test(pr.product_type + ' ' + tags.join(' ')) ? 'Graded' : '';
+        const tg = tags.find(t => /^[A-Za-z0-9.]{2,9}:\s/.test(t)), code = tg ? tg.split(':')[0].toLowerCase() : '';
+        const v = (pr.variants || []).find(x => x.available) || (pr.variants || [])[0];
+        if (v) rows.push([m[1].trim(), raptorNum(m[2]), raptorNum(m[3]), rest, +v.price, pr.handle, !!v.available, l, grade, code]);
+      });
+      if (list.length < 250) break;
+      await new Promise(res => setTimeout(res, 400));
+    }
+    gkIdx = rows;
+    try { localStorage.setItem(GK_KEY, JSON.stringify({ at: Date.now(), rows })); } catch (e) {}
+    return rows;
+  })();
+  try { return await gkLoading; } finally { gkLoading = null; }
+}
+const setTotalOf = (l, setId) => { try { const d = JSON.parse(localStorage.getItem(CACHE_PFX + l + ':sets/' + setId)); return d && d.cardCount && d.cardCount.official; } catch (e) { return 0; } };
+function gkMatches(card, l, setId, setName, total, rows) {
+  if (!total || (l !== 'en' && l !== 'ja')) return null;
+  const n = raptorNum(card.localId), t = String(total).replace(/^0+/, '');
+  let hits = rows.filter(r => r[7] === l && r[1] === n && r[2].replace(/^[A-Z]+0*/, '') === t);
+  if (l === 'en') {
+    const nm = raptorName(card.name), sn = raptorName(setName);
+    hits = hits.filter(r => raptorName(r[0]).startsWith(nm));
+    const own = hits.filter(r => raptorName(r[3]).includes(sn));
+    if (own.length) hits = own;
+  } else {
+    const code = String(setId).toLowerCase(), coded = hits.filter(r => r[9] === code);
+    hits = coded.length ? coded : hits.filter(r => !r[9]);          // a listing tagged with another set's code is another card
+  }
+  return hits.sort((a, b) => (a[8] ? 1 : 0) - (b[8] ? 1 : 0) || a[4] - b[4]);   // plain cards first, graded slabs after
+}
+// the Lookout line: cheapest plain card in stock, else a graded one, else "sold out"
+function fillGK(node, hits) {
+  if (!hits || !hits.length) { node.remove(); return; }
+  const r0 = hits.find(r => r[6] && !r[8]) || hits.find(r => r[6]);
+  node.className = 'rap ' + (r0 ? 'in' : 'out');
+  node.textContent = r0 ? 'Gate Keepers ' + (r0[8] ? r0[8] + ' ' : '') + (hits.filter(r => r[6] && !r[8] === !r0[8]).length > 1 ? 'from ' : '') + money(r0[4], 'AUD') : 'Gate Keepers: sold out';
+  node.title = hits.map(r => (r[8] ? r[8] + ' · ' : '') + r[3] + ' ' + money(r[4], 'AUD') + (r[6] ? '' : ' (sold out)')).join(' · ');
+}
+function gkBox(l, setId, setName, card) {
+  if (l !== 'en' && l !== 'ja') return null;
+  const box = el('div', 'raptor'), body = el('div', 'rbody');
+  box.innerHTML = '<h4>Gate Keepers <small>local store' + (l === 'ja' ? ' · matched by number and set size' : '') + '</small></h4>';
+  box.appendChild(body);
+  if (card.custom || card.extra) { body.innerHTML = '<small>Added cards are not looked up.</small>'; return box; }
+  body.innerHTML = '<small>' + (gkIdx ? 'Looking up…' : 'Reading the store\'s list once…') + '</small>';
+  loadGK().then(rows => {
+    const hits = gkMatches(card, l, setId, setName, setTotalOf(l, setId), rows);
+    body.innerHTML = '';
+    if (hits == null) body.innerHTML = '<small>This set has no printed total, so it cannot be matched to the store\'s numbering.</small>';
+    else if (!hits.length) body.innerHTML = '<small>Not listed at Gate Keepers right now.</small>';
+    else hits.slice(0, 8).forEach(r => {
+      const a = el('a', 'rrow', '<span class="rt"></span><b>' + money(r[4], 'AUD') + '</b><em class="' + (r[6] ? 'in' : 'out') + '">' + (r[6] ? 'In stock' : 'Sold out') + '</em>');
+      a.querySelector('.rt').textContent = (r[8] ? r[8] + ' · ' : '') + r[0] + ' · ' + r[3];
+      a.href = GK + '/products/' + r[5]; a.target = '_blank'; a.rel = 'noopener';
+      body.appendChild(a);
+    });
+    const re = el('a', 'rref', 'Refresh store prices');
+    re.href = '#'; re.onclick = e => { e.preventDefault(); gkIdx = null; try { localStorage.removeItem(GK_KEY); } catch (x) {} body.innerHTML = '<small>Refreshing…</small>'; box.replaceWith(gkBox(l, setId, setName, card)); };
+    body.appendChild(re);
+  }).catch(() => { body.innerHTML = '<small>Could not reach Gate Keepers (no internet?).</small>'; });
+  return box;
+}
+
 /* ---------- centering check ---------- */
 // Measures how evenly the printed border sits on each side of a card from one flat photo. It is an estimate only:
 // it cannot see corners, edges or surface. The photo is straightened to a card-shaped picture, the card's outer edge
@@ -4151,6 +4266,7 @@ async function openPriceCheck(l, setId, setName, card, variant) {
       }
     }
     body.appendChild(raptorBox(l, setId, setName, card));
+    const gkb = gkBox(l, setId, setName, card); if (gkb) body.appendChild(gkb);
     // live listings, including sold prices, which no free feed provides
     const q = encodeURIComponent(card.name + ' ' + card.localId + ' ' + setName + (v === 'r' ? ' reverse holo' : ''));
     const links = el('div', 'links');
