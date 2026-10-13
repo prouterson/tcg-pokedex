@@ -605,7 +605,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v92';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v93';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -4036,7 +4036,7 @@ const ctrMedian = a => { const s = Float32Array.from(a).sort(); return s[s.lengt
 async function ctrBitmap(file) {
   let bmp = file;
   if (file instanceof Blob) { try { bmp = await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (e) { bmp = await createImageBitmap(file); } }
-  const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+  const k = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
   const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
   c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
   return c;
@@ -4115,21 +4115,14 @@ function ctrEdges(c, bg) {
   const colP = prof(CW, Math.round(CH * .3), Math.round(CH * .7), (i, j) => (j * CW + i) * 4);
   const rowP = prof(CH, Math.round(CW * .3), Math.round(CW * .7), (i, j) => (i * CW + j) * 4);
   const mx = Math.round(CTR_M * CTR_W), my = Math.round(CTR_M * CTR_H);
-  // distance in from one end to the card's outer edge, or null
+  // distance in from one end to the card's outer edge, or null: the outermost sharp step close to where the straightened card's
+  // edge should be (a shadow or a soft glow outside the card is gradual, so it does not count)
   const outer = (P, n, m, rev) => {
-    const at = i => rev ? n - 1 - i : i, dB = P.map(p => ctrDist(p, bg)), span = n - 2 * m;
-    const lv = []; for (let i = m + Math.round(.02 * span); i < m + Math.round(.06 * span); i++) lv.push(dB[at(i)]);
-    lv.sort((a, b) => a - b);
-    const level = lv[Math.floor(lv.length * .8)];
-    if (!(level > 30)) return null;
-    const thr = Math.max(18, level * .5);
-    for (let c = 0; c < n / 2; c++) if (dB[at(c)] > thr && dB[at(c + 1)] > thr && dB[at(c + 2)] > thr) {
-      // a shadow can cross the threshold early; the card's own edge is the first sharp step after that
-      const g = i => ctrDist(P[at(i + 2)], P[at(Math.max(0, i - 2))]);
-      let mg = 0; for (let i = Math.max(0, c - 6); i < c + 45; i++) mg = Math.max(mg, g(i));
-      for (let i = Math.max(0, c - 6); i < c + 45; i++) if (g(i) > mg * .5) return i;
-      return c;
-    }
+    const at = i => rev ? n - 1 - i : i, W = Math.round(.045 * (n - 2 * m)), lo = Math.max(3, m - W), hi = Math.min(n - 4, m + W);
+    const g = i => ctrDist(P[at(Math.min(n - 1, i + 2))], P[at(Math.max(0, i - 2))]);
+    let mg = 0; for (let i = lo; i <= hi; i++) mg = Math.max(mg, g(i));
+    if (!(mg > 22)) return null;
+    for (let i = lo; i <= hi; i++) if (g(i) >= mg * .6 && g(i) >= g(i - 1) && g(i) >= g(i + 1)) return i;
     return null;
   };
   // distance in from that end to where the border's colour gives way to the card face, or null
@@ -4150,6 +4143,338 @@ function ctrEdges(c, bg) {
     iL: iL == null ? o.oL + .045 * CTR_W : iL, iR: iR == null ? o.oR - .045 * CTR_W : pos(iR, CW, true),
     iT: iT == null ? o.oT + .045 * CTR_W : iT, iB: iB == null ? o.oB - .045 * CTR_W : pos(iB, CH, true), ok
   });
+}
+
+/* ---- finding the card in a hand-held photo ---- */
+// ---- card finder v2: four straight edges, not a background colour ----
+// 1. Edge lines: every strong edge pixel votes for the line through it (Hough transform, guided by the edge's own direction).
+// 2. Quadrilaterals: pairs of roughly parallel lines at right angles to another pair, with a card's proportions.
+// 3. Each candidate is scored by how consistently "inside minus outside" has the same sign along the whole of every side
+//    (texture and shadows change sign along a side, a card edge does not) and the best is kept.
+// 4. The four lines are refitted to the real edges at a larger size; their corners straighten the card (perspective too).
+const CTR_RATIO = 63 / 88;
+function ctrPlane(src, maxDim) {
+  const sc = Math.min(1, maxDim / Math.max(src.width, src.height)), w = Math.max(8, Math.round(src.width * sc)), h = Math.max(8, Math.round(src.height * sc));
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const cx = c.getContext('2d', { willReadFrequently: true }); cx.drawImage(src, 0, 0, w, h);
+  const d = cx.getImageData(0, 0, w, h).data, P = [new Float32Array(w * h), new Float32Array(w * h), new Float32Array(w * h)];
+  for (let i = 0; i < w * h; i++) { P[0][i] = d[i * 4]; P[1][i] = d[i * 4 + 1]; P[2][i] = d[i * 4 + 2]; }
+  return { w, h, P, k: src.width / w };
+}
+function ctrBlur(a, w, h) {            // 3x3 box, twice
+  let s = a;
+  for (let pass = 0; pass < 2; pass++) {
+    const dst = new Float32Array(a.length);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      let sum = 0, n = 0;
+      for (let dy = -1; dy <= 1; dy++) { const yy = y + dy; if (yy < 0 || yy >= h) continue; for (let dx = -1; dx <= 1; dx++) { const xx = x + dx; if (xx < 0 || xx >= w) continue; sum += s[yy * w + xx]; n++; } }
+      dst[y * w + x] = sum / n;
+    }
+    s = dst;
+  }
+  return s;
+}
+const ctrAt = (a, w, h, x, y) => {      // bilinear; NaN outside
+  if (x < 0 || y < 0 || x > w - 1 || y > h - 1) return NaN;
+  const x0 = x | 0, y0 = y | 0, x1 = Math.min(w - 1, x0 + 1), y1 = Math.min(h - 1, y0 + 1), fx = x - x0, fy = y - y0;
+  return (a[y0 * w + x0] * (1 - fx) + a[y0 * w + x1] * fx) * (1 - fy) + (a[y1 * w + x0] * (1 - fx) + a[y1 * w + x1] * fx) * fy;
+};
+// signed step "inside minus outside" at (x,y) for the inward direction (nx,ny); windows from d0 to d1 pixels each side
+function ctrStep(a, w, h, x, y, nx, ny, d0, d1) {
+  let ins = 0, out = 0, n = 0;
+  for (let d = d0; d <= d1 + 1e-6; d += (d1 - d0) / 2 || 1) {
+    const vi = ctrAt(a, w, h, x + nx * d, y + ny * d), vo = ctrAt(a, w, h, x - nx * d, y - ny * d);
+    if (vi !== vi || vo !== vo) return NaN; ins += vi; out += vo; n++;
+  }
+  return (ins - out) / n;
+}
+// size of the colour change across a point (inside mean vs outside mean over all three channels), no sign
+function ctrStepC(B3, w, h, x, y, nx, ny, d0, d1) {
+  let a = 0, b = 0, c = 0, n = 0, oa = 0, ob = 0, oc = 0;
+  for (let d = d0; d <= d1 + 1e-6; d += (d1 - d0) / 2 || 1) {
+    const i0 = ctrAt(B3[0], w, h, x + nx * d, y + ny * d), i1 = ctrAt(B3[1], w, h, x + nx * d, y + ny * d), i2 = ctrAt(B3[2], w, h, x + nx * d, y + ny * d);
+    const o0 = ctrAt(B3[0], w, h, x - nx * d, y - ny * d), o1 = ctrAt(B3[1], w, h, x - nx * d, y - ny * d), o2 = ctrAt(B3[2], w, h, x - nx * d, y - ny * d);
+    if (i0 !== i0 || o0 !== o0) return NaN;
+    a += i0; b += i1; c += i2; oa += o0; ob += o1; oc += o2; n++;
+  }
+  return Math.hypot((a - oa) / n, (b - ob) / n, (c - oc) / n);
+}
+const ctrPct = (arr, q) => { const s = Float32Array.from(arr).sort(); return s[Math.min(s.length - 1, Math.floor(s.length * q))]; };
+
+function ctrHough(B, w, h) {
+  const gx = new Float32Array(w * h), gy = new Float32Array(w * h), mag = new Float32Array(w * h);
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const i = y * w + x; let sx = 0, sy = 0;
+    for (let c = 0; c < 3; c++) { const a = B[c], dx = a[i + 1] - a[i - 1], dy = a[i + w] - a[i - w]; if (Math.abs(dx) > Math.abs(sx)) sx = dx; if (Math.abs(dy) > Math.abs(sy)) sy = dy; }
+    gx[i] = sx; gy[i] = sy; mag[i] = Math.hypot(sx, sy);
+  }
+  const thr = Math.max(8, ctrPct(mag, .86)), CAP = 70;
+  const diag = Math.ceil(Math.hypot(w, h)), RN = 2 * diag + 1, NT = 180, acc = new Float32Array(NT * RN);
+  const cs = [], sn = []; for (let t = 0; t < NT; t++) { cs.push(Math.cos(t * Math.PI / 180)); sn.push(Math.sin(t * Math.PI / 180)); }
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const i = y * w + x, m = mag[i]; if (m < thr) continue;
+    let ph = Math.round(Math.atan2(gy[i], gx[i]) * 180 / Math.PI); ph = ((ph % 180) + 180) % 180;
+    const wgt = Math.min(CAP, m);
+    for (let d = -2; d <= 2; d++) {
+      const t = (ph + d + NT) % NT, rho = x * cs[t] + y * sn[t], r = Math.round(rho) + diag;
+      acc[t * RN + r] += wgt * (d === 0 ? 1 : .7);
+    }
+  }
+  // peaks: biggest first, each suppressing its neighbourhood
+  const cand = [];
+  for (let t = 0; t < NT; t++) for (let r = 2; r < RN - 2; r++) { const v = acc[t * RN + r]; if (v > 0) cand.push([v, t, r]); }
+  cand.sort((a, b) => b[0] - a[0]);
+  const used = new Uint8Array(NT * RN), lines = [], top = cand.length ? cand[0][0] : 0;
+  for (const [v, t, r] of cand) {
+    if (lines.length >= 64 || v < top * .06) break;
+    if (used[t * RN + r]) continue;
+    lines.push({ v, th: t * Math.PI / 180, rho: r - diag });
+    for (let dt = -4; dt <= 4; dt++) for (let dr = -5; dr <= 5; dr++) { const tt = (t + dt + NT) % NT, rr = r + dr; if (rr >= 0 && rr < RN) used[tt * RN + rr] = 1; }
+  }
+  return lines;
+}
+const ctrCross = (l1, l2) => {          // x cos + y sin = rho for both
+  const det = Math.cos(l1.th) * Math.sin(l2.th) - Math.sin(l1.th) * Math.cos(l2.th);
+  if (Math.abs(det) < .05) return null;
+  return [(l1.rho * Math.sin(l2.th) - l2.rho * Math.sin(l1.th)) / det, (Math.cos(l1.th) * l2.rho - Math.cos(l2.th) * l1.rho) / det];
+};
+const ctrAngDiff = (a, b) => { let d = Math.abs(a - b) % Math.PI; return Math.min(d, Math.PI - d); };
+
+// how well four corners (TL,TR,BR,BL, any rotation) look like a card sitting on something different from it
+function ctrScoreQuad(B, w, h, C) {
+  const cx = (C[0][0] + C[1][0] + C[2][0] + C[3][0]) / 4, cy = (C[0][1] + C[1][1] + C[2][1] + C[3][1]) / 4;
+  const NS = 24; let total = 0, bc = 0, sgn = 0, per = [];
+  const sides = [[0, 3], [1, 2], [0, 1], [3, 2]];        // left, right, top, bottom
+  for (let c = 0; c < 3; c++) {
+    const sc = [], signs = [];
+    for (const [i, j] of sides) {
+      const [x0, y0] = C[i], [x1, y1] = C[j], dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1;
+      let nx = -dy / len, ny = dx / len; if ((cx - x0) * nx + (cy - y0) * ny < 0) { nx = -nx; ny = -ny; }
+      const vals = [];
+      for (let t = 0; t < NS; t++) { const f = .1 + .8 * t / (NS - 1), s = ctrStep(B[c], w, h, x0 + dx * f, y0 + dy * f, nx, ny, 1.5, 3.5); if (s === s) vals.push(s); }
+      if (vals.length < NS * .6) { sc.push(0); signs.push(0); continue; }
+      const sg = ctrPct(vals, .5) >= 0 ? 1 : -1;
+      sc.push(Math.max(0, ctrPct(vals.map(v => v * sg), .25))); signs.push(sg);
+    }
+    const same = signs.every(s => s === signs[0] && s !== 0), tot = same ? sc.reduce((a, b) => a + b, 0) : 0;
+    if (tot > total && Math.min(...sc) >= 4) { total = tot; bc = c; sgn = signs[0]; per = sc; }
+  }
+  if (total < 40) return null;
+  // what lies just outside each side should be the same background all the way round; a rectangle inside the card has card on some sides
+  const outs = [];
+  for (const [i, j] of sides) {
+    const [x0, y0] = C[i], [x1, y1] = C[j], dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1;
+    let nx = -dy / len, ny = dx / len; if ((cx - x0) * nx + (cy - y0) * ny < 0) { nx = -nx; ny = -ny; }
+    const col = [[], [], []];
+    for (let t = 0; t < 12; t++) { const f = .12 + .76 * t / 11; for (let c = 0; c < 3; c++) { const v = ctrAt(B[c], w, h, x0 + dx * f - nx * 6, y0 + dy * f - ny * 6); if (v === v) col[c].push(v); } }
+    if (col[0].length < 6) { outs.push(null); continue; }
+    outs.push(col.map(a => ctrPct(a, .5)));
+  }
+  let spread = 0; const ok = outs.filter(Boolean);
+  for (let a = 0; a < ok.length; a++) for (let b = a + 1; b < ok.length; b++) spread = Math.max(spread, Math.hypot(ok[a][0] - ok[b][0], ok[a][1] - ok[b][1], ok[a][2] - ok[b][2]));
+  const pen = 1 / (1 + Math.pow(Math.max(0, spread - 30) / 45, 2));
+  return { total: total * pen, raw: total, spread, ch: bc, sgn, per };
+}
+
+function ctrQuad(src) {
+  const pl = ctrPlane(src, 360), w = pl.w, h = pl.h, M = Math.max(w, h);
+  const B = pl.P.map(p => ctrBlur(p, w, h));
+  const lines = ctrHough(B, w, h);
+  let best = null; const cands = [];
+  const n = lines.length;
+  // line pairs that are nearly parallel and far enough apart
+  const pairs = [];
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    if (ctrAngDiff(lines[i].th, lines[j].th) > 9 * Math.PI / 180) continue;
+    const sep = Math.abs(lines[j].rho * Math.cos(lines[j].th) * Math.cos(lines[i].th) + lines[j].rho * Math.sin(lines[j].th) * Math.sin(lines[i].th) - lines[i].rho);
+    if (sep < M * .12 || sep > M * .98) continue;
+    pairs.push([i, j, sep]);
+  }
+  for (let p = 0; p < pairs.length; p++) for (let q = p + 1; q < pairs.length; q++) {
+    const [a, b] = pairs[p], [c, d] = pairs[q];
+    if (a === c || a === d || b === c || b === d) continue;
+    const ta = (lines[a].th + lines[b].th) / 2, tc = (lines[c].th + lines[d].th) / 2;
+    if (Math.abs(ctrAngDiff(ta, tc) - Math.PI / 2) > 12 * Math.PI / 180) continue;
+    // corners: a x c, a x d, b x d, b x c  (a,b one pair; c,d the other)
+    const P1 = ctrCross(lines[a], lines[c]), P2 = ctrCross(lines[a], lines[d]), P3 = ctrCross(lines[b], lines[d]), P4 = ctrCross(lines[b], lines[c]);
+    if (!P1 || !P2 || !P3 || !P4) continue;
+    const C = [P1, P2, P3, P4], L = (u, v) => Math.hypot(u[0] - v[0], u[1] - v[1]);
+    const s1 = (L(P1, P2) + L(P4, P3)) / 2, s2 = (L(P2, P3) + L(P1, P4)) / 2;   // a-c-d-b pair spacing vs the other
+    const lo = Math.min(s1, s2), hi = Math.max(s1, s2), r = lo / hi;
+    if (r < .6 || r > .83 || hi < M * .2) continue;
+    // all four corners inside the picture (a little slack)
+    if (C.some(pt => pt[0] < -w * .03 || pt[0] > w * 1.03 || pt[1] < -h * .03 || pt[1] > h * 1.03)) continue;
+    const sc = ctrScoreQuad(B, w, h, C);
+    if (sc) {
+      // a card photographed at a slant is still close to a rectangle: opposite sides nearly parallel, corners nearly square
+      const deg = 180 / Math.PI, dev = Math.max(ctrAngDiff(lines[a].th, lines[b].th) * deg, ctrAngDiff(lines[c].th, lines[d].th) * deg, Math.abs(ctrAngDiff(ta, tc) - Math.PI / 2) * deg * .7);
+      sc.total *= 1 / (1 + Math.pow(Math.max(0, dev - 2.5) / 5, 2));
+    }
+    if (sc) cands.push(Object.assign(sc, { C, area: Math.abs((C[0][0] * C[1][1] - C[1][0] * C[0][1]) + (C[1][0] * C[2][1] - C[2][0] * C[1][1]) + (C[2][0] * C[3][1] - C[3][0] * C[2][1]) + (C[3][0] * C[0][1] - C[0][0] * C[3][1])) / 2 }));
+  }
+  if (!cands.length) return null;
+  // the card's own edge and the frame printed just inside it both look like an edge: take the biggest that is nearly as convincing as the best
+  cands.sort((p, q) => q.total - p.total);
+  const first = cands[0], inside = (C, x, y) => { let n = 0; for (let i = 0; i < 4; i++) { const [x0, y0] = C[i], [x1, y1] = C[(i + 1) % 4]; if ((x1 - x0) * (y - y0) - (y1 - y0) * (x - x0) > 0) n++; } return n === 0 || n === 4; };
+  const fc = [first.C.reduce((a, p) => a + p[0], 0) / 4, first.C.reduce((a, p) => a + p[1], 0) / 4];
+  best = first;      // the frame printed just inside the card's edge is dealt with when each side is refitted (outermost clear edge)
+  return { best, pl, B, lines, cands };
+}
+
+// the four lines refitted to the real edges at a larger size, in several passes with a shrinking search window; returns the corners
+// in the photo's own pixels, upright (TL, TR, BR, BL)
+function ctrFine(src) { const pl = ctrPlane(src, 1100); pl.B3 = pl.P.map(p => ctrBlur(p, pl.w, pl.h)); return pl; }
+function ctrRefine(pl, q, b) {
+  const w = pl.w, h = pl.h, s = w / q.pl.w, B3 = pl.B3;
+  let C = b.C.map(p => [p[0] * s, p[1] * s]);
+  const meet = (A, B2) => { const d = A.dx * B2.dy - A.dy * B2.dx; const t = ((B2.px - A.px) * B2.dy - (B2.py - A.py) * B2.dx) / d; return [A.px + A.dx * t, A.py + A.dy * t]; };
+  const fit = P => {
+    let mx = 0, my = 0; P.forEach(p => { mx += p[0]; my += p[1]; }); mx /= P.length; my /= P.length;
+    let sxx = 0, sxy = 0, syy = 0; P.forEach(p => { const ax = p[0] - mx, ay = p[1] - my; sxx += ax * ax; sxy += ax * ay; syy += ay * ay; });
+    const ang = .5 * Math.atan2(2 * sxy, sxx - syy); return { px: mx, py: my, dx: Math.cos(ang), dy: Math.sin(ang) };
+  };
+  const dist = (L, p) => Math.abs((p[0] - L.px) * -L.dy + (p[1] - L.py) * L.dx);
+  let support = [0, 0, 0, 0];
+  [[.05, .03], [.025, .025], [.012, .012], [.006, .006]].forEach(([out, inn], pass) => {
+    const cx = (C[0][0] + C[1][0] + C[2][0] + C[3][0]) / 4, cy = (C[0][1] + C[1][1] + C[2][1] + C[3][1]) / 4;
+    const lines = [0, 1, 2, 3].map(i => {
+      const [x0, y0] = C[i], [x1, y1] = C[(i + 1) % 4], dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1;
+      let nx = -dy / len, ny = dx / len; if ((cx - x0) * nx + (cy - y0) * ny < 0) { nx = -nx; ny = -ny; }      // inward
+      const Ro = Math.max(2.5, len * out), Ri = Math.max(2.5, len * inn), pts = [];
+      for (let t = 0; t < 56; t++) {
+        const f = .1 + .8 * t / 55, x = x0 + dx * f, y = y0 + dy * f, offs = [], val = [];
+        for (let o = -Ro; o <= Ri; o += .5) { const v = ctrStepC(B3, w, h, x + nx * o, y + ny * o, nx, ny, 1, 2.5); offs.push(o); val.push(v === v ? v : 0); }
+        const mx2 = Math.max(...val); if (mx2 < 8) continue;
+        // the outermost clear peak: the card's own edge, not the frame printed just inside it, and not a shadow beyond it
+        let bo = null;
+        for (let i = 1; i < val.length - 1; i++) if (val[i] >= mx2 * .6 && val[i] >= val[i - 1] && val[i] > val[i + 1]) { bo = offs[i]; break; }
+        if (bo == null) bo = offs[val.indexOf(mx2)];
+        pts.push([x + nx * bo, y + ny * bo]);
+      }
+      if (pts.length < 14) return { px: x0, py: y0, dx: dx / len, dy: dy / len, n: pts.length };
+      let P = pts, L = fit(P);
+      for (let k = 0; k < 4; k++) {
+        const res = P.map(p => dist(L, p)), lim = Math.max(1.2, 2.5 * ctrPct(res, .5));
+        const keep = P.filter((p, i) => res[i] <= lim); if (keep.length < 12 || keep.length === P.length) break; P = keep; L = fit(P);
+      }
+      L.n = P.length; return L;
+    });
+    C = [meet(lines[3], lines[0]), meet(lines[0], lines[1]), meet(lines[1], lines[2]), meet(lines[2], lines[3])];
+    support = lines.map(l => l.n);
+  });
+  const k = pl.k;
+  let c = C.map(p => [p[0] * k, p[1] * k]);
+  const L = (u, v) => Math.hypot(u[0] - v[0], u[1] - v[1]);
+  // clockwise on screen, then start at the corner nearest the top-left whose first side is the short one
+  const cw = (c[1][0] - c[0][0]) * (c[2][1] - c[0][1]) - (c[1][1] - c[0][1]) * (c[2][0] - c[0][0]) > 0;
+  if (!cw) c = [c[0], c[3], c[2], c[1]];
+  let bi = 0, bc2 = 1e18;
+  for (let i = 0; i < 4; i++) { const cost = L(c[i], c[(i + 1) % 4]) <= L(c[(i + 1) % 4], c[(i + 2) % 4]) ? c[i][0] + c[i][1] : 1e18; if (cost < bc2) { bc2 = cost; bi = i; } }
+  c = [c[bi], c[(bi + 1) % 4], c[(bi + 2) % 4], c[(bi + 3) % 4]];
+  return { corners: c, support, Cf: C };
+}
+
+// the whole search: several likely quadrilaterals are each fitted to the real edges, and the one that fits best wins
+// how well a refitted quad looks like a card: how sharp and steady the edge is along each side, and whether the same background lies outside all four sides
+function ctrFitScore(fine, C) {
+  const w = fine.w, h = fine.h, B3 = fine.B3, cx = (C[0][0] + C[1][0] + C[2][0] + C[3][0]) / 4, cy = (C[0][1] + C[1][1] + C[2][1] + C[3][1]) / 4;
+  const per = [], outs = [];
+  for (let i = 0; i < 4; i++) {
+    const [x0, y0] = C[i], [x1, y1] = C[(i + 1) % 4], dx = x1 - x0, dy = y1 - y0, len = Math.hypot(dx, dy) || 1;
+    let nx = -dy / len, ny = dx / len; if ((cx - x0) * nx + (cy - y0) * ny < 0) { nx = -nx; ny = -ny; }
+    const mags = [], col = [[], [], []];
+    for (let t = 0; t < 40; t++) {
+      const f = .08 + .84 * t / 39, x = x0 + dx * f, y = y0 + dy * f, v = ctrStepC(B3, w, h, x, y, nx, ny, 1, 2.5);
+      mags.push(v === v ? v : 0);
+      for (let c = 0; c < 3; c++) { const o = ctrAt(B3[c], w, h, x - nx * 9, y - ny * 9); if (o === o) col[c].push(o); }
+    }
+    per.push(ctrPct(mags, .3));
+    outs.push(col[0].length > 12 ? col.map(a => ctrPct(a, .5)) : null);
+  }
+  let spread = 0; const ok = outs.filter(Boolean);
+  for (let a = 0; a < ok.length; a++) for (let b = a + 1; b < ok.length; b++) spread = Math.max(spread, Math.hypot(ok[a][0] - ok[b][0], ok[a][1] - ok[b][1], ok[a][2] - ok[b][2]));
+  const pen = 1 / (1 + Math.pow(Math.max(0, spread - 30) / 45, 2)), mn = Math.min(...per);
+  if (mn < 6) return null;
+  return { total: (per[0] + per[1] + per[2] + per[3]) * pen, per, spread };
+}
+function ctrFindCard2(src) {
+  const q = ctrQuad(src); if (!q) return null;
+  const picks = [], M = Math.max(q.pl.w, q.pl.h);
+  for (const c of q.cands) {
+    if (picks.length >= 8) break;
+    const near = picks.some(p => [0, 1, 2, 3].some(sh => [0, 1, 2, 3].every(j => Math.hypot(p.C[(j + sh) % 4][0] - c.C[j][0], p.C[(j + sh) % 4][1] - c.C[j][1]) < M * .03)) || [0, 1, 2, 3].some(sh => [0, 1, 2, 3].every(j => Math.hypot(p.C[(sh - j + 4) % 4][0] - c.C[j][0], p.C[(sh - j + 4) % 4][1] - c.C[j][1]) < M * .03)));
+    if (!near) picks.push(c);
+  }
+  const fine = ctrFine(src); let best = null; const done = [];
+  for (const c of picks) {
+    let r; try { r = ctrRefine(fine, q, c); } catch (e) { continue; }
+    const sc = ctrFitScore(fine, r.Cf); if (!sc) continue;
+    const dev = (() => { const P = r.Cf, L = (u, v) => Math.hypot(u[0] - v[0], u[1] - v[1]), ar = Math.min(L(P[0], P[1]) + L(P[2], P[3]), L(P[1], P[2]) + L(P[3], P[0])) / Math.max(L(P[0], P[1]) + L(P[2], P[3]), L(P[1], P[2]) + L(P[3], P[0])); return Math.abs(ar - CTR_RATIO); })();
+    const tot = sc.total * (1 / (1 + Math.pow(Math.max(0, dev - .03) / .06, 2)));
+    const P = r.Cf, area = Math.abs((P[0][0] * P[1][1] - P[1][0] * P[0][1]) + (P[1][0] * P[2][1] - P[2][0] * P[1][1]) + (P[2][0] * P[3][1] - P[3][0] * P[2][1]) + (P[3][0] * P[0][1] - P[0][0] * P[3][1])) / 2;
+    done.push(Object.assign(r, { total: tot, score: sc, cand: c, area }));
+  }
+  if (done.length) {
+    // after fitting, every contender sits on real edges; a shape inside the card (art box, text box) scores well too, so the biggest convincing one wins
+    const top = Math.max(...done.map(d => d.total)), strong = done.filter(d => d.total >= top * .5 && Math.min(...d.score.per) >= 40);
+    const inside = (C, x, y) => { let n = 0; for (let i = 0; i < 4; i++) { const [x0, y0] = C[i], [x1, y1] = C[(i + 1) % 4]; if ((x1 - x0) * (y - y0) - (y1 - y0) * (x - x0) > 0) n++; } return n === 0 || n === 4; };
+    if (!strong.length) strong.push(done.sort((p, q) => q.total - p.total)[0]);
+    const lead = strong.sort((p, q) => q.total - p.total)[0], lc = [lead.Cf.reduce((a, p) => a + p[0], 0) / 4, lead.Cf.reduce((a, p) => a + p[1], 0) / 4];
+    best = strong.filter(d => inside(d.Cf, lc[0], lc[1]) && d.area <= lead.area * 4).sort((p, q) => q.area - p.area)[0];
+  }
+  return best && { corners: best.corners, support: best.support, total: best.total, score: best.score, tried: picks.length, q, fine };
+}
+
+// ---- straighten: the four corners -> a CTR_W x CTR_H card picture with a margin of background kept all round ----
+function ctrSolve(A, b) {
+  const n = b.length; A = A.map((r, i) => r.concat([b[i]]));
+  for (let i = 0; i < n; i++) {
+    let p = i; for (let r = i + 1; r < n; r++) if (Math.abs(A[r][i]) > Math.abs(A[p][i])) p = r;
+    [A[i], A[p]] = [A[p], A[i]];
+    for (let r = i + 1; r < n; r++) { const f = A[r][i] / A[i][i]; for (let c = i; c <= n; c++) A[r][c] -= f * A[i][c]; }
+  }
+  const x = new Array(n).fill(0);
+  for (let i = n - 1; i >= 0; i--) { let s = A[i][n]; for (let c = i + 1; c < n; c++) s -= A[i][c] * x[c]; x[i] = s / A[i][i]; }
+  return x;
+}
+// unit square (0,0),(1,0),(1,1),(0,1) -> the four corners; returns the 8 numbers of the mapping
+function ctrHomog(C) {
+  const U = [[0, 0], [1, 0], [1, 1], [0, 1]], A = [], b = [];
+  for (let i = 0; i < 4; i++) {
+    const [u, v] = U[i], [x, y] = C[i];
+    A.push([u, v, 1, 0, 0, 0, -u * x, -v * x]); b.push(x);
+    A.push([0, 0, 0, u, v, 1, -u * y, -v * y]); b.push(y);
+  }
+  return ctrSolve(A, b);
+}
+function ctrWarpQuad(src, C) {
+  const m = CTR_M, CW = Math.round(CTR_W * (1 + 2 * m)), CH = Math.round(CTR_H * (1 + 2 * m));
+  const H = ctrHomog(C), sw = src.width, sh = src.height;
+  const sd = src.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, sw, sh).data;
+  const out = document.createElement('canvas'); out.width = CW; out.height = CH;
+  const ox = out.getContext('2d'), od = ox.createImageData(CW, CH), o = od.data;
+  for (let Y = 0; Y < CH; Y++) {
+    const t = (Y + .5) / CH * (1 + 2 * m) - m;
+    for (let X = 0; X < CW; X++) {
+      const s = (X + .5) / CW * (1 + 2 * m) - m, z = H[6] * s + H[7] * t + 1, x = (H[0] * s + H[1] * t + H[2]) / z, y = (H[3] * s + H[4] * t + H[5]) / z, p = (Y * CW + X) * 4;
+      if (x < 0 || y < 0 || x > sw - 1 || y > sh - 1) { o[p] = o[p + 1] = o[p + 2] = 128; o[p + 3] = 255; continue; }
+      const x0 = x | 0, y0 = y | 0, x1 = Math.min(sw - 1, x0 + 1), y1 = Math.min(sh - 1, y0 + 1), fx = x - x0, fy = y - y0;
+      const i00 = (y0 * sw + x0) * 4, i10 = (y0 * sw + x1) * 4, i01 = (y1 * sw + x0) * 4, i11 = (y1 * sw + x1) * 4;
+      for (let c = 0; c < 3; c++) o[p + c] = (sd[i00 + c] * (1 - fx) + sd[i10 + c] * fx) * (1 - fy) + (sd[i01 + c] * (1 - fx) + sd[i11 + c] * fx) * fy;
+      o[p + 3] = 255;
+    }
+  }
+  ox.putImageData(od, 0, 0);
+  return out;
+}
+// background colour: the margin of the straightened picture
+function ctrMarginBg(c) {
+  const d = c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, c.width, c.height).data, R = [], G = [], B = [];
+  const mx = Math.round(CTR_M * CTR_W), my = Math.round(CTR_M * CTR_H);
+  for (let y = 0; y < c.height; y += 2) for (let x = 0; x < c.width; x += 2) {
+    if (x < mx * .6 || x > c.width - mx * .6 || y < my * .6 || y > c.height - my * .6) { const i = (y * c.width + x) * 4; R.push(d[i]); G.push(d[i + 1]); B.push(d[i + 2]); }
+  }
+  return [ctrMedian(R), ctrMedian(G), ctrMedian(B)];
 }
 
 // Modern cards print a thinner bottom border than top, so a perfect copy can read 58/42 top to bottom. The catalogue picture
@@ -4193,8 +4518,10 @@ function openCentering(card, photo) {
     res.innerHTML = '<div class="empty">Measuring…</div>';
     let base, lines;
     try {
-      const src = await ctrBitmap(file), f = ctrFindCard(src);
-      base = ctrWarp(src, f); lines = ctrEdges(base, f.bg);
+      const src = await ctrBitmap(file);
+      let quad = null; try { quad = ctrFindCard2(src); } catch (e) { quad = null; }
+      if (quad) { base = ctrWarpQuad(src, quad.corners); lines = ctrEdges(base, ctrMarginBg(base)); }
+      else { const f = ctrFindCard(src); base = ctrWarp(src, f); lines = ctrEdges(base, f.bg); }      // the plain-background method is kept as a second try
     } catch (e) { res.innerHTML = ''; res.appendChild(el('div', 'note', esc(e.message || 'Could not read that photo.'))); return; }
     res.innerHTML = '';
     if (!lines.ok) res.appendChild(el('div', 'note small', 'The border could not be found everywhere automatically (full-art cards have none). Lines are placed roughly. Drag them onto the real edges.'));
