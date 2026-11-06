@@ -605,7 +605,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v95';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v96';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -1131,16 +1131,33 @@ function withFamily(path, data) {
   return data;
 }
 // Fetch with a cache so sets already opened still load without signal.
+// The set and series lists (and each set's card list) are kept on the phone so the app opens fast and works offline, but they must not
+// stay frozen: a set released since the last look would never appear. Each is re-read from TCGdex in the background when it is a day
+// (lists) or a week (card lists) old; the saved copy is swapped and, if the set list changed, the home page redraws.
+const refreshing = {};
+function refreshStale(path) {
+  const list = path === 'sets' || path === 'series' || /^series\//.test(path), setcards = /^sets\//.test(path);
+  if ((!list && !setcards) || refreshing[path] || !navigator.onLine) return;
+  const at = cacheGet('at:' + path), age = list ? 24 * 3600 * 1000 : 7 * 24 * 3600 * 1000;
+  if (at && Date.now() - at < age) return;
+  refreshing[path] = true;
+  fetch(API() + path).then(r => r.ok ? r.json() : null).then(data => {
+    if (!data) return;
+    const changed = JSON.stringify(data) !== JSON.stringify(cacheGet(path));
+    cacheSet(path, data); cacheSet('at:' + path, Date.now());
+    if (changed && list) { window._sets = window._series = null; if ((location.hash || '#/') === '#/' && !ui.q) viewHome(); }
+  }).catch(() => {}).finally(() => { delete refreshing[path]; });
+}
 async function getJSON(path) {
   let m;
   if ((m = path.match(/^sets\/(.+)$/)) && state.customSets[m[1]]) return customSetData(m[1]);
   if ((m = path.match(/^series\/(fam-.+)$/))) { const l = customSetList().filter(x => x.serie.id === m[1]); if (l.length) return { ...l[0].serie, sets: l }; }
   const cached = cacheGet(path);
-  if (cached) return withFamily(path, path.startsWith('sets/') ? mergeCustom(await addClassics(addMissingArt(cached))) : cached);
+  if (cached) { refreshStale(path); return withFamily(path, path.startsWith('sets/') ? mergeCustom(await addClassics(addMissingArt(cached))) : cached); }
   const r = await fetch(API() + path);
   if (!r.ok) throw new Error('HTTP ' + r.status);
   const data = await r.json();
-  cacheSet(path, data);
+  cacheSet(path, data); cacheSet('at:' + path, Date.now());
   return withFamily(path, path.startsWith('sets/') ? mergeCustom(await addClassics(addMissingArt(data))) : data);
 }
 
