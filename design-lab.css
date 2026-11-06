@@ -273,7 +273,8 @@ body[data-view="home"] #designApp > header {padding-bottom:0;}
 #designApp .card img {border-radius:7px;filter:saturate(.8) opacity(.72);}
 #designApp .card.owned img,#designApp .card.want img,body.colourall #designApp .card img {filter:none;}
 #designApp .card .name {font-size:16px;font-weight:900;margin:5px 31px 0 2px;letter-spacing:-.25px;}
-#designApp .card .num {display:none;}
+#designApp .card .num {display:block;float:right;margin:9px 3px 0 8px;font-size:12px;font-weight:800;letter-spacing:.2px;color:var(--muted);white-space:nowrap;}
+#designApp .card .name {margin-right:2px;}
 #designApp .card .meta {font-size:10px;margin:3px 2px;min-height:0;}
 #designApp .card .vars {margin:4px 0;}
 #designApp .card .zoom,#designApp .card .tick {display:none;}
