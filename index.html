@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="binder">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -492,9 +492,11 @@
     .slot .tag { position: absolute; top: 5mm; left: -14mm; transform: rotate(-35deg); background: #e3350d; color: #fff; font-weight: 700; font-size: 8pt; letter-spacing: .1em; padding: 0.8mm 16mm; }
   }
 </style>
+<link rel="stylesheet" href="design-lab.css">
 </head>
 <body>
-<header>
+<div id="designLabBar"><div class="design-lab-actions"><label for="designWidth">View <select id="designWidth"><option value="phone">Phone</option><option value="wide">Wide</option></select></label><label for="designTheme">Theme <select id="designTheme" aria-label="Choose a design theme"></select></label></div></div>
+<div id="designApp"><header>
   <div class="top">
     <button id="who" class="whochip" aria-label="Switch person" hidden></button>
     <button class="back" id="back" aria-label="Back" hidden>‹</button>
@@ -577,9 +579,12 @@
   <button data-tab="more"><span class="ic"></span>More</button>
 </nav>
 <div id="toast" hidden><span>A new version is ready.</span><button id="toastBtn">Update</button></div>
+</div>
+<script src="design-lab.js"></script>
+<script src="design-interactions.js"></script>
 <script>
 // theme first, so there is no flash of the wrong colours
-try { const t = localStorage.getItem('tcgPokedex.theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
+try { let t = localStorage.getItem('tcgPokedex.theme'); const L = { poke: 'play', bright: 'play', dark: 'gengar', bulbasaur: 'binder' }; if (L[t]) { t = L[t]; localStorage.setItem('tcgPokedex.theme', t); } if (t) document.documentElement.setAttribute('data-theme', t); } catch (e) {}
 
 const LANGS = [
   ['en', 'English'], ['ja', 'Japanese (日本語)'], ['zh-cn', 'Simplified Chinese (简体中文)'], ['zh-tw', 'Traditional Chinese (繁體中文)'],
@@ -605,7 +610,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v103';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v104';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -938,6 +943,8 @@ function removePerson(p) {
 // Set ids like "sv03.5" and keys like "ja/SVK" contain characters Firebase forbids, so they are escaped.
 const dbKey = s => s.replace(/[.$#\[\]\/%]/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase().padStart(2, '0'));
 const unKey = s => decodeURIComponent(s);
+// every family operation is rooted here
+const designFamilyRoot = code => 'families/' + dbKey(code);
 const sync = {
   code: '', status: 'off', fb: null, root: null, unsub: null,
   get on() { return !!this.root; },
@@ -953,7 +960,7 @@ const sync = {
         this.fb = { db, database: db.getDatabase(a) };
       }
       this.stop();
-      this.root = this.fb.db.ref(this.fb.database, 'families/' + dbKey(code));
+      this.root = this.fb.db.ref(this.fb.database, designFamilyRoot(code));
       this.unsub = this.fb.db.onValue(this.root, snap => this.onRemote(snap.val()), err => { this.status = 'error: ' + err.message; renderSyncStatus(); });
     } catch (e) { this.status = 'error: ' + (e.message || e); this.root = null; renderSyncStatus(); }
   },
@@ -993,7 +1000,7 @@ const sync = {
     renderSyncStatus();
     rerender();
   },
-  path(...parts) { return this.fb.db.ref(this.fb.database, 'families/' + dbKey(this.code) + '/' + parts.map(dbKey).join('/')); },
+  path(...parts) { return this.fb.db.ref(this.fb.database, designFamilyRoot(this.code) + '/' + parts.map(dbKey).join('/')); },
   writeCard(pid, key, localId, value) {
     if (!this.on) return;
     const r = this.path('owned', pid, key, localId);
@@ -1023,7 +1030,7 @@ const sync = {
     if (!this.on) return;
     const up = {}; up['customsets/' + dbKey(id)] = v;
     pairs.forEach(([lid, n]) => { up['custom/' + dbKey(key) + '/' + dbKey(lid)] = n; });
-    this.fb.db.update(this.fb.db.ref(this.fb.database, 'families/' + dbKey(this.code)), up).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
+    this.fb.db.update(this.fb.db.ref(this.fb.database, designFamilyRoot(this.code)), up).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
   },
   removeAt(...parts) { if (this.on) this.fb.db.remove(this.path(...parts)).catch(() => {}); },
   writeCustom(key, localId, name) {
@@ -1259,17 +1266,21 @@ function personSelect() {
 }
 
 /* ---------- themes ---------- */
-const THEMES = [['', 'Classic'], ['poke', 'Poké Style'], ['bright', 'Pikachu'], ['dark', 'Gengar'], ['bulbasaur', 'Bulbasaur'], ['mew', 'Mew']];
+const THEMES = [['binder', 'Collector’s Binder'], ['gengar', 'Gengar After Dark'], ['play', 'Pokédex Play'], ['charmander', 'Charmander'], ['mew', 'Mew']];
 const THEME_KEY = 'tcgPokedex.theme';
-const THEME_BAR = { '': '#ffffff', poke: '#e3350d', dark: '#2a1b43', bright: '#ffd21f', bulbasaur: '#3da373', mew: '#f7a1c8' };   // phone status bar colour
+const THEME_BAR = { binder: '#fffefa', gengar: '#251b36', play: '#db352b', charmander: '#cd551f', mew: '#f2b6d2' };   // phone status bar colour
 function applyTheme(t) {
-  if (t) document.documentElement.setAttribute('data-theme', t); else document.documentElement.removeAttribute('data-theme');
-  document.querySelector('meta[name=theme-color]').content = THEME_BAR[t] || '#ffffff';
+  t = THEMES.some(item => item[0] === t) ? t : 'binder';
+  document.documentElement.setAttribute('data-theme', t);
+  document.querySelector('meta[name=theme-color]').content = THEME_BAR[t];
+  if (window.DesignLab) DesignLab.themeChanged(t);
 }
 function themeSelect() {
-  const cur = (() => { try { return localStorage.getItem(THEME_KEY) || ''; } catch (e) { return ''; } })();
+  const cur = (() => { try { return localStorage.getItem(THEME_KEY) || 'binder'; } catch (e) { return ''; } })();
   const sel = el('select');
   sel.title = 'Look of the app on this phone';
+  sel.classList.add('design-theme-select');
+  sel.setAttribute('aria-label', 'Choose a design theme');
   sel.innerHTML = THEMES.map(t => '<option value="' + t[0] + '"' + (t[0] === cur ? ' selected' : '') + '>' + t[1] + '</option>').join('');
   sel.onchange = () => { try { localStorage.setItem(THEME_KEY, sel.value); } catch (e) {} applyTheme(sel.value); };
   return sel;
@@ -1817,6 +1828,7 @@ async function viewLookout() {
       const gks = el('span', 'rap');
       (rap.parentNode ? rap : n.querySelector('.name')).insertAdjacentElement('afterend', gks);
       if ((g.lang === 'en' || g.lang === 'ja') && set && c.id && !c.custom) gkJobs.push([gks, g.lang, g.setId, name, c, set.cardCount && set.cardCount.official]); else gks.remove();
+      DesignInteractions.registerCard(n, c, g.lang, g.setId, name);
       n.onclick = e => {
         if (e.target.closest('.zoom')) { viewCard(c, g.lang, g.setId, name); return; }
         if (e.target.closest('.pcbtn')) { if (c.id) openPriceCheck(g.lang, g.setId, name, c); return; }
@@ -2659,6 +2671,7 @@ async function lbBuildBack() {
       if (g.tp && g.tp.productId) add('TCGplayer', 'https://www.tcgplayer.com/product/' + g.tp.productId);
       if (g.m && g.m.idProduct) add('Cardmarket', 'https://www.cardmarket.com/en/Pokemon/Products/Singles?idProduct=' + g.m.idProduct);
     } catch (e) { gbox.innerHTML = '<b>—</b><small>Could not fetch prices (no internet?)</small>'; }
+    if (lbCtx !== c) return; // Ignore late failures from a card we have already left.
     add('PriceCharting', 'https://www.pricecharting.com/search-products?type=prices&q=' + q);
     // the local store: only from the list this phone already holds (the 5 MB read happens in the price check, on request)
     if (c.l === 'en') {
@@ -3802,7 +3815,10 @@ const scanner = {
     if (cachedSet && cachedSet.cards[card.localId]) avail = cachedSet.cards[card.localId].v || 'n';
     else { try { const d = await getJSONL(lang, 'cards/' + card.id); avail = variantsFrom(d); } catch (e) {} }
     const btns = r.querySelector('.btns');
+    // A lookup can finish after the scanner has closed or another card replaced it.
+    if (!btns || !$('scan').classList.contains('open') || !lt.isConnected) return;
     const draw = () => {
+      if (!btns.isConnected || !$('scan').classList.contains('open')) return;
       btns.innerHTML = '';
       const m = marks(ownedIn(set.id)[card.localId]);
       [...avail].forEach(v => {
@@ -4801,6 +4817,8 @@ window.addEventListener('popstate', e => {
 });
 window.addEventListener('hashchange', () => { ui.q = ''; ui.langSet = null; viewLang = null; $('sheet').classList.remove('open'); route(); });
 loadState();
+DesignLab.init();
+DesignInteractions.init();
 try { $('ver').textContent = '· App ' + APP_VERSION; } catch (e) {}
 // a shared link carries ?family=<code>; remember it and tidy the address bar
 let family = '';
@@ -4811,7 +4829,7 @@ try {
 } catch (e) {}
 renderSyncStatus();
 loadFX().then(() => rerender());          // once today's exchange rates are in, redraw whatever is showing
-applyTheme((() => { try { return localStorage.getItem(THEME_KEY) || ''; } catch (e) { return ''; } })());
+applyTheme((() => { try { return localStorage.getItem(THEME_KEY) || 'binder'; } catch (e) { return ''; } })());
 if (FIREBASE_CONFIG && family) sync.start(family);
 route();
 

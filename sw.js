@@ -1,9 +1,9 @@
 // TCG Pokédex service worker: keeps the app and any card pictures you've seen available offline.
 // Bump VERSION whenever index.html changes so phones pick up the new one.
-const VERSION = 'v103';
+const VERSION = 'v104';
 const SHELL = 'tcg-shell-' + VERSION;
 const IMAGES = 'tcg-images';
-const SHELL_FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-180.png'];
+const SHELL_FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-180.png', './design-lab.css', './design-lab.js', './design-interactions.js', './design-assets/charmander.png', './design-assets/mew.png', './design-assets/gengar.png', './design-assets/pikachu.png', './design-assets/charizard-card.webp', './design-assets/blastoise-card.webp', './design-assets/base1-15.webp', './design-assets/base1-44.webp', './design-assets/base1-58.webp', './design-assets/nunito-sans.ttf', './design-assets/nunito-sans-400.ttf', './design-assets/nunito-sans-700.ttf'];
 
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(SHELL).then(c => c.addAll(SHELL_FILES)));
