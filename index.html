@@ -605,7 +605,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v97';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v98';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -1928,6 +1928,14 @@ function renderHome() {
     main.appendChild(jb);
   }
 
+  // a brand-new set the card database does not have yet: offer the ready-made list right here (it disappears once the set is added, or once TCGdex lists the real one)
+  PRESET_SETS.filter(ps => ps.suggest && !Object.values(state.customSets || {}).some(c => c.abbr === ps.abbr) && !(window._sets || []).some(x => !x.custom && x.name === ps.name)).forEach(ps => {
+    const nb = el('div', 'note joinbox');
+    nb.innerHTML = '<b>New set: ' + esc(ps.name) + '</b> It is out but the card database does not have it yet. Add a ready-made copy for the whole family now; it is swapped for the real one later.<div class="add"><button>Add ' + esc(ps.name) + '</button></div>';
+    nb.querySelector('button').onclick = () => { const id = createCustomSet(ps.name, ps.abbr, ps.cards, ps.region, ps.official, ps.parent, ps.plainFrom); ui.q = ''; location.hash = '#/set/' + id; };
+    main.appendChild(nb);
+  });
+
   const mine = sets.filter(s => ownedCount(s.id) > 0 || childrenOf(s.id).some(k => ownedCountAll(k) > 0));
   if (mine.length) {
     main.appendChild(el('h2', '', esc(me().name) + "'s sets"));
@@ -1973,7 +1981,7 @@ const PRESET_SETS = [
   { name: '30th Celebration Premium Deck Set: Espeon & Umbreon (Japanese)', abbr: '30th-DCJ', region: 'Japanese', official: 40, parent: '30th',
     note: 'The Japanese deck (MF, released 16 Sep 2026): 001–040, four special-art cards 041–044/040 (Victini, Zeraora, Espeon ex, Umbreon ex) and five basic Energy. List and pictures from decktradr.com.',
     cards: "001 Tropius\n002 Cherubi\n003 Cherrim\n004 Vulpix\n005 Ninetales\n006 Victini\n007 Zeraora\n008 Toxel\n009 Toxtricity\n010 Mewtwo\n011 Mew\n012 Marill\n013 Azumarill\n014 Espeon ex\n015 Cresselia\n016 Comfey\n017 Umbreon ex\n018 Murkrow\n019 Zorua\n020 Zoroark\n021 Deino\n022 Zweilous\n023 Hydreigon\n024 Kangaskhan\n025 Eevee\n026 Eevee\n027 Minior\n028 Potion\n029 Crushing Hammer\n030 Ultra Ball\n031 Poké Pad\n032 Switch\n033 Pokémon Catcher\n034 Iris's Fighting Spirit\n035 Waitress\n036 Urbain\n037 Judge\n038 Brock's Scouting\n039 Boss's Orders\n040 Lillie's Determination\n041 Victini\n042 Zeraora\n043 Espeon ex\n044 Umbreon ex\nGRA Basic Grass Energy\nFIR Basic Fire Energy\nLIG Basic Lightning Energy\nPSY Basic Psychic Energy\nDAR Basic Darkness Energy" },
-  { name: 'Delta Reign', abbr: 'DLR', region: '', official: 103, parent: '',
+  { name: 'Delta Reign', abbr: 'DLR', region: '', official: 103, parent: '', suggest: true,
     note: 'Released 6 Nov 2026 and not in TCGdex yet: 103 cards plus 38 secret rares (104–141). A stand-in until TCGdex lists it. List from tcgcollector.com, pictures from pokecottage.com.',
     cards: "001 Heracross\n002 Surskit\n003 Masquerain\n004 Cacnea\n005 Cacturne\n006 Combee\n007 Vespiquen\n008 Shaymin\n009 Virizion\n010 Wimpod\n011 Mega Golisopod ex\n012 Sprigatito\n013 Floragato\n014 Meowscarada ex\n015 Smoliv\n016 Dolliv\n017 Arboliva\n018 Growlithe\n019 Arcanine\n020 Magmar\n021 Magmortar\n022 Torkoal\n023 Heat Rotom ex\n024 Heatmor\n025 Mantine\n026 Kyogre\n027 Frillish\n028 Jellicent\n029 Wishiwashi ex\n030 Electabuzz\n031 Electivire\n032 Jolteon\n033 Raikou ex\n034 Rotom\n035 Thundurus\n036 Pincurchin\n037 Pawmi\n038 Pawmo\n039 Pawmot\n040 Wattrel\n041 Kilowattrel\n042 Miraidon\n043 Drowzee\n044 Hypno\n045 Giratina\n046 Golett\n047 Mega Golurk ex\n048 Enamorus\n049 Sandshrew\n050 Sandslash\n051 Onix\n052 Steelix\n053 Groudon\n054 Landorus\n055 Nidoran ♀\n056 Nidorina\n057 Nidoqueen\n058 Spinarak\n059 Ariados\n060 Sableye\n061 Carvanha\n062 Sharpedo\n063 Darkrai\n064 Purrloin\n065 Liepard\n066 Zorua\n067 Zoroark ex\n068 Inkay\n069 Mega Malamar ex\n070 Morpeko\n071 Zarude\n072 Druddigon\n073 Jangmo-o\n074 Hakamo-o\n075 Kommo-o\n076 Cyclizar\n077 Tauros\n078 Eevee\n079 Delibird\n080 Azurill\n081 Swablu\n082 Altaria\n083 Kecleon\n084 Mega Rayquaza ex\n085 Tornadus\n086 Fletchling\n087 Fletchinder\n088 Talonflame ex\n089 Aarune\n090 Adventure Lantern\n091 Custom Vest\n092 Emcee's Hype\n093 Grisham\n094 Legendary Pyroduct\n095 Legendary Pyroduct\n096 Legendary Summit\n097 Legendary Summit\n098 Legendary Trench\n099 Legendary Trench\n100 Mega Rayquaza Cap\n101 Tasty Rice Ball\n102 Tate & Liza's Training\n103 Zinnia's Trust\n104 Masquerain\n105 Sprigatito\n106 Growlithe\n107 Magmortar\n108 Electivire\n109 Pincurchin\n110 Enamorus\n111 Groudon\n112 Zorua\n113 Inkay\n114 Eevee\n115 Azurill\n116 Altaria\n117 Kecleon\n118 Mega Golisopod ex\n119 Heat Rotom ex\n120 Wishiwashi ex\n121 Raikou ex\n122 Mega Golurk ex\n123 Mega Malamar ex\n124 Talonflame ex\n125 Aarune\n126 Adventure Lantern\n127 Custom Vest\n128 Emcee's Hype\n129 Pokémon Catcher\n130 Tate & Liza's Training\n131 Zinnia's Trust\n132 Bubbly Water Energy\n133 Growing Grass Energy\n134 Nitro Fire Energy\n135 Mega Golisopod ex\n136 Raikou ex\n137 Mega Golurk ex\n138 Mega Rayquaza ex\n139 Aarune\n140 Zinnia's Trust\n141 Mega Rayquaza ex" }
 ];
