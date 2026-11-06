@@ -1,0 +1,55 @@
+// TCG Pokédex service worker: keeps the app and any card pictures you've seen available offline.
+// Bump VERSION whenever index.html changes so phones pick up the new one.
+const VERSION = 'design-lab-5';
+const SHELL = 'tcg-design-lab-shell-' + VERSION;
+const IMAGES = 'tcg-design-lab-images';
+const SHELL_FILES = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-180.png', './design-lab.css', './design-lab.js', './design-interactions.js', './design-assets/charmander.png', './design-assets/mew.png', './design-assets/gengar.png', './design-assets/pikachu.png', './design-assets/charizard-card.webp', './design-assets/blastoise-card.webp', './design-assets/base1-15.webp', './design-assets/base1-44.webp', './design-assets/base1-58.webp', './design-assets/nunito-sans.ttf', './design-assets/nunito-sans-400.ttf', './design-assets/nunito-sans-700.ttf'];
+
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(SHELL).then(c => c.addAll(SHELL_FILES)));
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k.startsWith('tcg-design-lab-shell-') && k !== SHELL).map(k => caches.delete(k)))).then(() => self.clients.claim()));
+});
+
+self.addEventListener('message', e => { if (e.data === 'skipWaiting') self.skipWaiting(); });
+
+self.addEventListener('fetch', e => {
+  const url = new URL(e.request.url);
+  if (e.request.method !== 'GET') return;
+
+  // card pictures and set logos, plus the text-reader files for the camera scan: saved copy first, otherwise fetch and save
+  if (url.hostname === 'assets.tcgdex.net' || url.hostname === 'static.tcgcollector.com' || url.hostname === 'd1rv4ufwpgk2kk.cloudfront.net' || url.hostname === 'pokecottagecdn.com' || url.hostname === 'cdn.jsdelivr.net' || url.hostname === 'tessdata.projectnaptha.com') {
+    e.respondWith(caches.open(IMAGES).then(async c => {
+      const hit = await c.match(e.request);
+      // a picture saved from a plain <img> is opaque; the card scanner asks with CORS so it can read the pixels, so refetch for it
+      if (hit && !(hit.type === 'opaque' && e.request.mode === 'cors')) return hit;
+      const res = await fetch(e.request);
+      if (res.ok) c.put(e.request, res.clone());
+      return res;
+    }).catch(() => new Response('', { status: 504 })));
+    return;
+  }
+
+  // the card-picture fingerprint file (a few MB, renamed when rebuilt): fetch once, keep
+  if (url.origin === location.origin && url.pathname.endsWith('.fp')) {
+    e.respondWith(caches.open(IMAGES).then(async c => {
+      const hit = await c.match(e.request);
+      if (hit) return hit;
+      const res = await fetch(e.request);
+      if (res.ok) c.put(e.request, res.clone());
+      return res;
+    }).catch(() => new Response('', { status: 504 })));
+    return;
+  }
+  // the app itself: try the network so updates arrive, fall back to the saved copy offline
+  if (url.origin === location.origin) {
+    // bypass the host's 10-minute cache so a freshly uploaded index.html shows up on the next open
+    e.respondWith(fetch(e.request, { cache: 'no-cache' }).then(res => {
+      if (res.ok) caches.open(SHELL).then(c => c.put(e.request, res.clone()));
+      return res;
+    }).catch(() => caches.open(SHELL).then(c => c.match(e.request, { ignoreSearch: true }).then(hit => hit || c.match('./index.html')))));
+  }
+  // everything else (TCGdex API, Firebase) goes straight to the network
+});
