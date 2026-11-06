@@ -605,7 +605,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v100';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v101';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -741,6 +741,14 @@ function addCustom(setId, localId, name) {
   (state.custom[key] = state.custom[key] || {})[localId] = name;
   saveState(); sync.writeCustom(key, localId, name);
 }
+// Several cards at once: written to the shared database in ONE update. (One write per card made the database echo a
+// half-finished list back over this phone's list, leaving a 103-card set with a single card.)
+function addCustomMany(setId, pairs) {
+  if (!pairs.length) return;
+  const key = setKey(setId), bucket = (state.custom[key] = state.custom[key] || {});
+  pairs.forEach(([id, name]) => { bucket[id] = name; });
+  saveState(); sync.writeCustomMany(key, pairs);
+}
 function removeCustom(setId, localId) {
   const key = setKey(setId), cards = state.custom[key];
   if (!cards) return;
@@ -754,9 +762,21 @@ function removeCustom(setId, localId) {
 const regionName = l => ((LANGS.find(x => x[0] === l) || ['', l])[1]).replace(/ \(.*/, '');
 const REGIONS = LANGS.map(l => regionName(l[0]));
 const famSeries = region => ({ id: 'fam-' + (region ? region.toLowerCase().replace(/[^a-z]+/g, '-') : 'other'), name: region ? region + ' releases' : 'Added by the family' });
+// A ready-made set that lost most of its cards (the old one-write-per-card bug) is topped up once from its built-in list.
+const healedSets = new Set();
+function healPreset(id) {
+  if (healedSets.has(id)) return; healedSets.add(id);
+  let ps = null; try { ps = PRESET_SETS.find(x => x.abbr === state.customSets[id].abbr); } catch (e) { healedSets.delete(id); }
+  if (!ps) return;
+  const lines = ps.cards.split(String.fromCharCode(10)).filter(Boolean).map(l => { const i = l.indexOf(' '); return [l.slice(0, i), l.slice(i + 1)]; });
+  const mine = customIn(id);
+  if (Object.keys(mine).length >= lines.length / 2) return;
+  addCustomMany(id, lines.filter(([lid]) => !mine[lid]));
+}
 function customSetData(id) {
   const cs = state.customSets && state.customSets[id];
   if (!cs) return null;
+  healPreset(id);
   const set = { id, name: cs.name, cardCount: { total: 0, official: cs.official || 0 }, cards: [], serie: famSeries(cs.region), abbreviation: { official: cs.abbr || '' }, custom: true, region: cs.region || '', parent: parentOf(id) };
   mergeCustom(set);
   set.cardCount.total = Math.max(set.cards.length, set.cardCount.official);   // a 103-card set with 1 card added so far still counts out of 103
@@ -772,11 +792,14 @@ function createCustomSet(name, abbr, cardsText, region, official, parent, plainF
   let id = 'x-' + slug, n = 2;
   while (state.customSets[id]) id = 'x-' + slug + '-' + n++;
   state.customSets[id] = { name, abbr: abbr || '', region: region || '', official: +official || 0, parent: parent || '', plainFrom: +plainFrom || 0 };
-  saveState(); sync.writeCustomSet(id, state.customSets[id]);
+  const pairs = [];
   (cardsText || '').split('\n').forEach(line => {
     const m = line.trim().match(/^([A-Za-z0-9-]+)\s*[,:\t -]?\s*(.+)$/);
-    if (m) addCustom(id, m[1].replace(/\/.*$/, ''), m[2].trim());
+    if (m) pairs.push([m[1].replace(/\/.*$/, ''), m[2].trim()]);
   });
+  const key = setKey(id), bucket = (state.custom[key] = state.custom[key] || {});
+  pairs.forEach(([lid, nm]) => { bucket[lid] = nm; });
+  saveState(); sync.writeNewSet(id, state.customSets[id], key, pairs);   // the set and all its cards in one write
   window._sets = window._series = null;
   return id;
 }
@@ -990,6 +1013,17 @@ const sync = {
     if (!this.on) return;
     const r = this.path('customsets', id);
     (v ? this.fb.db.set(r, v) : this.fb.db.remove(r)).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
+  },
+  writeCustomMany(key, pairs) {
+    if (!this.on || !pairs.length) return;
+    const up = {}; pairs.forEach(([id, n]) => { up[dbKey(id)] = n; });
+    this.fb.db.update(this.path('custom', key), up).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
+  },
+  writeNewSet(id, v, key, pairs) {
+    if (!this.on) return;
+    const up = {}; up['customsets/' + dbKey(id)] = v;
+    pairs.forEach(([lid, n]) => { up['custom/' + dbKey(key) + '/' + dbKey(lid)] = n; });
+    this.fb.db.update(this.fb.db.ref(this.fb.database, 'families/' + dbKey(this.code)), up).catch(e => { this.status = 'error: ' + e.message; renderSyncStatus(); });
   },
   removeAt(...parts) { if (this.on) this.fb.db.remove(this.path(...parts)).catch(() => {}); },
   writeCustom(key, localId, name) {
@@ -2009,7 +2043,7 @@ function openAddSet() {
     const b = el('button', '', '<em>＋ Fill in ' + todo.length + ' card' + (todo.length === 1 ? '' : 's') + ' of ' + esc(ps.name) + '</em><span>names and any missing numbers</span>');
     b.querySelector('em').style.fontStyle = 'normal';
     b.onclick = () => {
-      todo.forEach(([id, n]) => addCustom(have, id, n));
+      addCustomMany(have, todo);
       if (ps.plainFrom && !state.customSets[have].plainFrom) { state.customSets[have].plainFrom = ps.plainFrom; saveState(); sync.writeCustomSet(have, state.customSets[have]); }
       window._sets = window._series = null; done(have);
     };
@@ -2419,7 +2453,7 @@ function renderCards() {
       if (todo.length) {
         const fill = el('button', 'addcard', '＋ Fill in ' + todo.length + ' card' + (todo.length === 1 ? '' : 's') + ' from the full list');
         fill.onclick = () => {
-          todo.forEach(([id, n]) => addCustom(sid, id, n));
+          addCustomMany(sid, todo);
           if (ps.plainFrom && !state.customSets[sid].plainFrom) { state.customSets[sid].plainFrom = ps.plainFrom; saveState(); sync.writeCustomSet(sid, state.customSets[sid]); }
           mergeCustom(window._set); window._set.cardCount.total = Math.max(window._set.cards.length, window._set.cardCount.official); renderSet();
         };
