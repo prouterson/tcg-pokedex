@@ -21,6 +21,7 @@ window.DesignLab = (() => {
   function infoFor(setId,id,language='en'){
     if(setId==='base1'&&localCards[id])return {name:localCards[id][0],image:'design-assets/'+localCards[id][1]};
     let cached;try{cached=JSON.parse(localStorage.getItem(CACHE_PFX+language+':sets/'+setId)||'null');}catch(e){}
+    if(cached&&cached.cards){try{addMissingArt({id:setId,cards:cached.cards},language);}catch(e){}}   // the saved list is TCGdex's own, so add the pictures it lacks (promos, new sets)
     let card=cached?.cards?.find(c=>c.localId===id);
     if(!card&&state.customSets&&state.customSets[setId]){try{card=customSetData(setId).cards.find(c=>c.localId===id);}catch(e){}}   // a set the family added
     return {name:card?.name||('#'+id),image:card?.image?lowSrc(card.image):null};
