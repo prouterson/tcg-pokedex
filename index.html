@@ -611,7 +611,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v118';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v119';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -3174,6 +3174,71 @@ async function extendIndex(onProgress) {
   if (todo.length) { let b = ''; ids.forEach(id => { const v = vecs.get(id); for (let k = 0; k < L; k++) b += String.fromCharCode(v[k] & 255); }); cacheSet('fpext', { file: FP_FILE, ids, vec: btoa(b) }); }
 }
 
+// Gem pack number digits ("0904/07"): split the number into its seven characters and turn each into a small shape that
+// can be compared with shapes learned from the family's own cards. m = ink mask (1 = digit fill), W x H.
+const GLY_W = 14, GLY_H = 22, GLY_Q = 290;
+function gemSlots(m, W, H) {
+  const lab = new Int32Array(W * H).fill(-1), comps = [], st = [];
+  for (let s = 0; s < W * H; s++) {
+    if (!m[s] || lab[s] >= 0) continue;
+    const id = comps.length; let x0 = W, y0 = H, x1 = 0, y1 = 0, n = 0; st.push(s); lab[s] = id;
+    while (st.length) {
+      const p = st.pop(), x = p % W, y = (p / W) | 0; n++;
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const X = x + dx, Y = y + dy; if (X < 0 || Y < 0 || X >= W || Y >= H) continue; const q = Y * W + X; if (m[q] && lab[q] < 0) { lab[q] = id; st.push(q); } }
+    }
+    comps.push({ id, x0, y0, x1, y1, n, h: y1 - y0 + 1, w: x1 - x0 + 1 });
+  }
+  // the seven characters print touching, so the number is one wide blob (plus any piece that came apart beside it)
+  const wide = comps.filter(c => c.w > c.h * 3 && c.w < c.h * 6.5 && c.h >= 12).sort((a, b) => b.n - a.n)[0];
+  if (!wide) return null;
+  let x0 = wide.x0, x1 = wide.x1, y0 = wide.y0, y1 = wide.y1;
+  comps.forEach(c => { if (c.id === wide.id || c.n < 15) return; const cy = (c.y0 + c.y1) / 2; if (cy > y0 && cy < y1 && c.h > wide.h * 0.5 && (Math.abs(c.x0 - x1) < wide.h * 0.4 || Math.abs(x0 - c.x1) < wide.h * 0.4)) { x0 = Math.min(x0, c.x0); x1 = Math.max(x1, c.x1); y0 = Math.min(y0, c.y0); y1 = Math.max(y1, c.y1); } });
+  const bw = x1 - x0 + 1, col = new Float32Array(bw);
+  for (let x = x0; x <= x1; x++) { let n = 0; for (let y = y0; y <= y1; y++) if (m[y * W + x]) n++; col[x - x0] = n; }
+  // six cuts, each at the thinnest column near where an even split would put it
+  const cuts = [0];
+  for (let k = 1; k < 7; k++) { const c0 = Math.round(bw * (k - 0.4) / 7), c1 = Math.round(bw * (k + 0.4) / 7); let bi = c0; for (let x = c0; x <= c1; x++) if (col[x] < col[bi]) bi = x; cuts.push(bi); }
+  cuts.push(bw);
+  const g = [];
+  for (let k = 0; k < 7; k++) g.push(glyphNorm(m, W, x0 + cuts[k], x0 + cuts[k + 1], y0, y1));
+  return { g, box: [x0, y0, x1, y1] };
+}
+// one character: the ink in a 14 x 22 grid over its own ink box, centred and scaled to length 1, plus its width/height
+function glyphNorm(m, W, x0, x1, y0, y1) {
+  let a = x1, b = x0, c = y1, d = y0;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x < x1; x++) if (m[y * W + x]) { if (x < a) a = x; if (x > b) b = x; if (y < c) c = y; if (y > d) d = y; }
+  if (b < a) return null;
+  const v = new Float32Array(GLY_W * GLY_H), w = b - a + 1, h = d - c + 1;
+  for (let y = c; y <= d; y++) for (let x = a; x <= b; x++) if (m[y * W + x]) { const gx = Math.min(GLY_W - 1, ((x - a) / w * GLY_W) | 0), gy = Math.min(GLY_H - 1, ((y - c) / h * GLY_H) | 0); v[gy * GLY_W + gx] += 1; }
+  let mean = 0; for (let i = 0; i < v.length; i++) mean += v[i]; mean /= v.length;
+  let ss = 0; for (let i = 0; i < v.length; i++) { v[i] -= mean; ss += v[i] * v[i]; }
+  ss = Math.sqrt(ss) || 1; for (let i = 0; i < v.length; i++) v[i] /= ss;
+  return { v, ar: w / h };
+}
+function glyphSim(p, q) { let s = 0; for (let i = 0; i < p.v.length; i++) s += p.v[i] * q.v[i]; return s - Math.abs(Math.log(p.ar / q.ar)) * 0.5; }
+function glyphEnc(g) { let s = ''; for (const x of g.v) s += String.fromCharCode(Math.max(-127, Math.min(127, Math.round(x * GLY_Q))) & 255); return [Math.round(g.ar * 1000) / 1000, btoa(s)]; }
+function glyphDec([ar, b64]) { const raw = atob(b64), v = new Float32Array(raw.length); for (let i = 0; i < raw.length; i++) v[i] = ((raw.charCodeAt(i) << 24) >> 24) / GLY_Q; return { v, ar }; }
+// starting shapes, cut from the family's own scans (19-20 Nov 2026); every scan adds more (tcgPokedex.gemGlyphs, a dozen per digit)
+const GLY_SEED = {"0":[[0.51,"7+/v7+8ACRISABsbEgDv7+8AABISEhIAEhISAO/v+BIAEhISEgASEhIA7+8SEgASEgkA+AAAAADvACMjCSMJ7+/v7+/v7/gSEhIA+O/v7+/v7+/v+BISEgDv7+/v7wASAO8AEhIS7+/v7+/4EhIS7wAjIxvv7+/v7wkjIyMAABISAO/v7+8AABISEvgJEhIJ7+/v7/gAEhIS+AASEgDv7+/vAAASEhL4ABISAO/v7+8AABISEu/vIyMj7+/v7+8JIyMj+O8SEhIA7+/v7wASEgDv7+8SEgAA7+/v7/gS+O/v7wkSAAnv7+/v7+/v7+/v+BsJIxIA7+/v7+/v7+/v+AASEhIS+AAAAPjv7+/v7wASEhIAEhISAO/v7+/v7/gJEgASEhIA7+/v7+/v7+/4+AASEgA="],[0.327,"CgoKCgoWFjwWFgoKCgojCgoKCgoKIwoKCgoKCiMKCgoKCgojCgoKCgoKIwoKCv39/fHx/f39Cgov/fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8f0KCv3x8fHx8fHx8fH9IwoKCvHx8fHx8fHx8RY8FhYWCvHx8fHx8fEKCiMKCgoK8fHx8fHx8QoKIwoKCgr98fHx8fHxCgojCgoKCvHx8fHx8fEKCiMKCgoK8fHx8fHx8fEWPBYWFhbx8fHx8fHx8QojCgoK8fHx8fHx8fHx8QoKCv3x8fH98fHx8fHx8fHx8fHx8TwKCv3x8fHx8fHx8fHxIwoKCgoK/Qr9/f39/f0WCgoKCgoKIwoKCgoKCvH9/QoKCgojCgoKCgoK8fHx8fH9/QoKCgoKCgo="],[0.208,"ISEh8SEh8SEhIfEREfERERHxERHxERER8RER8REREfEREfERERHxERHxAQHx8fHx8QEBAfEBEfHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8QER8REREfHx8fHx8RHxERHxERER8fHx8fEBEfEREfERERHxAfHx8QER8RER8REREfER8fHxERHxERHxERER8RHx8fEhIfEhIfEhISHxIRHx8RER8RER8REREfER8fHxARHxERHxERER8RHx8fHxEfEREfERERHxAfHx8fEB8QER8RERAfHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHxAQEB8fHx8fHx8fHx8fERERHxERHxERER8RER8REREfEREfERERHxERHxARER8RER8REREfEREfE="],[0.229,"EhIjI/IjIyMS8hISEvISEhIS8hISEhLyEhIS8hICAgLyAgICAvICAhLy8vLy8vLy8vLy8vLy8vLy8vLy8vLy8vLy8vLy8vLy8vLy8gIC8vLy8vLy8vLy8vICEhIS8hLy8vLy8gIS8hISEhLyEvLy8vLyAhLyEhISEvISAvLy8vICEvISEhIS8hIS8vLyAhIS8hISEhLyEgLy8vLyIyPyIyMjI/IjI/Ly8vISEvISEhIS8hIS8vLy8vIS8hISEhLyEhIC8vLy8hLyEhISEvISAvLy8vLy8vICAhIC8vLy8vLy8vLy8vLy8vLy8vLy8vLy8vLy8vLy8vLy8vLyEhICAvIC8vLy8vLyAvISEhIS8hISEhLyEhIS8hISEhLyEhISEvISEhLy8gICAvICAhIS8hISEvI="]],"1":[[0.426,"F/f37Ozs7Oz3DAIsDAwXAhcCAuzs9wIXAhcCAhcCFwIXAgIXAhcCFwICDAIXAhcCAhcCFwIXAuzs9xcCFwICFwIXAvfs7OzsDAIXAgIX9+zs7Ozs7Ozs9xcCAgLs7Ozs7Ozs7OzsLAwMF+zs7Ozs7Ozs7OwCAgIXAgL3Avfs7Ozs7AICAhcCFwIXAuzs7Ozs9wICFwIXAhf37Ozs7OwCAgIXAhcCFwLs7Ozs7AICAhcCFwIXAuzs7OzsAgICFwIXAhcC7Ozs7OwhDAwsDCwMLPfs7Ozs7BcCAhcCFwIXAuzs7PcCFwICFwIXAhfs7OzsDAIXAgIXAhcCF/fsAgIXAhcCAhcCFwIXAvcXAhcCFwICAvcMAhcCAhcCFwIX9+zs7Oz3FwICFwIC9+zs7Ozs7Oz39wI="],[0.391,"8/Pz8/Pz8/P+CiIWFhbz8/Pz8/PzFgoKIgoKCvPz8/7+CgoiCgoiCgoK8/P+IgoKCiIKCiIK/vP+CgoiCgoKIgoKCvPz8xYKCiIKCgoK8/Pz8/PzCgoKIgr+8/Pz8/Pz8/MWCgoiCvPz8/Pz8/Pz8/7+CiIK/v7z8/Pz8/Pz8/PzIgoKChb+/hb+8/Pz8/P+CgoKIgoKIv7z8/Pz8/Pz8wo6FhY6FvPz8/Pz8/Pz8yIKCiLz8/Pz8/Pz8/PzFgoKIgrz8/Pz8/Pz8/MiCgoi8/Pz8/Pz8/Pz8xYKCiL+8/Pz8/Pz8/PzCgoKIgrz8/Pz8/Pz8/MWCgoi8/Pz8/Pz8/Pz8woKCiIK8/Pz8/Pz8/PzCgoKIgoK/vPz8/Pz8/Pz/goiCgoK8/Pz8/Pz8/Pz8xYKCgo="],[0.383,"8/Pz8/Pz8/4JFDYUFBTz8/Pz8/4JHwkJHwkJCfPz/hQJCQkfCQkfCQkJ/v4JHwkJCR8JCRT+8/MUCQkfCQkJH/7z8/Pz8x8JCR8JCf7z8/Pz8/PzHwkJHwnz8/Pz8/Pz8/MfFBQ2FP7z8/Pz8/Pz8/P+CR8JCf7+8/MJ8/Pz8/PzHwkJCR8JCR/z8/Pz8/Pz/gkJHwkJH/Pz8/Pz8/Pz8wkfCQkf8/Pz8/Pz8/Pz/h8JCRTz8/Pz8/Pz8/PzHwkJH/Pz8/Pz8/Pz8/42FBQ28/Pz8/Pz8/Pz8x8JCR/z8/Pz8/Pz8/P+HwkJCfPz8/Pz8/Pz8/MfCQkf8/Pz8/Pz8/Pz8x8JCR/z8/Pz8/Pz8/PzCQkJHwn+/vPz8/Pz8/Pz/gkfCQkJ8/Pz8/Pz8/Pz/hQJCQk="],[0.375,"8vLy8vLy8vLy/hQJFBTy8vLy8vLyCQkJIAkJCfLy8vL+CQkgCQkgCQkJ8vL+FAkJCSAJCSAJCf7+CQkgCQkJIAkJFP7y8hQUFDcUFBQg/v7y8vLyFAkJIAn+8vLy8vLy8vLyCQkgCQny8vLy8vLy8vL+CSAJCQny8vL+/vLy8vL+FAkJCSD+CSAJ/vLy8vLyCQkJIAkJIAny8vLy8vLy/gk3FBQ3CfLy8vLy8vLy8gkJCSAJ8vLy8vLy8vLyIAkJIP7y8vLy8vLy8vIUCQkgCfLy8vLy8vLy8iAJCSD+8vLy8vLy8vLyKxQUN/7y8vLy8vLy8vIgCQkg8vLy8vLy8vLy8hQJCSD+8vLy8vLy8vLyCQkJIAkJCfLy8vLy8vLyCQkgCQkJ8vLy8vLy8vLy8v4JCQk="]],"2":[[0.875,"7fkFEBAQHAv57e3tBRzzCxAQEBAQEBAQ8/8QEAsQEAv///8FEBAQEBALCxAF7e3t7e35EBAQEPMFEPnt7e3t7e3/EBAF7QsiBe3t+fPt7fMcIvPt7RAL8xAQEO3t7QUL7e3tEBAQEBAQ7e3tBQXt7e3/EBAQEBDz7e3/C+3t7e0FEBAQC+3t7QsF7e3t7fMQEBDt7e3tEP/t7e3tECIi/+3t7QUiEO3t7f8QEP/t7e35EBAL7e3tEBAL7e3t7QsQEBDt7fkQC/Pt7e3/EBAQEPPt+RAL7e3t7e3t7fMQC+0QIv/t7e3t7e3t7SIi8/kQBe3t7e3t7e3zEBAQ+RAQ////////BRAQEBDzEBAQEBAQEBAQEBAQEO3/EBAQEBAQEBAQEAX57e3//wv//xD////57e0="],[0.521,"9+7u7u4AChMTCiYTEwATAAATABMTExMAExMTABMTExMAExMTE/cAAAoAChMTEwAK7u7u7u7u7u7uABMTAPfu7u7u7u7u7u7uCiYKCu7u7u4A9+7u7u7uCgAT9/cTABMTE/fu7u4AABMTExMAExMTAO7u7gAAExMTEwATExP37u7u7gATExMTABMTCu7u7u7uABMTExMAEwru7u7u7u4AJiYmJgoc7u7u7u7u7gATExMK7u7u7u7u7u73ABMTCu7u7u7u7u7u7vcAEwru7u7u7u7u7u7uCgAK7u7u7u7u7u7u7vccChPu7u7u7u7u7u73ExMAAO7u7u7u7u7uAAoTEwATCgAA9wAAAPcTExMTABMTExMAExMTABMTExMAExMTEwATExMAEwoA7vcAAAAA9wAAAPc="],[0.521,"AO7u7u4AABERCSMjIwAREQAJABEREREAERERABEREREAEREREQAREREAEREREQAREQkA9/fuAPf3CRERABEA7u7u7u7u7u7uCSMJI+7u7u7u7u7u7u7uCQAR9+7u7gAAAO7u7u73ABERAAkAERERAO7u7u4AEREREQAREREA7u7u7u4RERERABEREQDu7u7u7hEREREAEREJ7u7u7u73IyMjIwkjGu7u7u7u7u4RERERAPfu7u7u7u7u7hEREQnu7u7u7u7u7u7uEREJ7u7u7u7u7u7u7gARCe7u7u7u7u7u7u73CSP37u7u7u7u7u7u9xEAEe7u7u7u7u7u7vcJEQARAO7u7u7u7u4JERERABERCREAERERABEREREAEREREQAREREAEREA9+4AABERABEREQA="],[0.531,"B/fu7v8H/xAYICAgIP8QEBAQEBD/EBAQEBAQ/xAQEBAQEP8QEBAQEBD/BxAQEBAQ///37u7u9/fu9yAgIBDu7u7u7u7u7u7u9wcQ9+7u7u7u7u7u7u7u/xAH7u7u/wcQ9+7u7u7/EBD//xAQEBAQ7u7u7u4gIAcgICAgICD/7u7u7hAQ/xAQEBAQB+7u7u7u/xD/EBAQEBD37u7u7u7/EP8QEBAQ9+7u7u7u7v8Q/xAQEO7u7u7u7u7uByAHIAf37u7u7u7u7u4QEP//7u7u7u7u7u7u7hAH7u7u7u7u7u7u7u4HEPfu7u7u7u7u7u7u/xggB+7u7u7u7u7u/wcQEBAH9+7u9//37vcQEBAQEBD/EBAQEBAQ/xAQEBAQEP8QEBAQEBD/EBD/7u739/8HEBAQB/c="]],"3":[[1.04,"IA4K+A4cDg4G6+vr6/AODg4GDg4GDg746+vwBg4ODgYODgYODg706/0G/Q4gEw79+AEcIA74HBPr+A4G6+vr6/AKBg4OBuv0Dgbr6+vr6/0GDg746/gOBvD0+Ovr+AYODuvr+CATICATBuv0EyAX6+v9DgYODgbw6/QGDv3r6/QOBg706+vr+AYOAevr/Q4GCuvr6+sKBg796+v9IBMc6+vr6xMTIAbr6/gOBg4G+PDr9AYO/evr+A4GDg4GAevwAQ4B6+sGIBMgIBMT6+sOIBPr6/gOAfD9+PDr6wEODvDr+A796+vr6+vwBg4O+Ov9Dvjr6+vr6/0GDg4BChcgEw79+P0GIBMc/RMODg4GDg4GDg4OBvTr/Q4OCvgGDgYODg746+vr9Ovr6+v0+P0G9Ovr6+s="],[0.531,"DgX17fUF/Q4WHh4eHgUODg4ODg79Dg4ODg4O/Q4ODg4ODv0ODg4ODg79Dg4ODg4O/Q79/f39/fXt/R4eHh4F7e3t7e3t7e3t9Q4ODu3t7e3t7e3t7e3tBQ4O9fXt9f39/e3t7e39Dg79Dg4ODg4O/e3t7f0eHgUeHh4eHgX17e3t7Q4O/Q4O9e3t7e3t7e3tDg79Dv3t7e3t7e3t7e39Dv0ODu3t7e3t7e3t7Q4O/Q4O9e3t7e3t7e3tHh4FHh4eHh4W/e3t7fUODv0ODg4ODg797e3t/Q4O9f0FDg4ODu3t7e0FDv3t7e3t7e3t7e3tFh4eDu3t7e3t7e3t/Q4ODg4O/f3t7e3t7e0ODg4ODg79Dg4ODg4O/Q4ODgX9Bf0ODg4ODg79DgX17e3t7fX9/Q4ODv0="]],"4":[[0.604,"Hg8P9+/v7+/v9wcPHh4eDw8PB/fv7+8PDw8PDx4PDw8P/+/v/w8PDw8PB/8HDw8P7/cPDw8P///v7+8PDw8PBw8PDwfv7+/v7x4eHh4eHh4P7+/v7+/vBw8PDw8PD+/v7+/v7/cPDw8PDw/37+/v7+/v9w8PDw8P/+/v7+/v7+/vDw8PDw/37+/v9+/v7/cPDw8P9+/v7/cP7+/v7x4eHgfv7+/vFx737+/vDw//7+/v7+//9+/v7+8PD//v7+/v7+/v7+/v9w8P/+/v7+/v7+/v7+/3Dw8H9+/v7+/v7+/v7+8eHh4eDw8PDx4X7+/v9w8PDw8PDw8PDwfv7+/3Dw8PB////w8PD/cHDw8PDw/v7+/v/w8PDx4PDw8PB+/v7+/v9w8PHg8PB//v7+/v7+/v7/8="],[0.625,"LRUOBu/v7+/v/g4VHR0dDg4OBvfv7/cODg4ODh0ODg4O/u/3Dg4ODg4O9/cGDg4G7wYODg4O/u/v7+8ODg4GFQ4OBu/v7+/v9x0dHR00HRX37+/v7+/3Dg4ODh0O9+/v7+/v7/4ODg4OHf7v7+/v7+/v7w4ODg4d9+/v7+/v7+/+Dg4ODgbv7+/v7+/v7/cODg4O/u/v7wb37+/vBh0dHQbv7+8GHf7v7+/3Dg7+7+/v7wYO7+/v7/cODv7v7+/v7+/v7+/v/g4O7+/v7+/v7+/v7+/3Dg7+7+/v7+/v7+/v7wYdHR0OHQ4ODg7v7+/v/g4ODg4dDg4ODvfv7+/+Dg4ODgb+Dg4O/u8GDg4ODg7v7+/3Dg4O/h0ODg4O9+/v7+/3Dg4OHQ4ODvfv7+/v7+8GDg4="],[0.563,"AvHx8fHx8fHx+RIbEgISEgLx8fHx8QISEhISAhISEgrx8fHxEhISEhICChISEvnx8QoSEhIK8fHx+RISEvnxChISEvnx8fHxCiMjIxsjIxv58fHx8fHxAhISEhISCvHx8fHx8fECEhISEgrx8fHx8fHx8fkSEhIS+fHx8fHx8fHx8RISEgrx8fH5AvHx8fHxEhIK8fHx8RIC8fHx8fESG/nx8fECIxvx8fHx8RIC8fHx8QIC8fHx8fHxAgLx8fHx8fHx8fHx8fESAvHx8fHx8fHx8fHx+RIK8fHx8fH58fHx8fkSIyMjIyMjIyMK8fHxAhISEhISEhISEgrx8QoSEhIKAgICAhISEvkSEhISCvnx8fHxChISAhISEhL58fHx8fHxEhICEgoC8fHx8fHx8fHxAvk="]],"5":[[0.609,"EAf27vYQISEhISEhISEQEBD/EBAQEBAQEBAQEBAQEBAQEBAQB///////7gcQEBAQEPbu7u7u7u7u7gcQEBAH7u7u7u7u7u7u7gcQEBDu7u7u7u7u7u7u9hAQEO7u7u4HEBDu7u7uBxAQ7u7u7gcQEO7u7u7/EBDu7u7u7v//7u7u7v8Q/+7u7u7u7u7u7u7u/xAQ7u7u7u7u7u7u7u4HISEH/xAQB/bu7u7u7v8QEBAQEBAQEAfu7u7u/xAQEBAQEBAQEO7u7u4HEBAQEBAQEBD/7u7u7hAQEPb//////+7u7u4HEBD/7u7u7u7u7u7u9hAQEBDu7u7u7u7u7v8QEBAQEO7u7u7u7u4QEBAQEBAQEBAQEBAQEBAQEBAHBxAQEBAQEBAQEBAH9u7u7v8HEBAQEBA="],[0.543,"Ae7u7vcUHhQUARQUFAEUFAELARQUFBQBFBQUARQUFBQBFBQUAQEUFAH3ARQUFAEUC+7u7u7u7u7uARQUARQL7u7u7u7u7u7uARQBFAHu7u7u7u7u7u73FAEUAe7u7u4LFAHu7u4BARQL7u7u7gEUAe7u7gEBFAHu7u7u9wH37u7u9wEUAe7u7u7u7u7u7u73ARQB7u7u7u7u7u7u7gELKB4BAQEUCwHu7u7uAQEUFBQUARQUFAHu7u4BARQUFBQBFBQUAe7u7gEBFBQUFAEUFBQB7u73FAEUAe7u9wEB9+7u7gEUART37u7u7u7u7u73FBQBFPfu7u7u7u7uARQUFAEUC/fu7u7u7u4UFBQUARQUFBQBFBQUARQUFAH3CxQUFAEUFBQBAQHu7u7u7gEB9wEUFAE="],[0.571,"/e3t7fUFDh4eDg4ODg4ODv39Dg4ODg4ODg4ODg4ODg4ODg4ODg4ODg4OBQ4ODg4ODvXt7f317e3tBR4eHh4O7e3t7e3t7e3t/Q4ODv3t7e3t7e3t7e31Dg4O/e3t7e0FDg7t7e39Dg797e3t7Q4ODu3t7f0eHv3t7e3tBQUO7e3t9Q4O/e3t7e3t7e3t7e39Dg797e3t7e3t7e3t7e0ODg71/f399e3t7e3t9Q4ODg4ODg4OBe3t7e39Hh4eHh4eHh4eBe3t7QUODg4ODg4ODg7t7e3tBQ4OBfX9/QX99e3t7fUODg717e3t7e3t7e39Hh4eHvXt7e3t7e3tBQ4ODg4ODv397e3t7f0ODg4ODg4ODg4ODg4ODg4ODgX9BQ4ODg4ODg4ODv317e3t9f39Dg4ODg4="]],"7":[[0.958,"HgoUKBkZGSgZGR7x7PYUCgoUCgoKFAoKFAr2BRQKChQKCgoUCgoUCgoKCgoK7Ozs7Ozs8Q8KCgrxCgDs7Ozs7OzsBQoKCuwFD/Hs7Ozs7OwUGRkP7OwKFAoKCvbs7A8KCvvs7AoUCgoK7OzsFAoK8ezsABQKCgXs7PEUCgrx7OwAFAoK9uzsABQKCuzs7PsUCgrs7OwKFAoK7OzsBSgZCuzs+xkoGRns7Oz7FArx7OwAChQKCvHs7AAUBezs8QoKAAAK9uzsBRT77Oz7Cgrx9gr27OwFFPHs7AAKCvHsCgrsABkZ7OzsHhkP7OwUGfEFChTs7PEUCvvs7PEKDwoKFPv7BRQK8ezs7AUUCgoUCgoKFADs7Ozs8RQK+xQKCgoU9uzs7OzsCvHs9vv7+/vs7Ozs7Ow="],[0.875,"Dv0OHw4ODhkfHx8Z9+wODg4ODg4ODg4ODg4O9w4ODg4ODg4ODg4ODg4DDg4OA/39/f39/f0ODgPyDg7y7Ozs7Ozs7P0ODuwDH/Ls7Ozs7OzsCB8f7OwDDv0ODgPs7OwDDg7s7AMODg4OCOzs7AgOCOzs/Q4ODg797OzyDg4D7Oz3Dg4ODvLs7P0ODv3s7PcODg4D7OzsDg4I7Ozs8h8fHwjs7PcfHw7s7Oz3Dg4I7OzsCA4O8uzs7PcODgPs7OwIDg7s7Ozs/Q4O8uzs8g4O/ezs7OwDDg7s7OwDDg737Ozs8hkfCOzs8hkfGezs7OwDDg7y7Oz3Dg737Ozs/Q4ODgPy/QgODvLs7OwODg4ODg4ODg4I7Ozs7A4ODg4ODg4ODv3s7OzsDgPy8ggODg4I7Ozs7Ow="],[0.875,"Bf8QEBsgICAgICAV/+4QEBAQEBAQEBAQEBAQ7hAQEAX////57u70ChD/+RAK7u7u7u7u7u4FEAXuCgXu7u7u7u7u7gUQBe7uIAX///8F7u7uECAb7u4FEBAQEP/u7u4QEP/u7vkQEBAQ/+7u9BAQ/+7u+RAQEBDu7u7/EBD07u70EBAQBe7u7goQCu7u7vQQEBD/7u70EBAK7u7u+SAgIO7u7v8gIPnu7u70EBAK7u7uChAQ7u7u7v8QEPnu7vQQEP/u7u7u+RAQ9O7u+RAQ/+7u7u4FEP/u7u4KEBD07u7u9CAg/+7u9CAgEO7u7vQKEBD57u4KEBD07u7uEBAQEBAQEBAQEO7u7u4QEBAQEBAQEBAF7u7u7hAQ/woQEBAQEO7u7u7uEP/u7u7////07u7u7u4="],[0.854,"//kPICAVFSAgICAP9O4PDw8PDw8PDw8PDw8K7g8PDw8PDw8PDw8PDw/0Dw8P///////u7u4KDwT/Dwru7u7u7u7u7gQP/+4EIO7u7u7u7u7uCiAP7u4PBP////nu7u4EDwTu7gQPDw8PBO7u7goPBO7uBA8PDw/07u75Dw/57u7/Dw8PD+7u7v8PD+7u7vkPDw8K7u7uCg8K7u7u+SAgIP/u7vkgIP/u7u7uDw8K7u7u/w8K7u7u7vkPD//u7u4PD//u7u7u+Q8P+e7u7g8P/+7u7u7/Dwru7u7/Dw/07u7u7hUgCu7u7hsgD+7u7u70Dw/u7u70Dw/07u7u7g8PD/Tu7gQPD+7u7u4PDw8PDwoPDw8E7u7u7g8PDw8PDw8PD/Tu7u7uDwTu9AoPDw/57u7u7u4="]],"9":[[0.638,"Dvfv7+/3DjQdHR0dHQ4dDv//Bg4OHQ4ODg4ODh0ODg4ODg4d//////8O/w4ODg4ODv/v7+/v7+/v9w4ODg737+/v7+/v7+/v/w4OBu/v7+/v7+/v7+/vDg7/7+/v7wYO/+/v7+8WHQbv7+8GHR0d9+/v7/8O/+/v7/8ODg7/7+/v/w7/7+/v9w4OBu/v7+/vDg7/7+/v7+/v7+/v7+8ODg7v7+/v7+/v7+/v7wYODg7v7+/v7+/v7+/vDg4OHQ7/////7+/v7wYdHR00HR0dHf/v7+/v/w4ODgb////v7+/v7/cODg737+/v7+/v7+/vBg4ODv/v7+/v7+/v9wYODg4OBu/v7+/v9/8dDg4ODg4OHQ4ODg4ODh0ODgb/Dg4dDg4ODg4OHf//7+/v/wYODg4ODgY="],[0.596,"APfv7+/v9wgQISEhEAgQEADv7wgQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ9xAQEBAQEBAA9+/v7+/v9xAQEBAI7+/v7+/v7+/v9wgQEADv7+/v7+/v7+/vABAQ7+/v7/cAAO/v7+8AIRDv7+/vECEhEO/v7+8QEO/v7+8IEBAQ7+/v7xAQ7+/v7wAQEPfv7+/vABAI7+/v7/cA7+/v7+8AEBDv7+/v7+/v7+/v7wgQEAj37+/v7+/v7+/vABAQEBAIAAAA7+/v7+8hISEhISEhISHv7+/v9xAQEAgAAAAA7+/v7+8IEBAA7+/v7+/v7+/v9xAQEAjv7+/v7+/v7wAQEBAQEPfv7+/v7/cQEBAQEBAQEBAQEBAQEBAQEBAACBAQEBAQEBAQEBAA7+/v9wAIEBAQEBA="],[0.587,"E/jv7+/vChMcJCQkHAETEwoBARMTExMTExMTAQoTExMTExMTEwEBAQH47woTExMTEwHv7+/v7+/v7wETExMB7+/v7+/v7+/v7xMTE+/v7+/v+O/v7+/vARMB7+/v7woTCu/v7+/vEwrv7+/vChMTAe/v7+8TAe/v7+8TExMB7+/v7woK7+/v7wETEwHv7+/vARMB7+/v7/j47+/v7+8cJBz47+/v7+/v7+/v7wETExMK7+/v7+/v7+/vExMTExMTExMT7+/v7+8TExMTExMTEwrv7+/vARMTCvjv7+/v7+/v7+8TExMB7+/v7+/v7+/vChMTEwHv7+/v7+/vAQoTExMTEwHv7+/4AfgTExMTExMTExMTExMTARMTEwoBARMTExMTExMBCgHv7+/v7/gBAQETEwE="],[0.571,"Fv7u7u72BhYeHh4eHhYODgb+/g4ODg4ODg4ODg4ODg4ODg4ODg4ODv4G9g4ODg4ODgb27u7u7u7u9g4eHh4W7u7u7u7u7u7u7g4ODu7u7u7u/vbu7u7u9g4G7u7u7v4ODvbu7u7uDg7u7u7u/g4O/u7u7u4WDu7u7u4WHh4O7u7u7v4O9u7u7u4ODv7u7u7uDg7+7u7u7u7u7u7u7u7+Dg4G7u7u7u7u7u7u7g4ODg4G7u7u7u7u7u7uHh4eHh4eFg4O/u7u7vYODg4ODg4ODgbu7u7u/g4ODvbu/v7u7u7u7vYODg4G7u7u7u7u7u7+Hh4eHg727u7u7u7uDg4ODg4ODg7+/v7+Bg4ODg4ODg4ODg4ODg4ODg4ODv7u9g4ODg4ODg4O/vbu7u7u7u72/v4GDg4="]]};
+const GLY_KEY = 'tcgPokedex.gemGlyphs';
+let glyphStore = null;
+function glyphLoad() {
+  if (glyphStore) return glyphStore;
+  let own = {}; try { own = JSON.parse(localStorage.getItem(GLY_KEY) || '{}'); } catch (e) {}
+  glyphStore = {};
+  [GLY_SEED, own].forEach(src => Object.entries(src).forEach(([ch, list]) => list.forEach(t => { try { (glyphStore[ch] = glyphStore[ch] || []).push(glyphDec(t)); } catch (e) {} })));
+  return glyphStore;
+}
+function glyphLearn(ch, g) {
+  if (!g || !/^[0-9]$/.test(ch)) return;
+  let own = {}; try { own = JSON.parse(localStorage.getItem(GLY_KEY) || '{}'); } catch (e) {}
+  (own[ch] = own[ch] || []).push(glyphEnc(g)); if (own[ch].length > 12) own[ch].shift();
+  try { localStorage.setItem(GLY_KEY, JSON.stringify(own)); } catch (e) {}
+  glyphStore = null;
+}
+const glyphBest = (g, ch) => { const ts = glyphLoad()[ch]; return ts && ts.length ? Math.max(...ts.map(t => glyphSim(g, t))) : null; };
+
 /* ---------- camera scan: match the picture, or read "001/084 PBL" off the card, and jump to it ---------- */
 const TESS_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
 // Language of the printed card, from its text: English, Japanese or Simplified Chinese. The English reader is the one already
@@ -3890,10 +3955,27 @@ const scanner = {
       for (let y = 0; y < rh; y++) for (let x = 0; x < CW; x++) if (L[(ry + y) * CW + x] >= hiT) { const i = ((y + M) * o.width + Math.round(x + M + y * shear)) * 4; q[i] = q[i + 1] = q[i + 2] = 0; }
       ox.putImageData(od, 0, 0); return o;
     };
+    // first the digit matcher: split the number into its seven characters and compare the copy digit (the fourth) with
+    // digit shapes learned from this family's own cards; it only answers when one copy is clearly the best fit
+    {
+      const im = ink(0.2), d = im.getContext('2d').getImageData(0, 0, im.width, im.height).data, m = new Uint8Array(im.width * im.height);
+      for (let i = 0; i < m.length; i++) m[i] = d[i * 4] < 128 ? 1 : 0;
+      if (!this.gemInk) try { this.gemInk = im.toDataURL('image/png'); } catch (e) {}
+      const sl = gemSlots(m, im.width, im.height);
+      if (sl && sl.g.every(Boolean)) {
+        if (!this.gemSlotsSeen) this.gemSlotsSeen = sl.g;
+        this.gemGlyph = sl.g[3];
+        const ids = Object.keys(a.map).filter(k => k.slice(0, 2) === g && k[2] === '0' && a.map[k] === a.map[pic.card.localId]);
+        const sc = ids.map(id => [id, glyphBest(sl.g[3], id[3])]).sort((p, q) => (q[1] == null ? -9 : q[1]) - (p[1] == null ? -9 : p[1]));
+        this.gemRead += 'shape ' + sc.slice(0, 3).map(([id, v]) => id[3] + ':' + (v == null ? '-' : v.toFixed(2))).join(' ') + ' | ';
+        const all = sc.every(x => x[1] != null), top = sc[0], nx = sc[1];
+        if (top && top[1] != null && top[1] >= (all ? 0.55 : 0.7) && (!nx || nx[1] == null || top[1] - nx[1] >= 0.1)) return top[0];
+      }
+    }
     try {
       await this.worker.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: '0123456789/' });
       for (const shear of [0.2, 0]) {
-        const im = ink(shear); if (shear && !this.gemInk) try { this.gemInk = im.toDataURL('image/png'); } catch (e) {}
+        const im = ink(shear);
         const t = (await this.worker.recognize(im)).data.text;
         this.gemRead += t.replace(/\s+/g, ' ').trim() + ' | ';
         // the group and copy just before the slash (often read as a 7): "0904/07", "0904707", "8871105/0788" (logo read as digits)
@@ -3913,7 +3995,7 @@ const scanner = {
   // The last dozen reads are kept on the phone (tcgPokedex.gemLog) so a misread can be looked at afterwards.
   async gemCopy(pic) {
     const reads = [], votes = {};
-    this.gemRead = ''; this.gemInk = null;
+    this.gemRead = ''; this.gemInk = null; this.gemSlotsSeen = null; this.gemGlyph = null;
     for (let f = 0; f < 3; f++) {
       if (f) await new Promise(r => setTimeout(r, 120));
       let id = null; try { id = await this.gemReadOnce(pic); } catch (e) {}
@@ -3923,6 +4005,13 @@ const scanner = {
     }
     const best = Object.entries(votes).sort((p, q) => q[1] - p[1])[0];
     const res = best ? { id: best[0], sure: best[1] >= 2 } : null;
+    // the digits whose value is known (the group from the picture, the 0 before the copy, the "07" after the slash) teach
+    // the matcher, but only when they look like those digits already (a bad split must not teach it rubbish)
+    const sg = this.gemSlotsSeen, g = pic.card.localId.slice(0, 2);
+    if (sg) {
+      const known = [[0, g[0]], [1, g[1]], [2, '0'], [5, '0'], [6, '7']], fit = known.map(([k, ch]) => glyphBest(sg[k], ch)).filter(v => v != null);
+      if (fit.length && Math.min(...fit) >= 0.45) known.forEach(([k, ch]) => glyphLearn(ch, sg[k]));
+    }
     try { const k = 'tcgPokedex.gemLog', log = JSON.parse(localStorage.getItem(k) || '[]'); log.push({ at: Date.now(), pic: pic.card.localId, reads, text: this.gemRead, got: res, ink: this.gemInk }); localStorage.setItem(k, JSON.stringify(log.slice(-12))); } catch (e) {}
     return res;
   },
@@ -3932,7 +4021,7 @@ const scanner = {
     if (!gc || gc.set !== set.id || !gc.ids.includes(card.localId)) return;
     const row = el('div', 'gemcopies');
     gc.ids.forEach(id => {
-      const b = makeButton(String(+id.slice(2)), () => { if (id === card.localId) return; this.gemNoRead = false; this.swap = true; this.found = { localId: id }; this.show(set.id, this.found); }, 'Copy ' + id);
+      const b = makeButton(String(+id.slice(2)), () => { if (id === card.localId) return; this.gemNoRead = false; if (this.gemGlyph) { glyphLearn(id[3], this.gemGlyph); this.gemGlyph = null; } this.swap = true; this.found = { localId: id }; this.show(set.id, this.found); }, 'Copy ' + id);
       if (id === card.localId) b.classList.add('on');
       row.appendChild(b);
     });
