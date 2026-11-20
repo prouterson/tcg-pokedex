@@ -610,7 +610,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v113';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v114';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -3852,15 +3852,26 @@ const scanner = {
     const a = ART[code], g = pic.card.localId.slice(0, 2), max = +((PRESET_DEN[code] || {})[g] || 9);
     // where the picture match put the card (its size and offset against the outline), then the number's place on the card
     const W = at.src.videoWidth || at.src.width, H = at.src.videoHeight || at.src.height, b = at.box, sc = pic.scale, sh = pic.shift || [0, 0];
-    const cw = b.w * sc, ch = b.h * sc, x0 = b.x + b.w / 2 - cw / 2 + sh[0] * b.w, y0 = b.y + b.h / 2 - ch / 2 + sh[1] * b.h;
-    const tries = [[0.13, 0.42, 0.93, 0.995], [0.08, 0.48, 0.91, 1.02]];        // "0903/07" sits at about 17-33% across, 95-98% down
+    // (the matched rectangle is the card less the 3.5% border the fingerprints leave off, so grow it back to the whole card)
+    const cw = b.w * sc / 0.93, ch = b.h * sc / 0.93, x0 = b.x + b.w / 2 - cw / 2 + sh[0] * b.w, y0 = b.y + b.h / 2 - ch / 2 + sh[1] * b.h;
+    // "0903/07" sits at about 15-30% across, right at the bottom; tried tight first, then nudged up, then light-on-dark
+    const tries = [[0.13, 0.36, 0.965, 1.02, 0], [0.13, 0.36, 0.945, 1.0, 0], [0.13, 0.36, 0.965, 1.02, 1]];
+    // the number is pale with a dark outline: a stretched grey copy reads far better than a black-and-white one
+    const grey = (x, y, w, h, inv) => {
+      const k = 500 / w, c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
+      const cx = c.getContext('2d', { willReadFrequently: true }); cx.imageSmoothingQuality = 'high'; cx.drawImage(at.src, x, y, w, h, 0, 0, c.width, c.height);
+      const d = cx.getImageData(0, 0, c.width, c.height), px = d.data; let lo = 255, hi = 0;
+      for (let i = 0; i < px.length; i += 4) { const l = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]; px[i] = l; if (l < lo) lo = l; if (l > hi) hi = l; }
+      for (let i = 0; i < px.length; i += 4) { let l = (px[i] - lo) / Math.max(1, hi - lo) * 255; if (inv) l = 255 - l; px[i] = px[i + 1] = px[i + 2] = l; }
+      cx.putImageData(d, 0, 0); return c;
+    };
     this.gemRead = '';
     try {
       await this.worker.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: '0123456789/' });
-      for (const [s0, s1, t0, t1] of tries) {
+      for (const [s0, s1, t0, t1, inv] of tries) {
         const x = Math.max(0, x0 + cw * s0), y = Math.max(0, y0 + ch * t0), w = Math.min(W - x, cw * (s1 - s0)), h = Math.min(H - y, ch * (t1 - t0));
         if (w < 20 || h < 8) continue;
-        for (const im of prepForOCR(at.src, x, y, w, h, 700)) {
+        for (const im of [grey(x, y, w, h, inv)]) {
           const t = (await this.worker.recognize(im)).data.text;
           this.gemRead += t.replace(/\s+/g, ' ').trim() + ' | ';
           for (const run of t.replace(/\s+/g, '').match(/\d{4,}/g) || []) {
