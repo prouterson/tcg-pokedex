@@ -610,7 +610,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v114';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v115';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -3854,32 +3854,43 @@ const scanner = {
     const W = at.src.videoWidth || at.src.width, H = at.src.videoHeight || at.src.height, b = at.box, sc = pic.scale, sh = pic.shift || [0, 0];
     // (the matched rectangle is the card less the 3.5% border the fingerprints leave off, so grow it back to the whole card)
     const cw = b.w * sc / 0.93, ch = b.h * sc / 0.93, x0 = b.x + b.w / 2 - cw / 2 + sh[0] * b.w, y0 = b.y + b.h / 2 - ch / 2 + sh[1] * b.h;
-    // "0903/07" sits at about 15-30% across, right at the bottom; tried tight first, then nudged up, then light-on-dark
-    const tries = [[0.13, 0.36, 0.965, 1.02, 0], [0.13, 0.36, 0.945, 1.0, 0], [0.13, 0.36, 0.965, 1.02, 1]];
-    // the number is pale with a dark outline: a stretched grey copy reads far better than a black-and-white one
-    const grey = (x, y, w, h, inv) => {
-      const k = 500 / w, c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(h * k);
-      const cx = c.getContext('2d', { willReadFrequently: true }); cx.imageSmoothingQuality = 'high'; cx.drawImage(at.src, x, y, w, h, 0, 0, c.width, c.height);
-      const d = cx.getImageData(0, 0, c.width, c.height), px = d.data; let lo = 255, hi = 0;
-      for (let i = 0; i < px.length; i += 4) { const l = 0.299 * px[i] + 0.587 * px[i + 1] + 0.114 * px[i + 2]; px[i] = l; if (l < lo) lo = l; if (l > hi) hi = l; }
-      for (let i = 0; i < px.length; i += 4) { let l = (px[i] - lo) / Math.max(1, hi - lo) * 255; if (inv) l = 255 - l; px[i] = px[i + 1] = px[i + 2] = l; }
-      cx.putImageData(d, 0, 0); return c;
+    // A tall strip across the bottom left, 600 px wide. The number is pale digits with a dark outline on the dark strip just
+    // above the light grey border, in italics: find that line (the lowest bright text above the border), keep only the
+    // bright digit fill as black on white with a margin, take the slant out, and read digits only.
+    const sx = Math.max(0, x0 + cw * 0.11), sy = Math.max(0, y0 + ch * 0.9), sw = Math.min(W - sx, cw * 0.27), sh2 = Math.min(H - sy, ch * 0.13);
+    if (sw < 40 || sh2 < 10) return null;
+    const k = 600 / sw, CW = 600, CH = Math.round(sh2 * k);
+    const cv = document.createElement('canvas'); cv.width = CW; cv.height = CH;
+    const cx = cv.getContext('2d', { willReadFrequently: true }); cx.imageSmoothingQuality = 'high'; cx.drawImage(at.src, sx, sy, sw, sh2, 0, 0, CW, CH);
+    const px = cx.getImageData(0, 0, CW, CH).data, L = new Uint8Array(CW * CH), hist = new Uint32Array(256);
+    for (let i = 0; i < CW * CH; i++) { L[i] = 0.299 * px[i * 4] + 0.587 * px[i * 4 + 1] + 0.114 * px[i * 4 + 2]; hist[L[i]]++; }
+    let acc = 0, hiT = 255; for (let t = 255; t >= 0; t--) { acc += hist[t]; if (acc > CW * CH * 0.15) { hiT = t; break; } }
+    const med = [], bright = [];
+    for (let y = 0; y < CH; y++) { const row = Array.from(L.subarray(y * CW, y * CW + CW)).sort((p, q) => p - q); med.push(row[CW >> 1]); let n = 0; for (let x = 0; x < CW; x++) if (L[y * CW + x] >= hiT) n++; bright.push(n); }
+    const mid = (Math.min(...med) + Math.max(...med)) / 2;
+    let border = CH; for (let y = CH - 1; y > 0; y--) if (med[y] < mid) { border = y + 1; break; }
+    const lineH = Math.round(ch * 0.024 * k);
+    let bot = border - 1; while (bot > 0 && bright[bot] < CW * 0.03) bot--;
+    let top = bot; while (top > 0 && bright[top - 1] >= CW * 0.03 && bot - top < lineH * 1.6) top--;
+    const pad = Math.round(lineH * 0.35), ry = Math.max(0, top - pad), rh = Math.min(CH - ry, bot - top + 1 + pad * 2);
+    if (rh < 6) return null;
+    const ink = shear => {
+      const M = 24, o = document.createElement('canvas'); o.width = CW + M * 2 + Math.round(rh * shear); o.height = rh + M * 2;
+      const ox = o.getContext('2d'), od = ox.createImageData(o.width, o.height), q = od.data; q.fill(255);
+      for (let y = 0; y < rh; y++) for (let x = 0; x < CW; x++) if (L[(ry + y) * CW + x] >= hiT) { const i = ((y + M) * o.width + Math.round(x + M + y * shear)) * 4; q[i] = q[i + 1] = q[i + 2] = 0; }
+      ox.putImageData(od, 0, 0); return o;
     };
     this.gemRead = '';
     try {
       await this.worker.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: '0123456789/' });
-      for (const [s0, s1, t0, t1, inv] of tries) {
-        const x = Math.max(0, x0 + cw * s0), y = Math.max(0, y0 + ch * t0), w = Math.min(W - x, cw * (s1 - s0)), h = Math.min(H - y, ch * (t1 - t0));
-        if (w < 20 || h < 8) continue;
-        for (const im of [grey(x, y, w, h, inv)]) {
-          const t = (await this.worker.recognize(im)).data.text;
-          this.gemRead += t.replace(/\s+/g, ' ').trim() + ' | ';
-          for (const run of t.replace(/\s+/g, '').match(/\d{4,}/g) || []) {
-            if (run.slice(0, 2) !== g) continue;
-            const copy = +run.slice(2, 4), id = g + String(copy).padStart(2, '0');
-            // only a copy that shares the matched picture: a different picture would have matched by itself
-            if (copy >= 1 && copy <= max && a.map[id] && a.map[id] === a.map[pic.card.localId]) return id;
-          }
+      for (const shear of [0.2, 0]) {
+        const t = (await this.worker.recognize(ink(shear))).data.text;
+        this.gemRead += t.replace(/\s+/g, ' ').trim() + ' | ';
+        for (const run of t.replace(/\s+/g, '').match(/\d{4,}/g) || []) {
+          const at2 = run.indexOf(g); if (at2 < 0 || at2 > 1) continue;            // "0904707" or "20904707": the group, then the copy
+          const copy = +run.slice(at2 + 2, at2 + 4), id = g + String(copy).padStart(2, '0');
+          // only a copy that shares the matched picture: a different picture would have matched by itself
+          if (copy >= 1 && copy <= max && a.map[id] && a.map[id] === a.map[pic.card.localId]) return id;
         }
       }
     } finally {
