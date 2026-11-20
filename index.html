@@ -610,7 +610,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v110';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v111';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -920,7 +920,9 @@ const PRESET_DEN = {};
       let best = null; picks.forEach(([n, h]) => { if (n.slice(0, 2) === id.slice(0, 2) && n <= id) best = h; });
       if (best) map[id] = 'T:' + best.slice(0, 2) + '/' + best.slice(2, 4) + '/' + best.slice(4, 6) + '/' + best + '.webp';
     });
-    PRESET_DEN[code] = den; ART[code] = { base: '', map, scan: {} };
+    // the scanner learns each distinct picture once (the first copy of a name, and a last copy with its own picture), filed under that copy's number
+    const scan = {}; picks.forEach(([n]) => { if (map[n]) scan[n] = map[n]; });
+    PRESET_DEN[code] = den; ART[code] = { base: '', map, scan };
     v.cards = Object.keys(names).map(id => id + ' ' + names[id]).join(String.fromCharCode(10)); v.count = Object.keys(names).length;
   });
 })();
@@ -3000,19 +3002,20 @@ function coarseSearch(cams, K, hist, only) {
   return { top: top.map(t => ({ k: t.k, card: IDX.cards[t.k], coarse: t.s / 1e5 })), scores: raw };
 }
 // fine fingerprints of catalogue pictures, fetched on demand and kept for the session
-const fineCache = new Map();
+const fineCache = new Map(), fineFailed = new Map();       // fineFailed: pictures that would not load, left alone for two minutes
 const thumbOf = card => { const u = card.img || (cardImageUrl(card) ? cardImageUrl(card) + '/low.webp' : ''); return u; };
 function cardImageUrl(card) { const serie = window._serieOf && window._serieOf[card.set]; return serie ? 'https://assets.tcgdex.net/en/' + serie + '/' + card.set + '/' + card.localId : null; }
 function fineFor(card) {
   const key = card.set + '-' + card.localId;
   if (fineCache.has(key)) return fineCache.get(key);
+  if (Date.now() - (fineFailed.get(key) || 0) < 120000) return Promise.resolve(null);
   const base = cardImageUrl(card), url = card.img || (base ? base + '/low.webp' : null);
   if (!url) return Promise.resolve(null);
   const load = u => new Promise((ok, bad) => { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => ok(im); im.onerror = bad; im.src = u; });
   // a copy saved by the service worker without CORS cannot be read back; a query string gets a fresh readable one
   const p = load(url).catch(() => load(url + '?fp')).then(fingerprintOf).catch(() => null);
   fineCache.set(key, p);
-  p.then(v => { if (!v) fineCache.delete(key); });
+  p.then(v => { if (!v) { fineCache.delete(key); fineFailed.set(key, Date.now()); } });
   return p;
 }
 // which series each set belongs to (the picture URL needs it): one small GraphQL call, cached with the card index
@@ -3037,7 +3040,15 @@ async function searchPicture(src, box, opts) {
   const res = coarseSearch(cams, opts.k || 40, opts.hist, opts.only);
   const coarse = res.top; coarse.scores = res.scores;
   if (opts.coarseOnly) return coarse;
-  const fps = await Promise.all(coarse.map(c => fineFor(c.card)));
+  // the live scan waits at most opts.waitMs for the catalogue pictures; any still downloading carry on in the background
+  // for the next frame, and if one of the five likeliest is still missing the result is marked .pending (not safe to decide on)
+  const fpP = coarse.map(c => fineFor(c.card)), got = new Array(coarse.length).fill(null), done = new Array(coarse.length).fill(false);
+  fpP.forEach((p, i) => p.then(v => { got[i] = v; done[i] = true; }));
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  if (opts.waitMs) await Promise.race([Promise.all(fpP), sleep(opts.waitMs), Promise.all(fpP.slice(0, 8)).then(() => sleep(120))]);   // the likeliest eight in: a moment for the rest, then go
+  else await Promise.all(fpP);
+  const fps = got.slice();
+  coarse.pending = done.slice(0, 5).some(d => !d);
   const fines = [];
   const fscales = opts.fineScales || FINE_SCALES, perFrame = fscales.length * FINE_SHIFTS.length * FINE_SHIFTS.length;
   frames.forEach(fr => fineRects(fr, fscales).forEach(v => fines.push(fineCam(v))));
@@ -3753,7 +3764,7 @@ const scanner = {
             const pk = $('scanPeek'); pk.width = 36; pk.height = 50; pk.getContext('2d').drawImage(v, box.x, box.y, box.w, box.h, 0, 0, 36, 50);
             const coarse = await searchPicture(v, box, { set: this.liveSet(), hist: this.coarseHist, k: 40, coarseOnly: true, only: this.scopeSet() });
             this.coarseHist.push(coarse.scores); if (this.coarseHist.length > 3) this.coarseHist.shift();
-            coarse.slice(0, 12).forEach(c => fineFor(c.card));            // start fetching the likely pictures now, so the fine check has them
+            coarse.slice(0, 20).forEach(c => fineFor(c.card));            // start fetching the likely pictures now, so the fine check has them
             const keys = coarse.slice(0, 3).map(c => this.key(c.card));
             $('scanRead').textContent = v.videoWidth + '×' + v.videoHeight + ': ' + coarse.slice(0, 3).map(c => this.key(c.card) + ' ' + c.coarse.toFixed(2)).join(', ');
             // the wide sweep (rig mode, card much bigger or smaller than the outline) is compared with its own previous result
@@ -3766,12 +3777,19 @@ const scanner = {
             if (steady && !again) {
               $('scanStatus').textContent = 'Checking ' + this.cardName(coarse[0].card) + '…';
               const ls = this.liveSet();
-              const list = await searchPicture(v, box, { set: ls, fineScales: ls === LIVE_WIDE ? FINE_WIDE : undefined, hist: this.coarseHist, k: 40, only: this.scopeSet() });
+              const list = await searchPicture(v, box, { set: ls, fineScales: ls === LIVE_WIDE ? FINE_WIDE : undefined, hist: this.coarseHist, k: 40, only: this.scopeSet(), waitMs: 700 });
+              if (list.pending) {                                         // the likeliest pictures are still downloading: look again next frame
+                $('scanStatus').textContent = 'Getting the pictures to compare… hold still.';
+                throw 'pending';
+              }
               if (this.rig && this.rig.on) {
                 if (list[0] && list[0].fine >= 0.5) { this.rigMiss = 0; this.rigLearn(list[0].fineScale); }
                 else if (!list[0] || list[0].fine < 0.45) this.rigMiss = (this.rigMiss || 0) + 1;
               }
-              const lang = !this.found && !(this.rig && this.rig.on) && list[0] && list[0].fine >= 0.3 ? await this.langFor(v, box, this.key(list[0].card)) : null;
+              // rig mode reads the language only when it decides something: the same picture is in an English set and a regional one
+              const near = list[0] ? list.filter(c => list[0].fine - c.fine < 0.05) : [];
+              const mixed = near.some(c => c.card.regional) && near.some(c => !c.card.regional);
+              const lang = !this.found && (!(this.rig && this.rig.on) || mixed) && list[0] && list[0].fine >= 0.3 ? await this.langFor(v, box, this.key(list[0].card)) : null;
               if (!this.found && !this.decide(list, null, lang)) {
                 if (list[0] && list[0].fine >= 0.3) { $('scanStatus').textContent = 'Looks like ' + this.cardName(list[0].card) + ' — hold still, fill the outline…'; getJSON('sets/' + list[0].card.set).catch(() => {}); }
                 else $('scanStatus').textContent = 'Looking… fill the outline with the card, or tap Snap.';
