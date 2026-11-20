@@ -611,7 +611,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v117';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v118';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -3873,8 +3873,15 @@ const scanner = {
     // the number line: the lowest run of rows that sit on the dark strip (dark median) and carry bright digits; the copyright
     // line below is dark text on the light border, so it can never be picked
     const lineH = Math.round(ch * 0.024 * k), ok = y => med[y] < mid && bright[y] >= CW * 0.03;
-    let bot = CH - 1; while (bot > 0 && !ok(bot)) bot--;
-    let top = bot; while (top > 0 && ok(top - 1) && bot - top < lineH * 1.6) top--;
+    // runs of such rows; specks of glare make runs of a row or two, digits are about half a line tall: take the lowest real one
+    let bot = -1, top = -1;
+    for (let y = CH - 1; y >= 0 && bot < 0; ) {
+      if (!ok(y)) { y--; continue; }
+      let t = y; while (t > 0 && ok(t - 1) && y - t < lineH * 1.6) t--;
+      if (y - t + 1 >= lineH * 0.3) { bot = y; top = t; }
+      y = t - 1;
+    }
+    if (bot < 0) return null;
     const pad = Math.round(lineH * 0.35), ry = Math.max(0, top - pad), rh = Math.min(CH - ry, bot - top + 1 + pad * 2);
     if (rh < 6) return null;
     const ink = shear => {
@@ -3889,9 +3896,10 @@ const scanner = {
         const im = ink(shear); if (shear && !this.gemInk) try { this.gemInk = im.toDataURL('image/png'); } catch (e) {}
         const t = (await this.worker.recognize(im)).data.text;
         this.gemRead += t.replace(/\s+/g, ' ').trim() + ' | ';
-        for (const run of t.replace(/\s+/g, '').match(/\d{4,}/g) || []) {
-          const at2 = run.indexOf(g); if (at2 < 0 || at2 > 1) continue;            // "0904707" or "20904707": the group, then the copy
-          const copy = +run.slice(at2 + 2, at2 + 4), id = g + String(copy).padStart(2, '0');
+        // the group and copy just before the slash (often read as a 7): "0904/07", "0904707", "8871105/0788" (logo read as digits)
+        const flat = t.replace(/[^0-9/]/g, ''), re = new RegExp(g + '([0-9]{2})(?=[/7])', 'g');
+        for (const mm of flat.matchAll(re)) {
+          const copy = +mm[1], id = g + String(copy).padStart(2, '0');
           // only a copy that shares the matched picture: a different picture would have matched by itself
           if (copy >= 1 && copy <= max && a.map[id] && a.map[id] === a.map[pic.card.localId]) return id;
         }
