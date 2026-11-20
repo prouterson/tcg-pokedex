@@ -610,7 +610,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v112';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v113';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -3054,10 +3054,11 @@ async function searchPicture(src, box, opts) {
   frames.forEach(fr => fineRects(fr, fscales).forEach(v => fines.push(fineCam(v))));
   coarse.forEach((c, i) => {
     if (!fps[i]) { c.fine = -1; return; }
-    const per = new Array(fscales.length).fill(-9), nsh = FINE_SHIFTS.length * FINE_SHIFTS.length;
-    fines.forEach((f, j) => { const sc = scoreFP(f, fps[i]), si = Math.floor((j % perFrame) / nsh); if (sc > per[si]) per[si] = sc; });
+    const per = new Array(fscales.length).fill(-9), perSh = new Array(fscales.length).fill(0), nsh = FINE_SHIFTS.length * FINE_SHIFTS.length;
+    fines.forEach((f, j) => { const sc = scoreFP(f, fps[i]), si = Math.floor((j % perFrame) / nsh); if (sc > per[si]) { per[si] = sc; perSh[si] = (j % perFrame) % nsh; } });
     let bi = 0; per.forEach((v, k) => { if (v > per[bi]) bi = k; });
     c.fine = per[bi];
+    c.fineShift = [FINE_SHIFTS[Math.floor(perSh[bi] / FINE_SHIFTS.length)], FINE_SHIFTS[perSh[bi] % FINE_SHIFTS.length]];   // where the card sat, as a share of the outline
     let sc0 = fscales[bi];                                                        // the card looked this much bigger than the outline...
     if (bi > 0 && bi < per.length - 1) {                                          // ...refined between the grid steps
       const a = per[bi - 1], b = per[bi], d = per[bi + 1], den = a - 2 * b + d;
@@ -3637,7 +3638,7 @@ const scanner = {
     for (const c of list) { const k = c.card.set + '-' + c.card.localId; if (c.fine < 0.3 || seenC.has(k)) continue; seenC.add(k); cands.push(c.card); if (cands.length >= 6) break; }
     this.cand = cands; this.candI = Math.max(0, cands.findIndex(c => c.set === pick.card.set && c.localId === pick.card.localId));
     this.found = { localId: pick.card.localId };
-    if (gemCodeOf(pick.card.set)) this.found.gemPic = { card: pick.card, scale: pick.fineScale || 1, at: this.picSrc };   // show() reads the copy number
+    if (gemCodeOf(pick.card.set)) this.found.gemPic = { card: pick.card, scale: pick.fineScale || 1, shift: pick.fineShift || [0, 0], at: this.picSrc };   // show() reads the copy number
     this.show(pick.card.set, this.found);
     return 'shown';
   },
@@ -3849,21 +3850,29 @@ const scanner = {
     const at = pic.at, code = gemCodeOf(pic.card.set);
     if (!at || !at.src || !this.worker || !code) return null;
     const a = ART[code], g = pic.card.localId.slice(0, 2), max = +((PRESET_DEN[code] || {})[g] || 9);
-    const W = at.src.videoWidth || at.src.width, H = at.src.videoHeight || at.src.height, b = at.box, sc = pic.scale;
-    const cw = b.w * sc, ch = b.h * sc, x0 = b.x + b.w / 2 - cw / 2, y0 = b.y + b.h / 2 - ch / 2;
-    const x = Math.max(0, x0 - cw * 0.02), y = Math.max(0, y0 + ch * 0.9), w = Math.min(W - x, cw * 0.45), h = Math.min(H - y, ch * 0.12);
-    if (w < 20 || h < 8) return null;
-    const imgs = prepForOCR(at.src, x, y, w, h, 1400);
-    await this.worker.setParameters({ tessedit_pageseg_mode: '6' });
-    for (const im of imgs) {
-      const t = (await this.worker.recognize(im)).data.text.toUpperCase().replace(/[OQD]/g, '0').replace(/[|IL!]/g, '1').replace(/S/g, '5').replace(/B/g, '8');
-      this.gemRead = t.replace(/\s+/g, ' ').trim();
-      for (const run of t.replace(/\s+/g, '').match(/\d{4,}/g) || []) {
-        if (run.slice(0, 2) !== g) continue;
-        const copy = +run.slice(2, 4), id = g + String(copy).padStart(2, '0');
-        // only a copy that shares the matched picture: a different picture would have matched by itself
-        if (copy >= 1 && copy <= max && a.map[id] && a.map[id] === a.map[pic.card.localId]) return id;
+    // where the picture match put the card (its size and offset against the outline), then the number's place on the card
+    const W = at.src.videoWidth || at.src.width, H = at.src.videoHeight || at.src.height, b = at.box, sc = pic.scale, sh = pic.shift || [0, 0];
+    const cw = b.w * sc, ch = b.h * sc, x0 = b.x + b.w / 2 - cw / 2 + sh[0] * b.w, y0 = b.y + b.h / 2 - ch / 2 + sh[1] * b.h;
+    const tries = [[0.13, 0.42, 0.93, 0.995], [0.08, 0.48, 0.91, 1.02]];        // "0903/07" sits at about 17-33% across, 95-98% down
+    this.gemRead = '';
+    try {
+      await this.worker.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: '0123456789/' });
+      for (const [s0, s1, t0, t1] of tries) {
+        const x = Math.max(0, x0 + cw * s0), y = Math.max(0, y0 + ch * t0), w = Math.min(W - x, cw * (s1 - s0)), h = Math.min(H - y, ch * (t1 - t0));
+        if (w < 20 || h < 8) continue;
+        for (const im of prepForOCR(at.src, x, y, w, h, 700)) {
+          const t = (await this.worker.recognize(im)).data.text;
+          this.gemRead += t.replace(/\s+/g, ' ').trim() + ' | ';
+          for (const run of t.replace(/\s+/g, '').match(/\d{4,}/g) || []) {
+            if (run.slice(0, 2) !== g) continue;
+            const copy = +run.slice(2, 4), id = g + String(copy).padStart(2, '0');
+            // only a copy that shares the matched picture: a different picture would have matched by itself
+            if (copy >= 1 && copy <= max && a.map[id] && a.map[id] === a.map[pic.card.localId]) return id;
+          }
+        }
       }
+    } finally {
+      await this.worker.setParameters({ tessedit_char_whitelist: '0123456789/ABCDEFGHIJKLMNOPQRSTUVWXYZ:. ' });
     }
     return null;
   },
