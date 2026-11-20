@@ -610,7 +610,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v111';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v112';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -3083,6 +3083,7 @@ function coarseFromImage(im) {
 // Regional editions the family has added (the Chinese 30th Celebration) have no pictures of their own: each card borrows
 // one (ART). Those borrowed pictures go into the scanner's index too, filed under the edition and the card's own number,
 // so a Chinese card is recognised as that edition's card, not as the English one with the same artwork.
+const gemCodeOf = setId => { const ab = ((state.customSets || {})[setId] || {}).abbr; return ab && /^CBB\d+C$/.test(ab) && ART[ab] ? ab : null; };   // a Chinese Gem pack set
 const regionLangOf = setId => { const r = ((state.customSets || {})[setId] || {}).region; const l = LANGS.find(x => regionName(x[0]) === r); return l ? l[0] : null; };
 function regionalCards() {
   const out = [];
@@ -3370,7 +3371,7 @@ const scanner = {
     const r = $('scanResult'); r.hidden = false;
     r.innerHTML = (card.image ? '<img alt="" src="' + lowSrc(card.image) + '">' : '') + '<div class="t"><b></b><small></small><div class="px"></div></div><div class="btns"></div><button class="dismiss" title="Take it out of the list" aria-label="Remove">✕</button>';
     r.querySelector('b').textContent = card.name + (row.qty > 1 ? ' ×' + row.qty : '');
-    r.querySelector('small').textContent = set.name + ' · ' + row.num + (cardLang !== 'en' ? ' · ' + regionName(cardLang) : '');
+    r.querySelector('small').textContent = set.name + ' · ' + row.num + (cardLang !== 'en' ? ' · ' + regionName(cardLang) : '') + (this.gemNoRead ? ' · copy number not read: check it' : '');
     r.querySelector('.px').textContent = [price != null ? money(price, 'AUD') : '', needers.length ? needers.map(p => p.name).join(' & ') + (needers.length > 1 ? ' need' : ' needs') + ' it' : ''].filter(Boolean).join(' · ');
     const btns = r.querySelector('.btns');
     if ((this.cand || []).length > 1) btns.appendChild(makeButton('↻ Not this one', () => {
@@ -3636,6 +3637,7 @@ const scanner = {
     for (const c of list) { const k = c.card.set + '-' + c.card.localId; if (c.fine < 0.3 || seenC.has(k)) continue; seenC.add(k); cands.push(c.card); if (cands.length >= 6) break; }
     this.cand = cands; this.candI = Math.max(0, cands.findIndex(c => c.set === pick.card.set && c.localId === pick.card.localId));
     this.found = { localId: pick.card.localId };
+    if (gemCodeOf(pick.card.set)) this.found.gemPic = { card: pick.card, scale: pick.fineScale || 1, at: this.picSrc };   // show() reads the copy number
     this.show(pick.card.set, this.found);
     return 'shown';
   },
@@ -3704,6 +3706,7 @@ const scanner = {
       }
       let lang = null;
       if (list && list[0] && list[0].fine >= 0.25) lang = await this.langFor(src, G, this.key(list[0].card));
+      this.picSrc = { src, box: G };
       if (list && this.decide(list, hit, lang)) {}
       else if (hit) { this.found = hit; await this.resolve(hit); }
       else if (list && list[0] && list[0].fine >= 0.25) {
@@ -3790,6 +3793,7 @@ const scanner = {
               const near = list[0] ? list.filter(c => list[0].fine - c.fine < 0.05) : [];
               const mixed = near.some(c => c.card.regional) && near.some(c => !c.card.regional);
               const lang = !this.found && (!(this.rig && this.rig.on) || mixed) && list[0] && list[0].fine >= 0.3 ? await this.langFor(v, box, this.key(list[0].card)) : null;
+              this.picSrc = { src: v, box };
               if (!this.found && !this.decide(list, null, lang)) {
                 if (list[0] && list[0].fine >= 0.3) { $('scanStatus').textContent = 'Looks like ' + this.cardName(list[0].card) + ' — hold still, fill the outline…'; getJSON('sets/' + list[0].card.set).catch(() => {}); }
                 else $('scanStatus').textContent = 'Looking… fill the outline with the card, or tap Snap.';
@@ -3839,8 +3843,44 @@ const scanner = {
     }
     this.show(candidates[0].id, hit);
   },
+  // Gem pack copies 1-6 of a Pokémon share one picture; the copy is in the printed number ("0903/07", bottom left).
+  // Read it off the card the picture match found, at the camera's full size. Returns the copy's localId, or null.
+  async gemCopy(pic) {
+    const at = pic.at, code = gemCodeOf(pic.card.set);
+    if (!at || !at.src || !this.worker || !code) return null;
+    const a = ART[code], g = pic.card.localId.slice(0, 2), max = +((PRESET_DEN[code] || {})[g] || 9);
+    const W = at.src.videoWidth || at.src.width, H = at.src.videoHeight || at.src.height, b = at.box, sc = pic.scale;
+    const cw = b.w * sc, ch = b.h * sc, x0 = b.x + b.w / 2 - cw / 2, y0 = b.y + b.h / 2 - ch / 2;
+    const x = Math.max(0, x0 - cw * 0.02), y = Math.max(0, y0 + ch * 0.9), w = Math.min(W - x, cw * 0.45), h = Math.min(H - y, ch * 0.12);
+    if (w < 20 || h < 8) return null;
+    const imgs = prepForOCR(at.src, x, y, w, h, 1400);
+    await this.worker.setParameters({ tessedit_pageseg_mode: '6' });
+    for (const im of imgs) {
+      const t = (await this.worker.recognize(im)).data.text.toUpperCase().replace(/[OQD]/g, '0').replace(/[|IL!]/g, '1').replace(/S/g, '5').replace(/B/g, '8');
+      this.gemRead = t.replace(/\s+/g, ' ').trim();
+      for (const run of t.replace(/\s+/g, '').match(/\d{4,}/g) || []) {
+        if (run.slice(0, 2) !== g) continue;
+        const copy = +run.slice(2, 4), id = g + String(copy).padStart(2, '0');
+        // only a copy that shares the matched picture: a different picture would have matched by itself
+        if (copy >= 1 && copy <= max && a.map[id] && a.map[id] === a.map[pic.card.localId]) return id;
+      }
+    }
+    return null;
+  },
   async show(setId, hit) {
     const status = m => { $('scanStatus').textContent = m; };
+    if (!(hit && hit.gemPic)) this.gemNoRead = false;
+    if (hit && hit.gemPic) {
+      const pic = hit.gemPic; delete hit.gemPic;
+      status('Reading the copy number…');
+      let id = null; try { id = await this.gemCopy(pic); } catch (e) {}
+      const code = gemCodeOf(setId), a = ART[code], g = pic.card.localId.slice(0, 2);
+      const same = Object.keys(a.map).filter(k => k.slice(0, 2) === g && a.map[k] === a.map[pic.card.localId]).sort();
+      if (id) hit.localId = id;
+      this.gemNoRead = !id && same.length > 1;
+      // "Not this one" steps through the copies with this picture
+      this.cand = same.map(localId => ({ set: setId, localId })); this.candI = Math.max(0, same.indexOf(hit.localId));
+    }
     let set;
     try { set = await getJSON('sets/' + setId); } catch (e) { status('Could not load that set.'); this.found = null; return; }
     const card = hit.localId ? set.cards.find(c => c.localId === hit.localId)
@@ -3866,7 +3906,7 @@ const scanner = {
     r.querySelector('.dismiss').onclick = () => { this.found = null; this.last = null; this.coarseHist = []; r.hidden = true; status('Fill the outline with the next card.'); };
     this.shown = { key: set.id + '-' + card.localId, at: Date.now() };
     r.querySelector('b').textContent = card.name;
-    r.querySelector('small').textContent = set.name + ' · ' + card.localId + (set.cardCount.official ? '/' + String(set.cardCount.official).padStart(card.localId.length, '0') : '');
+    r.querySelector('small').textContent = set.name + ' · ' + card.localId + (set.cardCount.official ? '/' + String(set.cardCount.official).padStart(card.localId.length, '0') : '') + (this.gemNoRead ? ' · copy number not read: check it' : '');
     const lt = r.querySelector('.t'), note = el('div', 'langnote');
     note.textContent = rl ? 'Recognised as the ' + regionName(rl) + ' edition' : (heard && heard !== 'en' && !set.custom ? 'Printed in ' + regionName(heard) + '. The picture is the English card with the same artwork.' : '');
     lt.appendChild(cardLangSelect()); if (note.textContent) lt.appendChild(note);
