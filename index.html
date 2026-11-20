@@ -382,6 +382,7 @@
   #scan .rigadj #rigSharp { font: 600 15px ui-monospace, Consolas, monospace; color: #ffd21f; }
   #scan .rigadj small { color: #9a9a92; }
   #scan.rig .guide { border-style: dashed; }
+  #scanResult .gemcopies { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; } #scanResult .gemcopies button { min-width: 38px; padding: 6px 10px; font-weight: 700; } #scanResult .gemcopies button.on { background: #ffd21f; color: #000; border-color: #ffd21f; }
   /* while lining up, give the camera view the room: only the sliders and the buttons stay */
   #scan.adjusting .peek, #scan.adjusting #scanResult, #scan.adjusting .row2:has(#scanManual), #scan.adjusting .row2:has(#scanSnap), #scan.adjusting .row2:has(#scanCenter) { display: none; }
   #scan .setrow { align-items: center; font-size: 14px; color: #c9ccd4; }
@@ -610,7 +611,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v115';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v116';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -3372,7 +3373,8 @@ const scanner = {
     const r = $('scanResult'); r.hidden = false;
     r.innerHTML = (card.image ? '<img alt="" src="' + lowSrc(card.image) + '">' : '') + '<div class="t"><b></b><small></small><div class="px"></div></div><div class="btns"></div><button class="dismiss" title="Take it out of the list" aria-label="Remove">✕</button>';
     r.querySelector('b').textContent = card.name + (row.qty > 1 ? ' ×' + row.qty : '');
-    r.querySelector('small').textContent = set.name + ' · ' + row.num + (cardLang !== 'en' ? ' · ' + regionName(cardLang) : '') + (this.gemNoRead ? ' · copy number not read: check it' : '');
+    r.querySelector('small').textContent = set.name + ' · ' + row.num + (cardLang !== 'en' ? ' · ' + regionName(cardLang) : '') + (this.gemNoRead ? ' · not sure of the copy: tap the right one' : '');
+    this.gemChips(r, set, card);
     r.querySelector('.px').textContent = [price != null ? money(price, 'AUD') : '', needers.length ? needers.map(p => p.name).join(' & ') + (needers.length > 1 ? ' need' : ' needs') + ' it' : ''].filter(Boolean).join(' · ');
     const btns = r.querySelector('.btns');
     if ((this.cand || []).length > 1) btns.appendChild(makeButton('↻ Not this one', () => {
@@ -3846,7 +3848,7 @@ const scanner = {
   },
   // Gem pack copies 1-6 of a Pokémon share one picture; the copy is in the printed number ("0903/07", bottom left).
   // Read it off the card the picture match found, at the camera's full size. Returns the copy's localId, or null.
-  async gemCopy(pic) {
+  async gemReadOnce(pic) {
     const at = pic.at, code = gemCodeOf(pic.card.set);
     if (!at || !at.src || !this.worker || !code) return null;
     const a = ART[code], g = pic.card.localId.slice(0, 2), max = +((PRESET_DEN[code] || {})[g] || 9);
@@ -3880,11 +3882,11 @@ const scanner = {
       for (let y = 0; y < rh; y++) for (let x = 0; x < CW; x++) if (L[(ry + y) * CW + x] >= hiT) { const i = ((y + M) * o.width + Math.round(x + M + y * shear)) * 4; q[i] = q[i + 1] = q[i + 2] = 0; }
       ox.putImageData(od, 0, 0); return o;
     };
-    this.gemRead = '';
     try {
       await this.worker.setParameters({ tessedit_pageseg_mode: '7', tessedit_char_whitelist: '0123456789/' });
       for (const shear of [0.2, 0]) {
-        const t = (await this.worker.recognize(ink(shear))).data.text;
+        const im = ink(shear); if (shear && !this.gemInk) try { this.gemInk = im.toDataURL('image/png'); } catch (e) {}
+        const t = (await this.worker.recognize(im)).data.text;
         this.gemRead += t.replace(/\s+/g, ' ').trim() + ' | ';
         for (const run of t.replace(/\s+/g, '').match(/\d{4,}/g) || []) {
           const at2 = run.indexOf(g); if (at2 < 0 || at2 > 1) continue;            // "0904707" or "20904707": the group, then the copy
@@ -3898,17 +3900,47 @@ const scanner = {
     }
     return null;
   },
+  // up to three frames: a copy read twice is sure; one read alone is a guess (the copy buttons are shown either way).
+  // The last dozen reads are kept on the phone (tcgPokedex.gemLog) so a misread can be looked at afterwards.
+  async gemCopy(pic) {
+    const reads = [], votes = {};
+    this.gemRead = ''; this.gemInk = null;
+    for (let f = 0; f < 3; f++) {
+      if (f) await new Promise(r => setTimeout(r, 120));
+      let id = null; try { id = await this.gemReadOnce(pic); } catch (e) {}
+      reads.push(id || '-');
+      if (id) { votes[id] = (votes[id] || 0) + 1; if (votes[id] >= 2) break; }
+      if (f === 1 && reads.every(r => r === '-')) break;
+    }
+    const best = Object.entries(votes).sort((p, q) => q[1] - p[1])[0];
+    const res = best ? { id: best[0], sure: best[1] >= 2 } : null;
+    try { const k = 'tcgPokedex.gemLog', log = JSON.parse(localStorage.getItem(k) || '[]'); log.push({ at: Date.now(), pic: pic.card.localId, reads, text: this.gemRead, got: res, ink: this.gemInk }); localStorage.setItem(k, JSON.stringify(log.slice(-12))); } catch (e) {}
+    return res;
+  },
+  // one button per copy that shares the picture, the chosen one lit: a wrong copy is one tap to put right
+  gemChips(r, set, card) {
+    const gc = this.gemChoice;
+    if (!gc || gc.set !== set.id || !gc.ids.includes(card.localId)) return;
+    const row = el('div', 'gemcopies');
+    gc.ids.forEach(id => {
+      const b = makeButton(String(+id.slice(2)), () => { if (id === card.localId) return; this.gemNoRead = false; this.swap = true; this.found = { localId: id }; this.show(set.id, this.found); }, 'Copy ' + id);
+      if (id === card.localId) b.classList.add('on');
+      row.appendChild(b);
+    });
+    (r.querySelector('.t') || r).appendChild(row);
+  },
   async show(setId, hit) {
     const status = m => { $('scanStatus').textContent = m; };
-    if (!(hit && hit.gemPic)) this.gemNoRead = false;
+    if (!(hit && hit.gemPic)) { this.gemNoRead = false; if (!this.swap) this.gemChoice = null; }
     if (hit && hit.gemPic) {
       const pic = hit.gemPic; delete hit.gemPic;
       status('Reading the copy number…');
-      let id = null; try { id = await this.gemCopy(pic); } catch (e) {}
+      let res = null; try { res = await this.gemCopy(pic); } catch (e) {}
       const code = gemCodeOf(setId), a = ART[code], g = pic.card.localId.slice(0, 2);
       const same = Object.keys(a.map).filter(k => k.slice(0, 2) === g && a.map[k] === a.map[pic.card.localId]).sort();
-      if (id) hit.localId = id;
-      this.gemNoRead = !id && same.length > 1;
+      if (res) hit.localId = res.id;
+      this.gemNoRead = !(res && res.sure) && same.length > 1;
+      this.gemChoice = same.length > 1 ? { set: setId, ids: same } : null;
       // "Not this one" steps through the copies with this picture
       this.cand = same.map(localId => ({ set: setId, localId })); this.candI = Math.max(0, same.indexOf(hit.localId));
     }
@@ -3937,10 +3969,11 @@ const scanner = {
     r.querySelector('.dismiss').onclick = () => { this.found = null; this.last = null; this.coarseHist = []; r.hidden = true; status('Fill the outline with the next card.'); };
     this.shown = { key: set.id + '-' + card.localId, at: Date.now() };
     r.querySelector('b').textContent = card.name;
-    r.querySelector('small').textContent = set.name + ' · ' + card.localId + (set.cardCount.official ? '/' + String(set.cardCount.official).padStart(card.localId.length, '0') : '') + (this.gemNoRead ? ' · copy number not read: check it' : '');
+    r.querySelector('small').textContent = set.name + ' · ' + card.localId + (set.cardCount.official ? '/' + String(set.cardCount.official).padStart(card.localId.length, '0') : '') + (this.gemNoRead ? ' · not sure of the copy: tap the right one' : '');
     const lt = r.querySelector('.t'), note = el('div', 'langnote');
     note.textContent = rl ? 'Recognised as the ' + regionName(rl) + ' edition' : (heard && heard !== 'en' && !set.custom ? 'Printed in ' + regionName(heard) + '. The picture is the English card with the same artwork.' : '');
     lt.appendChild(cardLangSelect()); if (note.textContent) lt.appendChild(note);
+    this.gemChips(r, set, card);
     // someone else in the family has started this set in this language and does not have this card yet
     const needers = familyNeeds(set.id, card.localId, cardLang);
     if (needers.length) {
