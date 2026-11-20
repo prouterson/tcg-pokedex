@@ -611,7 +611,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v116';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v117';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -3859,7 +3859,7 @@ const scanner = {
     // A tall strip across the bottom left, 600 px wide. The number is pale digits with a dark outline on the dark strip just
     // above the light grey border, in italics: find that line (the lowest bright text above the border), keep only the
     // bright digit fill as black on white with a margin, take the slant out, and read digits only.
-    const sx = Math.max(0, x0 + cw * 0.11), sy = Math.max(0, y0 + ch * 0.9), sw = Math.min(W - sx, cw * 0.27), sh2 = Math.min(H - sy, ch * 0.13);
+    const sx = Math.max(0, x0 + cw * 0.09), sy = Math.max(0, y0 + ch * 0.86), sw = Math.min(W - sx, cw * 0.31), sh2 = Math.min(H - sy, ch * 0.24);   // reaches well below: a card sitting low in the rig keeps its number inside
     if (sw < 40 || sh2 < 10) return null;
     const k = 600 / sw, CW = 600, CH = Math.round(sh2 * k);
     const cv = document.createElement('canvas'); cv.width = CW; cv.height = CH;
@@ -3870,10 +3870,11 @@ const scanner = {
     const med = [], bright = [];
     for (let y = 0; y < CH; y++) { const row = Array.from(L.subarray(y * CW, y * CW + CW)).sort((p, q) => p - q); med.push(row[CW >> 1]); let n = 0; for (let x = 0; x < CW; x++) if (L[y * CW + x] >= hiT) n++; bright.push(n); }
     const mid = (Math.min(...med) + Math.max(...med)) / 2;
-    let border = CH; for (let y = CH - 1; y > 0; y--) if (med[y] < mid) { border = y + 1; break; }
-    const lineH = Math.round(ch * 0.024 * k);
-    let bot = border - 1; while (bot > 0 && bright[bot] < CW * 0.03) bot--;
-    let top = bot; while (top > 0 && bright[top - 1] >= CW * 0.03 && bot - top < lineH * 1.6) top--;
+    // the number line: the lowest run of rows that sit on the dark strip (dark median) and carry bright digits; the copyright
+    // line below is dark text on the light border, so it can never be picked
+    const lineH = Math.round(ch * 0.024 * k), ok = y => med[y] < mid && bright[y] >= CW * 0.03;
+    let bot = CH - 1; while (bot > 0 && !ok(bot)) bot--;
+    let top = bot; while (top > 0 && ok(top - 1) && bot - top < lineH * 1.6) top--;
     const pad = Math.round(lineH * 0.35), ry = Math.max(0, top - pad), rh = Math.min(CH - ry, bot - top + 1 + pad * 2);
     if (rh < 6) return null;
     const ink = shear => {
