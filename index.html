@@ -221,6 +221,25 @@
   .line.partial { opacity: .85; }
   .card .want { position: absolute; top: 40px; right: 6px; width: 30px; height: 30px; padding: 0; border-radius: 50%; background: var(--panel); font-size: 19px; line-height: 1; color: #e0a800; border: 2px solid #e0a800; box-shadow: 0 1px 3px rgba(0,0,0,.35); }
   .card .want.on, .line .want.on { color: #fff; background: #e0a800; border-color: #e0a800; }
+  /* Quick tick: tap a card to tick it owned, no menu; ⋯ opens the menu instead */
+  button.qtick { font-weight: 700; border-color: var(--owned); color: var(--owned); }
+  button.qtick.on { background: var(--owned); border-color: var(--owned); color: #fff; }
+  .qbar { flex-basis: 100%; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; background: var(--owned); color: #fff; border-radius: var(--radius); padding: 6px 10px; font-size: 13px; font-weight: 600; }
+  .qbar span { flex: 1; min-width: 140px; }
+  .qbar select, .qbar button { background: #fff; color: #1d2330; border: 0; }
+  .qbar button { font-weight: 700; color: var(--owned); }
+  .card .more, .line .more { display: none; }
+  body.quick .card .zoom { display: none; }
+  body.quick .card .more { display: flex; position: absolute; top: 6px; right: 6px; width: 30px; height: 30px; padding: 0; border-radius: 50%; background: var(--panel); font-size: 17px; font-weight: 700; line-height: 1; align-items: center; justify-content: center; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+  body.quick .line .more { display: inline-flex; width: 30px; height: 30px; padding: 0; border-radius: 50%; align-items: center; justify-content: center; flex: none; font-weight: 700; }
+  body.quick .card:not(.owned) { border: 2px dashed var(--line); }
+  .card.pop .tick { animation: qpop .25s; }
+  .line.pop { animation: qflash .4s; }
+  @keyframes qpop { 0% { transform: scale(.3); } 70% { transform: scale(1.25); } 100% { transform: scale(1); } }
+  @keyframes qflash { 0% { background: var(--owned); } 100% { background: var(--panel); } }
+  #qtoast { position: fixed; left: 50%; bottom: calc(84px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 9px 14px; border-radius: 12px; display: flex; gap: 12px; align-items: center; z-index: 30; box-shadow: 0 4px 16px rgba(0,0,0,.3); font-size: 14px; max-width: calc(100% - 32px); }
+  #qtoast span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #qtoast button { background: var(--owned); color: #fff; border: 0; font-weight: 700; flex: none; }
   .pcbtn { padding: 4px 8px; font-size: 14px; border-radius: 8px; }
   .card .pcbtn { position: absolute; top: 6px; left: 6px; width: 30px; height: 30px; padding: 0; border-radius: 50%; background: var(--panel); }
   .line .want { color: #e0a800; border: 2px solid #e0a800; border-radius: 50%; width: 30px; height: 30px; padding: 0; display: inline-flex; align-items: center; justify-content: center; flex: none; }
@@ -611,7 +630,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v119';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v120';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -671,6 +690,9 @@ const langsOf = v => langOf(v).split(',').filter(Boolean);
 // Language view: in a set where cards are held in more than one language, the page shows one language's collection at a
 // time (null = all together). Set when a set is opened, cleared on leaving it.
 let viewLang = null;
+// Quick tick (set page): on until Done, across sets; quickKeep = cards ticked on this page, kept in view under the filters
+let quickTick = false, quickUndo = null, quickTimer = 0;
+const quickKeep = new Set();
 function inView(mark) {
   const m = marks(mark);
   if (!viewLang) return m;
@@ -2334,9 +2356,10 @@ function haveDetails() { return Object.keys(details).length > 0; }
 function cardVisible(c) {
   const have = !!ownedIn(window._set.id)[c.localId];
   const complete = master ? ownedVariants(c).length === variantsOf(c).length : have;   // Master set: a card is only done when every printing is
-  if (ui.filter === 'need' && complete) return false;
-  if (ui.filter === 'owned' && !have) return false;
-  if (ui.filter === 'family' && ownersOf(window._set.id, c.localId).length) return false;
+  const kept = quickKeep.has(c.localId);   // ticked with Quick tick: stays put until the page changes, so the grid does not jump
+  if (ui.filter === 'need' && complete && !kept) return false;
+  if (ui.filter === 'owned' && !have && !kept) return false;
+  if (ui.filter === 'family' && ownersOf(window._set.id, c.localId).length && !kept) return false;
   if (ui.rarity && rarityOf(c) !== ui.rarity) return false;
   if (ui.q) {
     const q = ui.q.toLowerCase();
@@ -2389,7 +2412,7 @@ function makeCard(c) {
     n.dataset.id = c.localId;
     n.innerHTML = '<span class="n">' + esc(cardNum(c)) + '</span><span class="name"></span>' + who + wantBadge + chips +
       (price ? '<span class="price">' + price + '</span>' : '') + star +
-      '<span class="st">' + status + (tag ? ' · ' + tag : '') + '</span>';
+      '<span class="st">' + status + (tag ? ' · ' + tag : '') + '</span><button class="more" title="Card menu" aria-label="Card menu">⋯</button>';
     n.querySelector('.name').innerHTML = esc(c.name) + (d.r ? '<small>' + esc(d.r) + '</small>' : '');
     const bl = buyBadge(setKey(window._set.id), c.localId); if (bl) n.querySelector('.name').appendChild(bl);
     return n;
@@ -2398,7 +2421,7 @@ function makeCard(c) {
   n.dataset.id = c.localId;
   n.innerHTML =
     '<span class="tick">' + (have && !complete && master ? got.length + '/' + avail.length : '✓') + (tag ? '<b>' + tag + '</b>' : '') + '</span>' +
-    (c.image ? '<button class="zoom" title="View card" aria-label="View card">⤢</button>' : '') + star +
+    (c.image ? '<button class="zoom" title="View card" aria-label="View card">⤢</button>' : '') + '<button class="more" title="Card menu" aria-label="Card menu">⋯</button>' + star +
     '<img loading="lazy" alt="" src="' + (c.image ? lowSrc(c.image) : '') + '">' + (c.standin ? '<span class="enart" title="Picture borrowed from the ' + (c.standin === 'JP art' ? 'Japanese card with the same artwork' : 'English card with the same Pokémon') + '">' + c.standin + '</span>' : '') +
     '<div class="ph"></div>' +
     '<div class="num">' + esc(cardNum(c)) + '</div><div class="name"></div>' + chips +
@@ -2460,12 +2483,23 @@ function renderSetHeader() {
   if (lb.children.length > 2) controls.push(lb);              // other languages or editions held: switch between them right here
   controls.push(
     makeSearch('Search name or number', () => renderCards()),
-    makeSeg(filters, ui.filter, k => { ui.filter = k; renderSet(); }),
+    makeSeg(filters, ui.filter, k => { ui.filter = k; quickKeep.clear(); renderSet(); }),
     makeSeg([['grid', '▦', 'Card grid'], ['list', '☰', 'Compact list']], ui.mode, k => { ui.mode = k; renderSet(); })
   );
+  const qt = makeButton('✓ Quick tick', () => { quickTick = !quickTick; quickKeep.clear(); renderSet(); }, 'Tap cards to tick them owned, with no menu');
+  qt.classList.add('qtick');
+  if (quickTick) qt.classList.add('on');
+  controls.push(qt);
   const tb = makeButton(ico('sliders') + 'Tools', () => openSetTools(set), 'Rarity, sort, master set, full colour, print placeholders, languages');
   if (ui.rarity || master || colourAll || ui.sort === 'price') tb.classList.add('on');
   controls.push(tb);
+  if (quickTick) {
+    const bar = el('div', 'qbar', '<span>Tap a card to tick or untick it · ⋯ opens its menu</span>');
+    bar.appendChild(cardLangSelect());
+    bar.appendChild(makeButton('Done', () => { quickTick = false; quickKeep.clear(); renderSet(); }));
+    controls.push(bar);
+  }
+  document.body.classList.toggle('quick', quickTick);
   document.body.classList.toggle('colourall', colourAll);
   setHeader({
     title: esc(set.name) + (yearOf(set.id) ? ' <small class="vl yr">' + yearOf(set.id) + '</small>' : '') + (set.region ? ' <small class="vl rg">' + esc(set.region) + '</small>' : '') + (viewLang ? ' <small class="vl">' + esc(langName(viewLang)) + '</small>' : ''), back: set.custom && set.parent ? '#/set/' + set.parent : set.serie ? '#/series/' + set.serie.id : '#/',
@@ -2579,11 +2613,48 @@ function onCardClick(e) {
   const chip = e.target.closest('button.var');
   if (chip) {
     // one printing on or off, straight from the chip
+    if (quickTick) quickKeep.add(id);
     setCard(state.current, setKey(set.id), id, !ownedVariants(card).includes(chip.dataset.v), chip.dataset.v);
     refreshCardNode(card);
     return;
   }
+  if (quickTick && !e.target.closest('button.more')) { quickToggle(card); return; }
   openCardSheet(card);
+}
+/* ---------- Quick tick: tap a card to tick it owned (its main printing) or untick it, with a short Undo ---------- */
+function quickToggle(card) {
+  const set = window._set, key = setKey(set.id), pid = state.current, id = card.localId;
+  // what the card held before, so Undo can put it back exactly (printings, languages, lookout, being-bought note)
+  const prev = ((state.owned[pid] || {})[key] || {})[id], wished = !!wishedBy(pid, key)[id], bought = buyOfKey(key, id);
+  const on = !ownedIn(set.id)[id];
+  setCard(pid, key, id, on, on ? primaryVariant(card) : '*');
+  quickKeep.add(id);
+  refreshCardNode(card);
+  const node = document.querySelector('#cards [data-id="' + CSS.escape(id) + '"]');
+  if (node && on) node.classList.add('pop');
+  if (on) try { navigator.vibrate && navigator.vibrate(15); } catch (e) {}
+  quickUndo = () => {
+    const person = state.owned[pid] || (state.owned[pid] = {}), mine = person[key] || (person[key] = {});
+    if (prev) mine[id] = prev; else delete mine[id];
+    if (!Object.keys(mine).length) delete person[key];
+    saveState();
+    sync.writeCard(pid, key, id, prev ? marks(prev) : false);
+    if (wished && !wishedBy(pid, key)[id]) setWish(pid, key, id, true);
+    if (bought && !buyOfKey(key, id)) setBuyKey(key, id, bought);
+    if (window._set && window._set.id === set.id) refreshCardNode(card);
+  };
+  quickToast((on ? '✓ Ticked ' : 'Unticked ') + card.name);
+}
+function quickToast(msg) {
+  let t = $('qtoast');
+  if (!t) {
+    t = el('div', '', '<span></span><button>Undo</button>'); t.id = 'qtoast'; document.body.appendChild(t);
+    t.querySelector('button').onclick = () => { if (quickUndo) quickUndo(); quickUndo = null; t.hidden = true; };
+  }
+  t.querySelector('span').textContent = msg;
+  t.hidden = false;
+  clearTimeout(quickTimer);
+  quickTimer = setTimeout(() => { t.hidden = true; quickUndo = null; }, 4000);
 }
 // redraw one card in place so the page does not jump, then the counts
 function refreshCardNode(card) {
@@ -5046,7 +5117,8 @@ function importProgress() {
 /* ---------- routing: #/  #/series/<id>  #/set/<id>  #/people ---------- */
 function route() {
   detailJob++;                       // stop any price loader from the previous view
-  if (!(location.hash || '').startsWith('#/set/')) document.body.classList.remove('colourall');
+  if (!(location.hash || '').startsWith('#/set/')) document.body.classList.remove('colourall', 'quick');
+  quickKeep.clear();                 // ticked cards stay in view only until the page changes
   const h = location.hash || '#/';
   let m;
   if (!h.startsWith('#/set/')) { viewLang = null; ui.langSet = null; }      // the language view belongs to one visit to one set
