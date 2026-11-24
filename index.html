@@ -630,7 +630,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v123';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v124';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -2223,7 +2223,9 @@ function languageBar(set) {
   const add = (label, on, onclick, title) => { const b = el('button', on ? 'on' : '', esc(label)); if (title) b.title = title; b.onclick = onclick; bar.appendChild(b); };
   const held = Object.keys(langCounts(rootId));
   const rl = set.custom && set.region ? regionLangOf(set.id) : null;
-  const langs = [...new Set([rl || 'en', ...held, ...(!onEdition && viewLang ? [viewLang] : [])])];   // English (or the set's own language), then only languages already ticked here (or just chosen with +)
+  // English (or the set's own language), then only languages already ticked here (or just chosen with +).
+  // On an edition's own page there are no language tags to pick: English there means "back to the English set", the editions are the other buttons.
+  const langs = onEdition ? ['en'] : [...new Set([rl || 'en', ...held, ...(viewLang ? [viewLang] : [])])];
   langs.forEach(l => add(langLabel(l), !onEdition && cardLang === l, () => pickLang(set, l), 'Cards printed in ' + langLabel(l)));
   childrenOf(rootId).forEach(k => {
     const cs = state.customSets[k];
