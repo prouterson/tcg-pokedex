@@ -630,7 +630,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v122';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v123';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -2191,7 +2191,7 @@ async function viewSet(id) {
   details = (cached && cached.cards) || {};
   presetDetails(set);
   // the language switch starts on what this set holds (no question asked); a regional edition is its own set and has no language view
-  if (set.custom && set.parent) viewLang = null;
+  if (set.custom && set.parent) { viewLang = null; const rl0 = set.region ? regionLangOf(id) : null; if (rl0) setCardLang(rl0); }   // an edition records its own language (it used to carry on with whatever the English set had: English)
   else {
     const held = Object.keys(langCounts(id));
     const rl = set.custom && set.region ? regionLangOf(id) : null;   // a regional set (Gem Pack…) is printed in one language: ticks there are recorded in it
