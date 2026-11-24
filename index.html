@@ -630,7 +630,7 @@ const ABBR = {"base2":"JU","base1":"BS","base3":"FO","base4":"B2","base5":"RO","
 
 const SAVE_KEY = 'tcgPokedex.v2';
 const OLD_KEY = 'tcgPokedex.v1';
-const APP_VERSION = 'v121';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
+const APP_VERSION = 'v122';                    // keep in step with VERSION in sw.js; shown at the bottom of every page
 const LANG_KEY = 'tcgPokedex.lang';
 const FAMILY_KEY = 'tcgPokedex.family';
 const CURRENT_KEY = 'tcgPokedex.current';   // which user this phone is — never synced
@@ -2194,8 +2194,10 @@ async function viewSet(id) {
   if (set.custom && set.parent) viewLang = null;
   else {
     const held = Object.keys(langCounts(id));
-    setCardLang('en');   // a set always opens on English; the other languages ticked here are buttons at the top
-    viewLang = held.every(x => x === 'en') ? null : 'en';
+    const rl = set.custom && set.region ? regionLangOf(id) : null;   // a regional set (Gem Pack…) is printed in one language: ticks there are recorded in it
+    const open = rl || 'en';
+    setCardLang(open);   // other sets open on English; the other languages ticked here are buttons at the top
+    viewLang = held.every(x => x === open) ? null : open;
   }
   renderSet();
   loadDetails(set, cached);
@@ -2220,7 +2222,8 @@ function languageBar(set) {
   const bar = el('div', 'seg langbar');
   const add = (label, on, onclick, title) => { const b = el('button', on ? 'on' : '', esc(label)); if (title) b.title = title; b.onclick = onclick; bar.appendChild(b); };
   const held = Object.keys(langCounts(rootId));
-  const langs = [...new Set(['en', ...held, ...(!onEdition && viewLang ? [viewLang] : [])])];   // English, then only languages already ticked here (or just chosen with +)
+  const rl = set.custom && set.region ? regionLangOf(set.id) : null;
+  const langs = [...new Set([rl || 'en', ...held, ...(!onEdition && viewLang ? [viewLang] : [])])];   // English (or the set's own language), then only languages already ticked here (or just chosen with +)
   langs.forEach(l => add(langLabel(l), !onEdition && cardLang === l, () => pickLang(set, l), 'Cards printed in ' + langLabel(l)));
   childrenOf(rootId).forEach(k => {
     const cs = state.customSets[k];
@@ -2260,6 +2263,18 @@ function openLanguageMenu(set, rootId) {
   sh.querySelector('.x').onclick = close;
   sh.onclick = e => { if (e.target === sh) close(); };
   sh.classList.add('open');
+}
+// every printing of every card one person has ticked in a set: change its language mark from -> to (both kept once if a card already has both).
+// Returns the old marks by card id so it can be undone.
+function relabelTicks(setId, from, to, pid) {
+  const key = setKey(setId), mine = (state.owned[pid] || {})[key] || {}, before = {};
+  Object.keys(mine).forEach(id => {
+    const m = marks(mine[id]), next = {}; let hit = false;
+    Object.keys(m).forEach(v => { const ls = langsOf(m[v]); if (ls.includes(from)) { hit = true; next[v] = [...new Set(ls.map(l => l === from ? to : l))].join(','); } else next[v] = m[v]; });
+    if (hit) { before[id] = mine[id]; mine[id] = next; sync.writeCard(pid, key, id, next); }
+  });
+  saveState();
+  return before;
 }
 function ownedCountAll(setId) { return Object.keys((state.owned[state.current] || {})[setKey(setId)] || {}).length; }
 
@@ -2500,7 +2515,7 @@ function renderSetHeader() {
   if (ui.rarity || master || colourAll || ui.sort === 'price') tb.classList.add('on');
   controls.push(tb);
   if (quickTick) {
-    const bar = el('div', 'qbar', '<span>Tap a card to tick or untick it · ⋯ opens its menu</span>');
+    const bar = el('div', 'qbar', '<span>Tap a card to tick it (tap a ticked one to remove, it asks first) · ⋯ opens its menu</span>');
     bar.appendChild(cardLangSelect());
     bar.appendChild(makeButton('Done', () => { quickTick = false; quickKeep.clear(); renderSet(); }));
     controls.push(bar);
@@ -2539,6 +2554,16 @@ function openSetTools(set) {
   if (colourAll) cb.classList.add('on');
   acts.appendChild(cb);
   acts.appendChild(makeButton(lbl('print', 'Print placeholders'), () => { close(); printPlaceholders(); }));
+  // a regional set (Gem Pack…) holding English-tagged ticks: relabel them all in one go
+  const rl = set.custom && set.region ? regionLangOf(set.id) : null, wrong = rl && rl !== 'en' ? (langCounts(set.id, state.current).en || 0) : 0;
+  if (wrong) acts.appendChild(makeButton('→ Mark the ' + wrong + ' English tick' + (wrong === 1 ? '' : 's') + ' here as ' + langLabel(rl), () => {
+    if (!confirm('Change ' + wrong + ' card' + (wrong === 1 ? '' : 's') + ' in ' + set.name + ' from English to ' + langLabel(rl) + ' for ' + me().name + '? Nothing else changes, and you can undo it straight after.')) return;
+    const pid = state.current, key = setKey(set.id), before = relabelTicks(set.id, 'en', rl, pid);
+    setCardLang(rl); viewLang = Object.keys(langCounts(set.id)).every(x => x === rl) ? null : rl;
+    close(); renderSet();
+    quickUndo = () => { const mine = (state.owned[pid] || {})[key] || {}; Object.keys(before).forEach(id => { mine[id] = before[id]; sync.writeCard(pid, key, id, marks(before[id])); }); saveState(); if (window._set && window._set.id === set.id) { viewLang = null; renderSet(); } };
+    quickToast('Changed ' + Object.keys(before).length + ' card' + (Object.keys(before).length === 1 ? '' : 's') + ' to ' + langLabel(rl));
+  }, 'Cards ticked in this set as English prints become ' + langLabel(rl)));
   acts.appendChild(el('div', 'hint', 'Languages and editions of this set'));
   acts.appendChild(languageBar(set));
   sh.querySelector('.x').onclick = close;
@@ -2632,7 +2657,9 @@ function quickToggle(card) {
   const set = window._set, key = setKey(set.id), pid = state.current, id = card.localId;
   // what the card held before, so Undo can put it back exactly (printings, languages, lookout, being-bought note)
   const prev = ((state.owned[pid] || {})[key] || {})[id], wished = !!wishedBy(pid, key)[id], bought = buyOfKey(key, id);
+  // tapping a card that is already ticked would remove it: ask first (a stray tap must not remove one, and the toast can be off screen)
   const on = !ownedIn(set.id)[id];
+  if (!on && !confirm('Remove ' + card.name + ' (' + cardNum(card) + ') from ' + me().name + "'s collection?")) return;
   setCard(pid, key, id, on, on ? primaryVariant(card) : '*');
   quickKeep.add(id);
   refreshCardNode(card);
@@ -2651,13 +2678,14 @@ function quickToggle(card) {
   };
   quickToast((on ? '✓ Ticked ' : 'Unticked ') + card.name);
 }
-function quickToast(msg) {
+function quickToast(msg, noUndo) {
   let t = $('qtoast');
   if (!t) {
     t = el('div', '', '<span></span><button>Undo</button>'); t.id = 'qtoast'; document.body.appendChild(t);
     t.querySelector('button').onclick = () => { if (quickUndo) quickUndo(); quickUndo = null; t.hidden = true; };
   }
   t.querySelector('span').textContent = msg;
+  t.querySelector('button').hidden = !!noUndo;
   t.hidden = false;
   clearTimeout(quickTimer);
   quickTimer = setTimeout(() => { t.hidden = true; quickUndo = null; }, 4000);
